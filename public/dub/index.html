@@ -66,7 +66,8 @@
     <legend>the set</legend>
     <div class="row"><label>tempo</label><input id="bpm" type="range" min="110" max="140" step="1" value="125"><output id="bpm_v"></output></div>
     <div class="row"><label>master</label><input id="vol" type="range" min="0" max="1" step="0.01" value="0.8"><output id="vol_v"></output></div>
-    <div class="row"><label>kick pump</label><input id="pump" type="range" min="0" max="1" step="0.01" value="0.25"><output id="pump_v"></output></div>
+    <div class="row"><label>kick pump</label><input id="pump" type="range" min="0" max="1" step="0.01" value="0"
+      title="The sidechain duck on everything tonal, from the Endless Set's deck (:8479): 15 ms down, 240 ms back. IT STARTS AT ZERO, and here is why. The manifest's twenty-piece round has no ducking anywhere in it — this is the reference's architecture, not the piece's. And it does not earn its place on the rumble either: MEASURED, a pump of 0.25 takes 1.4 dB off the rumble's own level inside 30-120 Hz and does NOT sharpen its swell into the gap (crest 11.8 dB against 12.9 dB with no pump at all) — the rumble already has a duck of its own. It also costs 0.68 dB of mix RMS. So it is here, it works, and the owner turns it up if the piece wants it."><output id="pump_v"></output></div>
   </fieldset>
 
   <fieldset>
@@ -92,12 +93,18 @@
   <fieldset>
     <legend>the mix</legend>
     <table id="chans"><thead><tr>
-      <th>ch</th><th>voice</th><th>pattern</th><th style="width:150px">fader</th><th>echo</th><th>room</th><th>from</th>
+      <th>ch</th><th>voice</th><th>pattern</th><th style="width:150px">fader</th><th title="the input gain: a fixed stage BEFORE the fader, so the fader values mean the same thing from one channel to the next">in</th><th>echo</th><th>room</th><th>from</th>
     </tr></thead><tbody></tbody></table>
     <div style="color:var(--dim);margin-top:10px">
       eight faders start where <b>221-dub-basic</b> put them; the rumble is the
       reference's own idea and starts at its default —
       <button id="reset" style="padding:3px 10px">back to the manifest</button>
+      <p style="margin:10px 0 0"><b>in</b> is the input gain: one fixed number per channel,
+      ahead of the fader and not on it. A kick built to the reference's recipe peaks 17 dB
+      above a clap built to the reference's recipe, so without this the fader positions would
+      not mean the same thing from one channel to the next. Measured once, each voice alone
+      at the deck sum, and it does not move. It is written here rather than left invisible,
+      because a gain nobody can see is a gain nobody can account for.</p>
     </div>
   </fieldset>
 
@@ -263,29 +270,37 @@ const INPUT_GAIN = {
   7: 1.0784,   // pad    alone: peak -12.66 dBFS, RMS -27.72
 };
 
-// Measured 2026-09-17, in Chromium. Two windows, because one was not enough:
-//   OFFLINE, 24 bars — the least common multiple of the three modulator
-//   periods (3, 4 and 8 bars), so it holds the loudest combination the
-//   MODULATORS can reach:
-//       trim 0.80 -> peak -6.02 dBFS / RMS -21.28      trim 1.00 -> -4.76 / -19.36
-//       trim 1.24 -> peak -3.69 dBFS / RMS -17.53      trim 1.40 -> -3.08 / -16.52
-//   LIVE, 150 s (78 bars), analysed on the output. Louder every time, because
-//   the humanisation and the per-note component tolerances put a hotter bar
-//   somewhere outside any modulator cycle: trim 1.40 read -2.78 dBFS peak and
-//   trim 1.32 read -2.27 — both OVER the ceiling, and both into the finisher's
-//   soft-clip knee, which begins at 0.75 linear = -2.5 dBFS.
-//   A 24-bar offline render is therefore NOT a ceiling test. The live window is.
+// Measured 2026-09-17, in Chromium, live, on the output. The rule that came
+// out of doing it: A 24-BAR OFFLINE RENDER IS NOT A CEILING TEST. Twenty-four
+// bars is the least common multiple of the three modulator periods (3, 4 and
+// 8), so it holds the loudest combination the MODULATORS can reach — but the
+// humanisation and the per-note component tolerances put a hotter bar
+// somewhere outside any modulator cycle, and every offline figure has read
+// 1-1.5 dB under the live one. The live window is the test.
 //
-//   trim 1.15: live peak -3.08 dBFS, RMS -17.95 dBFS over 150 s; offline 24-bar
-//   peak -3.74 dBFS, RMS -18.19. That is [M]'s "-3 dBFS of predicted peak"
-//   exactly, with
-//   0.6 dB of clear air under the guard's knee. Nothing clips.
+// The trim has moved twice, and both times because something else changed the
+// balance rather than because the level was wrong:
+//   1.15  the original setting, live peak -3.08 dBFS
+//   1.06  after the rumble's ceiling was doubled (see the rumble block)
+//   0.95  after the kick pump was defaulted to 0, which stops pulling the
+//         tonal bus down under every kick and put 1.1 dB back on the peak
+//
+// At 0.95, with the master slider at its default 0.8, measured over two runs
+// of 135 s and 150 s: peak -4.65 and -4.73 dBFS, RMS -17.98 and -18.24. The
+// finisher's soft clip knee is at -2.50 dBFS, so there is better than 2 dB of
+// clear air. Nothing clips. The loudness is within 0.2 dB of where it was
+// before any of this, so what changed is the balance and not the level.
 //
 // [M]'s own main fader (0.2178) is NOT used. It was measured on the rig, over
 // forty-eight bars of zynmixer output, against LV2 engines whose levels are not
 // this engine's — copying it would be carrying a measurement of a different
 // machine, which is the exact mistake the parent lost a day to.
-const MASTER_TRIM = 1.15;
+const MASTER_TRIM = 0.95;
+
+// THE RUMBLE'S CEILING. [E] :8046 ships 0.045 — "never above 4.5% of full
+// scale, raised twice by request from the original 2%". Measured and changed
+// here; see the block beside the rumble bus for what the measurement said.
+const RUMBLE_CAP = 0.09;
 
 /* ---------------------------------------------------------------------------
    3. THE GRID — euclidean placement [G]
@@ -352,7 +367,7 @@ function createEngine(ctx, opts) {
   const cfg = {
     bpm: PIECE.tempo,
     master: 0.8,
-    pump: 0.25,
+    pump: 0,                             // see the control's own title: measured, not assumed
     dlyBeats: DLY_DIVISIONS[PIECE.globals.dlytime],
     dlyFbk: PIECE.globals.dlyfbk / 100,
     dlyTrim: 1,
@@ -361,6 +376,7 @@ function createEngine(ctx, opts) {
     modDepth: 1,
     stabCut: 1,
     rumble: 0.70,                        // [E] :1015 — their fader ships at 70 of 0-150
+    rumbleCap: RUMBLE_CAP,
     bypassFaders: !!opts.bypassFaders,   // calibration render: [M]'s faders off
     raw: !!opts.raw,                     // …and the input gain off too: the voice exactly as built
     solo: (opts.solo === undefined ? null : opts.solo)
@@ -520,9 +536,46 @@ function createEngine(ctx, opts) {
         driven and therefore its character, never its ceiling. Rumble is the
         element that eats a mix when it is a free knob. The cap is not exposed.
      --------------------------------------------------------------------- */
-  const RUMBLE_MAX = 0.045;      // [E] :8046 — "never above 4.5% of full scale"
   const RUMBLE_AMT = 0.95;       // [E] :1122 — STYLES["dub techno"].rum is [.8, 1.1]
-  A.rumbleMax = RUMBLE_MAX;
+  /* THE CAP IS TWICE THE REFERENCE'S, AND THE MEASUREMENT IS WHY. [P]
+     At [E]'s own 0.045 the rumble was inaudible here, and there were two
+     candidate reasons that need different fixes. Measured inside 30-120 Hz, at
+     the deck sum, eight bars, faders as [M] set them:
+
+         the sub alone         RMS -23.69 dBFS
+         the rumble alone      RMS -33.09 dBFS     <- 9.4 dB under it
+         the kick alone        RMS -31.79 dBFS
+         the pad alone         RMS -39.77 dBFS
+         turning the rumble on moved the whole band by 0.45 dB
+
+     So it was not that the rumble was broken: it was MASKED. And the masking
+     is structural rather than accidental — the wash is designed to fill the
+     space between kicks, and in this piece the sub is a sustained two-note
+     line that never leaves that space. [E]'s ceiling is right for the
+     tech-house context it was written in, where the bass is a series of short
+     notes off the one, and wrong for a piece whose sub holds.
+
+     Against the cap, the rumble's own level inside its band, and what it cost:
+
+         cap 0.045   RMS -33.09   9.4 dB under the sub   mix peak -4.84
+         cap 0.09    RMS -26.47   2.8 dB under the sub   mix peak -4.35
+         cap 0.135   RMS -22.86   0.8 dB OVER the sub    mix peak -4.60
+         cap 0.18    RMS -20.64   3.1 dB OVER the sub    mix peak -4.24
+
+     THE MIX PEAK BARELY MOVES ACROSS THE WHOLE RANGE, because the rumble is
+     ducked hardest exactly where the peak lives. It is RMS this buys, which is
+     what "you can hear it" means for a sub-bass wash — and it is why the
+     ceiling could be moved at all without the output paying for it.
+
+     0.09 is the setting: present, two to three dB under the sub, still the
+     sub's record. 0.135 puts the wash over the bassline and 0.18 puts it well
+     over, which is a different genre. The trade above that is the owner's, and it is made
+     with the two FADERS rather than by moving this: the sub's and the rumble's
+     sit next to each other in the mix table for exactly that reason. */
+  // The cap is a constant to the surface and a variable to the measurement
+  // harness only: `renderOffline({set:{rumbleCap: x}})` is how the value below
+  // was chosen. Nothing the owner can touch reaches it.
+  const capOf = () => cfg.rumbleCap;
 
   // the IR. [E] :8034 — MONO ("as the genre demands"), 2.8 s, a one-pole at
   // coefficient .06 (very dark filtered noise) under a (1-t)^2 tail. Nothing
@@ -546,7 +599,7 @@ function createEngine(ctx, opts) {
   A.rSat = ctx.createWaveShaper(); A.rSat.curve = satCurve(1.3); A.rSat.oversample = "2x";
   A.rHp = ctx.createBiquadFilter(); A.rHp.type = "highpass"; A.rHp.frequency.value = 32;  A.rHp.Q.value = 0.7;
   A.rLp = ctx.createBiquadFilter(); A.rLp.type = "lowpass";  A.rLp.frequency.value = 120; A.rLp.Q.value = 0.7;
-  A.rOut = ctx.createGain(); A.rOut.gain.value = RUMBLE_MAX;
+  A.rOut = ctx.createGain(); A.rOut.gain.value = capOf();
   A.rIn.connect(A.rConv); A.rConv.connect(rSatIn); rSatIn.connect(A.rSat);
   A.rSat.connect(A.rHp); A.rHp.connect(A.rLp); A.rLp.connect(A.rOut);
   A.rOut.connect(A.pump);        // [E] :8235 — "also rides the deck's kick-pump"
@@ -570,9 +623,10 @@ function createEngine(ctx, opts) {
   // rather than reverting to the bottom of the last ramp, which on a gain
   // multiplying sub-bass is a click.
   function duckRumble(t) {
+    const cap = capOf();
     cancelHold(A.rOut.gain, t);
-    A.rOut.gain.linearRampToValueAtTime(RUMBLE_MAX * 0.07, t + 0.004);
-    A.rOut.gain.linearRampToValueAtTime(RUMBLE_MAX, t + 0.34);
+    A.rOut.gain.linearRampToValueAtTime(cap * 0.07, t + 0.004);
+    A.rOut.gain.linearRampToValueAtTime(cap, t + 0.34);
   }
 
   // one kick, one rumble hit: the exciter goes in, the output ducks. Both at
@@ -1265,10 +1319,14 @@ const CHANNELS = [
   { ch: "R", voice: "rumble", max: 1.05,
     from: "[E] the rumble bus :8222 — dark mono reverb on a copy of the kick, "
         + "distorted, band-limited to 32-120 Hz, ducked BY the kick so it fills "
-        + "the space between them. Hard-capped at 4.5% of full scale, and the "
-        + "fader shapes its character under that ceiling rather than lifting it. "
-        + "THE MANIFEST HAS NO OPINION ABOUT THIS ONE: the parent's round has no "
-        + "rumble at all, so this fader starts at the reference's own 0.70." }
+        + "the space between them. The fader shapes its character under a hard "
+        + "ceiling rather than lifting it. THE MANIFEST HAS NO OPINION ABOUT "
+        + "THIS ONE: the parent's round has no rumble at all, so it starts at "
+        + "the reference's own 0.70. IT LIVES UNDER THE SUB — measured, 2 to 3 dB "
+        + "under it inside 30-120 Hz, where at the reference's own ceiling it was "
+        + "9.4 dB under and inaudible. The two "
+        + "share one band and one job, so if you want more wash, take it off "
+        + "the sub on the fader above rather than looking for more here." }
 ];
 
 function patternText(ch) {
@@ -1309,6 +1367,8 @@ function buildTable() {
       + `<td><input type="range" id="fad${c.ch}" min="0" max="${c.max || 1.2}" step="0.005" value="${lvl}"`
       + `${empty ? ' disabled title="nothing is written on this channel — see the note"' : ''}`
       + ` style="width:100px;accent-color:var(--hot)"> <span class="n" id="lvl${c.ch}">${lvl.toFixed(3)}</span></td>`
+      + `<td class="n" title="input gain — fixed, measured once, ahead of the fader">`
+      + `${c.ch === "R" ? "\u2014" : (INPUT_GAIN[c.ch] || 1).toFixed(3)}</td>`
       + (c.ch === "R"
           ? `<td class="n">\u2014</td><td class="n">\u2014</td>`
           : `<td class="n" id="dly${c.ch}">${(w.delay / 100).toFixed(2)}</td>`
@@ -1484,7 +1544,21 @@ async function renderOffline(o) {
   });
   eng.cfg.bpm = bpm;
   if (o.set) for (const k of Object.keys(o.set)) eng.set(k, o.set[k]);
-  eng.tail.connect(off.destination);
+  // `band: [lo, hi]` measures inside a frequency band instead of across the
+  // whole spectrum — four cascaded poles each side, so what is outside really
+  // is outside. This is how the question "is the rumble quiet, or is it
+  // masked?" gets an answer instead of an argument.
+  if (o.band) {
+    let node = eng.tail;
+    for (let i = 0; i < 2; i++) {
+      const hp = off.createBiquadFilter(); hp.type = "highpass";
+      hp.frequency.value = o.band[0]; hp.Q.value = 0.7071;
+      const lp = off.createBiquadFilter(); lp.type = "lowpass";
+      lp.frequency.value = o.band[1]; lp.Q.value = 0.7071;
+      node.connect(hp); hp.connect(lp); node = lp;
+    }
+    node.connect(off.destination);
+  } else eng.tail.connect(off.destination);
   for (let s = 0; s < bars * 16; s++) eng.scheduleStep(s, s * stepDur + 0.05, stepDur);
   const buf = await off.startRendering();
   let peak = 0, sum = 0, n = 0;
