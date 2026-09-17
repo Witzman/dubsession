@@ -1,0 +1,8 @@
+# Process documents never enter this repository. The workshop repo holds them,
+# and nothing a reader of the published site can see may link to a path they
+# cannot reach.
+notes/
+node_modules/
+__pycache__/
+*.pyc
+.DS_Store

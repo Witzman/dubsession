@@ -1,0 +1,4 @@
+#!/bin/sh
+# Every commit is authored by witzman alone. CI refuses it too; the hook is
+# here so the refusal arrives before the push rather than after.
+exec python3 "$(git rev-parse --show-toplevel)/tools/hooks/check-message.py" "$1"

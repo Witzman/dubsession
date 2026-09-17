@@ -1,0 +1,57 @@
+name: CI
+
+on:
+  pull_request:
+  push:
+    branches: [main]
+
+jobs:
+  tests:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: The image builds, and serves /dub/
+        run: |
+          set -e
+          docker build -t dubsession-ci .
+          docker run -d --name ci -p 8081:80 dubsession-ci
+          for i in $(seq 1 20); do
+            curl -sf http://127.0.0.1:8081/healthz && break || sleep 1
+          done
+          # The prefix, not the root. A container that answers at / and not at
+          # /dub/ passes every check that asks the wrong question.
+          curl -sf http://127.0.0.1:8081/dub/ > /dev/null
+          echo "serves /dub/"
+          docker rm -f ci
+
+  hygiene:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - name: No assistant attribution trailers
+        run: |
+          set -e
+          range="origin/main..HEAD"
+          git rev-parse --verify origin/main >/dev/null 2>&1 || range="HEAD"
+          # A TRAILER, not a mention. `git log` indents the body four spaces,
+          # so anchor to start-of-line-plus-space and require the colon or the
+          # link form.
+          if git log --format='%n%B' "$range" \
+               | grep -nE '^[[:space:]]*(Co-Authored-By:|Co-authored-by:)' \
+               || git log --format='%n%B' "$range" \
+               | grep -nE 'Generated with \[Claude Code\]|🤖 Generated with'; then
+            echo "::error::Every commit is authored by witzman alone."
+            exit 1
+          fi
+          echo "clean"
+      - name: No internal paths in what ships
+        run: |
+          set -e
+          if grep -rnE 'notes/[A-Za-z0-9_./-]+\.(md|py|sh|json|txt)' \
+               --exclude-dir=.git --exclude-dir=.github . ; then
+            echo "::error::Process documents never enter this repository."
+            exit 1
+          fi
+          echo "clean"
