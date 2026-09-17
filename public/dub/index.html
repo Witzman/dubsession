@@ -90,12 +90,13 @@
   </fieldset>
 
   <fieldset>
-    <legend>the eight channels</legend>
+    <legend>the mix</legend>
     <table id="chans"><thead><tr>
       <th>ch</th><th>voice</th><th>pattern</th><th style="width:150px">fader</th><th>echo</th><th>room</th><th>from</th>
     </tr></thead><tbody></tbody></table>
     <div style="color:var(--dim);margin-top:10px">
-      the faders start where <b>221-dub-basic</b> put them and go anywhere —
+      eight faders start where <b>221-dub-basic</b> put them; the rumble is the
+      reference's own idea and starts at its default —
       <button id="reset" style="padding:3px 10px">back to the manifest</button>
     </div>
   </fieldset>
@@ -359,6 +360,7 @@ function createEngine(ctx, opts) {
     revSeconds: 4.5,
     modDepth: 1,
     stabCut: 1,
+    rumble: 0.70,                        // [E] :1015 — their fader ships at 70 of 0-150
     bypassFaders: !!opts.bypassFaders,   // calibration render: [M]'s faders off
     raw: !!opts.raw,                     // …and the input gain off too: the voice exactly as built
     solo: (opts.solo === undefined ? null : opts.solo)
@@ -491,6 +493,101 @@ function createEngine(ctx, opts) {
   A.revLp.frequency.value = 3100; A.revLp.Q.value = 0.5;
   A.revIn.connect(A.rev); A.rev.connect(A.revWet); A.revWet.connect(A.revLp);
   A.revLp.connect(A.pump);
+
+  /* =========================================================================
+     THE RUMBLE — [E] :8023 (the recipe), :8034 (the IR), :8048 (the exciter),
+     :8083 (the duck), :8222 (the bus). The tech-house/techno low-end wash:
+     a copy of the kick sent into a long, dark, 100%-wet reverb, distorted,
+     band-limited to the sub, kept mono, and DUCKED BY THE DRY KICK so it
+     swells in the space BETWEEN kicks instead of smearing the transient.
+
+     THIS ONE IS NOT THE PARENT'S. [M]'s twenty-piece round has no rumble at
+     all — it is the reference's idea, and the first thing on this page that
+     is. The surface says so where the fader lives.
+
+     THREE THINGS THAT ARE THE DIFFERENCE BETWEEN ROLLING AND BUZZING:
+
+     1. THE SATURATOR SITS AFTER THE REVERB AND BEFORE THE FILTERS. [E]'s own
+        line at :8231: "order matters: distort FIRST, band-limit LAST — the
+        filters must strip the harmonics the saturator creates, or the rumble
+        buzzes instead of rolls." Its header comment three hundred lines
+        earlier gives the order the other way round and the corners as 28/150;
+        the WIRING is what ships there, and the wiring is what is rebuilt here.
+     2. THE DUCK IS BY THE DRY KICK, 4 ms down and 340 ms back — "4 ms down,
+        not a step: this is sub-bass".
+     3. IT IS HARD-CAPPED at 4.5% of full scale, on a node the fader cannot
+        reach. The fader scales the EXCITER, so it shapes how hard the tail is
+        driven and therefore its character, never its ceiling. Rumble is the
+        element that eats a mix when it is a free knob. The cap is not exposed.
+     --------------------------------------------------------------------- */
+  const RUMBLE_MAX = 0.045;      // [E] :8046 — "never above 4.5% of full scale"
+  const RUMBLE_AMT = 0.95;       // [E] :1122 — STYLES["dub techno"].rum is [.8, 1.1]
+  A.rumbleMax = RUMBLE_MAX;
+
+  // the IR. [E] :8034 — MONO ("as the genre demands"), 2.8 s, a one-pole at
+  // coefficient .06 (very dark filtered noise) under a (1-t)^2 tail. Nothing
+  // like the 4.5 s stereo hall the chords use, and that is the point: this is
+  // weight, not space.
+  function makeRumbleIR() {
+    const secs = 2.8, rate = ctx.sampleRate, len = Math.floor(secs * rate);
+    const buf = ctx.createBuffer(1, len, rate), d = buf.getChannelData(0);
+    let lp = 0;
+    for (let i = 0; i < len; i++) {
+      const t = i / len;
+      lp += 0.06 * ((Math.random() * 2 - 1) - lp);
+      d[i] = lp * Math.pow(1 - t, 2);
+    }
+    return buf;
+  }
+
+  A.rIn = ctx.createGain();
+  A.rConv = ctx.createConvolver(); A.rConv.buffer = makeRumbleIR();
+  const rSatIn = satTrim();
+  A.rSat = ctx.createWaveShaper(); A.rSat.curve = satCurve(1.3); A.rSat.oversample = "2x";
+  A.rHp = ctx.createBiquadFilter(); A.rHp.type = "highpass"; A.rHp.frequency.value = 32;  A.rHp.Q.value = 0.7;
+  A.rLp = ctx.createBiquadFilter(); A.rLp.type = "lowpass";  A.rLp.frequency.value = 120; A.rLp.Q.value = 0.7;
+  A.rOut = ctx.createGain(); A.rOut.gain.value = RUMBLE_MAX;
+  A.rIn.connect(A.rConv); A.rConv.connect(rSatIn); rSatIn.connect(A.rSat);
+  A.rSat.connect(A.rHp); A.rHp.connect(A.rLp); A.rLp.connect(A.rOut);
+  A.rOut.connect(A.pump);        // [E] :8235 — "also rides the deck's kick-pump"
+
+  // the exciter. [E] :8048 — "a boomier, deeper copy of the kick": a sine at
+  // 90 Hz falling to 28 Hz over 300 ms, decaying over 550 ms. It feeds the
+  // reverb and NEVER the output; nothing you hear is this oscillator.
+  function rumbleExciter(t, v) {
+    if (!(v > 0.001)) return;
+    const o = ctx.createOscillator(), g = ctx.createGain();
+    o.type = "sine";
+    o.frequency.setValueAtTime(90, t);
+    o.frequency.exponentialRampToValueAtTime(28, t + 0.3);
+    g.gain.setValueAtTime(v * 0.9, t);
+    g.gain.exponentialRampToValueAtTime(0.001, t + 0.55);
+    o.connect(g); g.connect(A.rIn);
+    o.start(t); o.stop(t + 0.6);
+  }
+
+  // the duck. [E] :8083 — and it holds what the swell had actually reached
+  // rather than reverting to the bottom of the last ramp, which on a gain
+  // multiplying sub-bass is a click.
+  function duckRumble(t) {
+    cancelHold(A.rOut.gain, t);
+    A.rOut.gain.linearRampToValueAtTime(RUMBLE_MAX * 0.07, t + 0.004);
+    A.rOut.gain.linearRampToValueAtTime(RUMBLE_MAX, t + 0.34);
+  }
+
+  // one kick, one rumble hit: the exciter goes in, the output ducks. Both at
+  // the kick's own time, [E] :12369.
+  function rumbleHit(t) {
+    // [E] :8049 clamps the exciter at 1. Their fader runs to 150% and their
+    // amount for this style is .95, so the top third of their travel is
+    // clamped and moves nothing. MEASURED here: fader 0.70 and fader 1.50 put
+    // 0.0545 and 0.0598 linear into the deck sum — 0.8 dB apart for a 2.1x
+    // move. This fader therefore stops at 1.05, which is where the clamp
+    // begins, so that every part of its travel does something. [G]: a control
+    // that does nothing must look dead, and that includes a third of a fader.
+    rumbleExciter(t, Math.min(1, cfg.rumble * RUMBLE_AMT));
+    duckRumble(t);
+  }
 
   /* --- the eight channels. Each is one gain (the fader) with two sends. --- */
   A.chan = {};
@@ -964,7 +1061,9 @@ function createEngine(ctx, opts) {
 
     // the drums
     for (const ch of [0, 1, 2, 3]) {
-      if (!audible(ch)) continue;
+      // the kick's step still runs when the RUMBLE is soloed: the rumble is
+      // the kick's own tail, and there is nothing to hear without its trigger
+      if (!audible(ch) && !(ch === 0 && cfg.solo === "R")) continue;
       const pat = DRUM_PAT[ch];
       if (!pat[s]) continue;
       const d = PIECE.drums[ch];
@@ -976,7 +1075,11 @@ function createEngine(ctx, opts) {
       const v = clamp((d.velo + hv) / 127, 0, 1);
       const t = when + sw + hm;
       const out = A.chan[ch].in;
-      if (ch === 0) { voiceKick(t, v, out); duck(t); }
+      if (ch === 0) {
+        if (audible(0)) voiceKick(t, v, out);
+        duck(t);                                   // the bus automation runs either way
+        if (cfg.solo === null || cfg.solo === "R") rumbleHit(t);
+      }
       else if (ch === 1) voiceRim(t, v, out, -0.18);
       else if (ch === 2) voiceClap(t, v, out);
       else voiceHat(t, v, out, 0.12);
@@ -1004,6 +1107,9 @@ function createEngine(ctx, opts) {
      finisher, so pulling a channel down makes it quieter rather than changing
      the compressor's mind about it. --- */
   function setLevel(ch, v) {
+    if (ch === "R") { cfg.rumble = v; return; }   // the rumble's fader scales the
+                                                  // EXCITER, per event, so there is
+                                                  // no gain to ramp and no zipper
     const c = A.chan[ch]; if (!c) return;
     c.fader = v;
     c.base = v * c.inGain;
@@ -1142,6 +1248,10 @@ function say(msg, sticky) {
   sayUntil = sticky ? Infinity : performance.now() + 6000;
 }
 
+// Where each fader starts. [M] has an opinion about eight of them; the ninth
+// is the reference's own default, because [M]'s round has no rumble in it.
+const FADER_START = Object.assign({}, PIECE.levels, { R: 0.70 });
+
 // Named for what they are, not for the slot they live in.
 const CHANNELS = [
   { ch: 0, voice: "kick",    from: "[E] playKick :8487" },
@@ -1151,10 +1261,22 @@ const CHANNELS = [
   { ch: 4, voice: "—",       from: "—" },
   { ch: 5, voice: "sub",     from: "[E] playBass sub :9170" },
   { ch: 6, voice: "stab",    from: "[E] playChord dubstab :9737" },
-  { ch: 7, voice: "pad",     from: "[E] playChord ensemble/pad :10035" }
+  { ch: 7, voice: "pad",     from: "[E] playChord ensemble/pad :10035" },
+  { ch: "R", voice: "rumble", max: 1.05,
+    from: "[E] the rumble bus :8222 — dark mono reverb on a copy of the kick, "
+        + "distorted, band-limited to 32-120 Hz, ducked BY the kick so it fills "
+        + "the space between them. Hard-capped at 4.5% of full scale, and the "
+        + "fader shapes its character under that ceiling rather than lifting it. "
+        + "THE MANIFEST HAS NO OPINION ABOUT THIS ONE: the parent's round has no "
+        + "rumble at all, so this fader starts at the reference's own 0.70." }
 ];
 
 function patternText(ch) {
+  if (ch === "R") {
+    // it has no pattern of its own: it sounds wherever the kick does
+    const pat = rotated(euclid(16, PIECE.drums[0].hits), PIECE.drums[0].rotate);
+    return pat.map(x => x ? "\u2500" : ".").join("");   // the kick's steps, smeared
+  }
   if (PIECE.empty[ch]) return "empty";
   const d = PIECE.drums[ch];
   if (d) {
@@ -1179,16 +1301,18 @@ function buildTable() {
     const empty = !!PIECE.empty[c.ch];
     if (empty) tr.className = "silent";
     const w = PIECE.wets[c.ch] || { delay: 0, reverb: 0 };
-    const lvl = PIECE.levels[c.ch];
+    const lvl = FADER_START[c.ch];
     tr.innerHTML =
       `<td>${c.ch}</td>`
       + `<td>${empty ? "—" : c.voice}</td>`
       + `<td style="letter-spacing:.12em">${patternText(c.ch)}</td>`
-      + `<td><input type="range" id="fad${c.ch}" min="0" max="1.2" step="0.005" value="${lvl}"`
+      + `<td><input type="range" id="fad${c.ch}" min="0" max="${c.max || 1.2}" step="0.005" value="${lvl}"`
       + `${empty ? ' disabled title="nothing is written on this channel — see the note"' : ''}`
       + ` style="width:100px;accent-color:var(--hot)"> <span class="n" id="lvl${c.ch}">${lvl.toFixed(3)}</span></td>`
-      + `<td class="n" id="dly${c.ch}">${(w.delay / 100).toFixed(2)}</td>`
-      + `<td class="n" id="rev${c.ch}">${(w.reverb / 100).toFixed(2)}</td>`
+      + (c.ch === "R"
+          ? `<td class="n">\u2014</td><td class="n">\u2014</td>`
+          : `<td class="n" id="dly${c.ch}">${(w.delay / 100).toFixed(2)}</td>`
+            + `<td class="n" id="rev${c.ch}">${(w.reverb / 100).toFixed(2)}</td>`)
       + `<td class="why">${empty ? PIECE.empty[c.ch] : c.from}</td>`;
     tb.appendChild(tr);
   }
@@ -1205,7 +1329,7 @@ function wireFaders() {
   }
   ui("reset").addEventListener("click", () => {
     for (const c of CHANNELS) {
-      const v = PIECE.levels[c.ch];
+      const v = FADER_START[c.ch];
       ui("fad" + c.ch).value = v;
       if (engine) engine.setLevel(c.ch, v);
       if (c.ch !== 3) ui("lvl" + c.ch).textContent = v.toFixed(3);
