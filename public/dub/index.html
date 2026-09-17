@@ -1,35 +1,1402 @@
-<!doctype html>
+<!DOCTYPE html>
 <html lang="en">
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>dubsession</title>
 <style>
-  :root { color-scheme: dark; }
-  body { margin: 0; min-height: 100vh; display: grid; place-items: center;
-         background: #0b0d0e; color: #8a9396;
-         font: 400 15px/1.6 ui-monospace, SFMono-Regular, Menlo, monospace; }
-  main { max-width: 34rem; padding: 2rem 1rem; }
-  h1 { font-size: 1rem; font-weight: 400; letter-spacing: .35em;
-       text-transform: uppercase; color: #cfd6d8; margin: 0 0 1.5rem; }
-  p { margin: 0 0 .75rem; }
-  code { color: #cfd6d8; }
-  a { color: #7fd6c4; }
+  :root {
+    --bg: #0b0d0e; --panel: #131718; --line: #222829;
+    --ink: #cdd3d2; --dim: #6b7574; --hot: #7fd6c4; --warn: #d6a97f;
+  }
+  * { box-sizing: border-box; }
+  body {
+    margin: 0; padding: 24px 16px; background: var(--bg); color: var(--ink);
+    font: 13px/1.5 ui-monospace, SFMono-Regular, Menlo, monospace;
+  }
+  main { max-width: 720px; margin: 0 auto; }
+  h1 { font-size: 13px; font-weight: 400; color: var(--dim); margin: 0 0 20px; letter-spacing: .08em; }
+  h1 b { color: var(--ink); font-weight: 400; }
+  button {
+    font: inherit; background: var(--panel); color: var(--ink);
+    border: 1px solid var(--line); padding: 10px 20px; cursor: pointer;
+  }
+  button:hover { border-color: var(--hot); color: var(--hot); }
+  button[aria-pressed="true"] { border-color: var(--warn); color: var(--warn); }
+  .top { display: flex; gap: 10px; align-items: center; }
+  .row { display: flex; align-items: center; gap: 12px; margin: 6px 0; }
+  .row label { width: 150px; color: var(--dim); flex: none; }
+  .row input[type=range] { flex: 1; accent-color: var(--hot); }
+  .row select { flex: 1; font: inherit; background: var(--panel); color: var(--ink); border: 1px solid var(--line); padding: 4px; }
+  .row output { width: 78px; text-align: right; color: var(--hot); flex: none; }
+  #bars { margin: 18px 0 8px; color: var(--dim); }
+  #steps { display: flex; gap: 3px; margin-bottom: 8px; }
+  #steps i { flex: 1; height: 5px; background: var(--line); }
+  #steps i.on { background: var(--hot); }
+  #steps i.beat { background: #2e3839; }
+  #steps i.on.beat { background: var(--hot); }
+  fieldset { border: 1px solid var(--line); padding: 12px 14px; margin: 0 0 14px; }
+  legend { color: var(--dim); padding: 0 6px; }
+  table { border-collapse: collapse; width: 100%; font-size: 12px; }
+  th { text-align: left; color: var(--dim); font-weight: 400; padding: 2px 8px 6px 0; }
+  td { padding: 2px 8px 2px 0; color: var(--ink); vertical-align: top; }
+  td.n { color: var(--hot); text-align: right; }
+  td.why { color: var(--dim); }
+  tr.silent td { color: var(--warn); }
+  #status { color: var(--warn); min-height: 1.5em; margin: 8px 0 0; }
+  #perf { color: var(--dim); font-size: 12px; margin-top: 10px; }
+  a { color: var(--hot); }
 </style>
 </head>
 <body>
 <main>
-  <h1>dubsession</h1>
-  <p>A generative dub techno engine, built in the browser. Early.</p>
-  <p><a href="p02/">p02 &mdash; Basic, rendered</a> &middot; the same piece through
-     a renderer built from a reference rather than invented: eight channels with
-     faders, the clap p01 forgot, a ducked tonal bus, and the two sends drifting
-     on coprime bar counts.</p>
-  <p><a href="p01/">p01 &mdash; Basic</a> &middot; 125 BPM, G minor, the centre
-     of the round: four on the floor, the chord on every offbeat eighth, one
-     rimshot a bar, drenched. The first attempt, kept for comparison and
-     level-matched to p02 so the louder one is not simply the better one.</p>
-  <p>Prototypes ship here as they are made. Nothing is finished.</p>
+  <h1>dubsession playing <b>221-dub-basic</b> · 125 BPM · G minor</h1>
+
+  <div class="top">
+    <button id="go">start</button>
+    <button id="mute" aria-pressed="false">mute</button>
+  </div>
+
+  <div id="status"></div>
+
+  <div id="bars">bar — · step —</div>
+  <div id="steps"></div>
+
+  <fieldset>
+    <legend>the set</legend>
+    <div class="row"><label>tempo</label><input id="bpm" type="range" min="110" max="140" step="1" value="125"><output id="bpm_v"></output></div>
+    <div class="row"><label>master</label><input id="vol" type="range" min="0" max="1" step="0.01" value="0.8"><output id="vol_v"></output></div>
+    <div class="row"><label>kick pump</label><input id="pump" type="range" min="0" max="1" step="0.01" value="0.25"><output id="pump_v"></output></div>
+  </fieldset>
+
+  <fieldset>
+    <legend>the space — the echo and the room are the instruments</legend>
+    <div class="row"><label>echo division</label><select id="dlydiv">
+      <option value="0.5" selected>1/8 — the manifest</option>
+      <option value="0.75">3/16 dotted eighth — the genre default</option>
+      <option value="0.25">1/16</option>
+      <option value="1">1/4</option>
+    </select><output id="dlydiv_v"></output></div>
+    <div class="row"><label>echo feedback</label><input id="fbk" type="range" min="0" max="0.88" step="0.01" value="0.42"><output id="fbk_v"></output></div>
+    <div class="row"><label>echo send trim</label><input id="dlytrim" type="range" min="0" max="2" step="0.01" value="1"><output id="dlytrim_v"></output></div>
+    <div class="row"><label>room size</label><input id="revsize" type="range" min="1.5" max="6" step="0.1" value="4.5"><output id="revsize_v"></output></div>
+    <div class="row"><label>room send trim</label><input id="revtrim" type="range" min="0" max="2" step="0.01" value="1"><output id="revtrim_v"></output></div>
+    <div class="row"><label>send modulation</label><input id="moddepth" type="range" min="0" max="1" step="0.01" value="1"><output id="moddepth_v"></output></div>
+  </fieldset>
+
+  <fieldset>
+    <legend>the stab — its filter is what moves</legend>
+    <div class="row"><label>stab cutoff</label><input id="stabcut" type="range" min="0.35" max="2" step="0.01" value="1"><output id="stabcut_v"></output></div>
+  </fieldset>
+
+  <fieldset>
+    <legend>the eight channels</legend>
+    <table id="chans"><thead><tr>
+      <th>ch</th><th>voice</th><th>pattern</th><th style="width:150px">fader</th><th>echo</th><th>room</th><th>from</th>
+    </tr></thead><tbody></tbody></table>
+    <div style="color:var(--dim);margin-top:10px">
+      the faders start where <b>221-dub-basic</b> put them and go anywhere —
+      <button id="reset" style="padding:3px 10px">back to the manifest</button>
+    </div>
+  </fieldset>
+
+  <div id="perf">scheduler: not running</div>
 </main>
+
+<script>
+"use strict";
+/* ===========================================================================
+   p02 — THE ENDLESS SET'S RENDERER, PLAYING THE PARENT'S 221-dub-basic
+   ---------------------------------------------------------------------------
+   Two sources, and neither is a blank page. Every number below carries the one
+   it came from:
+
+     [M]  The parent project's dub round manifest, entry 0, "221-dub-basic"
+          — THE GENRE'S CENTRE. The patterns, the chord takes,
+          the sends, the faders and the modulators are its, verbatim.
+     [E]  The Endless Set (jeroenvanzutphen.nl/ai/dj/, v1.275), read
+          2026-09-17. The line numbers are into that page. Its VOICE
+          ARCHITECTURE and its PARAMETERS — filter corners, envelope times,
+          oscillator counts, detune amounts, bus topology, curve shapes — are
+          what the sound here is made of.
+          THE PAGE CARRIES NO LICENCE. Nothing is copied from it. What is
+          carried is the description of a sound (a 1700 Hz bandpass at Q 1.4,
+          three bursts 11 ms apart) and the shape of a graph, both of which are
+          facts, written out again here in our own code and our own names.
+     [D]  The project's living note on what makes a piece dub techno.
+     [G]  The project's living note on the generative vocabulary.
+     [P]  measured here, on the date given. Nothing in this file is a
+          prediction: where a number had to be chosen, it was rendered offline
+          and read.
+
+   WHAT THIS IS NOT: the Endless Set's composer, its DJ, its two decks, its
+   transitions, its style graph, its corpus tables, its vocals. This is one
+   deck playing one fixed piece. The renderer is the part that was worth
+   having.
+   =========================================================================== */
+
+/* ---------------------------------------------------------------------------
+   1. THE PIECE — [M], transcribed from the manifest entry, field for field
+   --------------------------------------------------------------------------- */
+const PIECE = {
+  file: "221-dub-basic",
+  tempo: 125,                                   // [M] tempo
+  // [M] globals. root 7 = G, scale 0 = natural minor. master 22 is the
+  // parent's own main-fader index and does not cross to this engine.
+  globals: { root: 7, scale: 0, revsize: 30, revtype: 3, dlytime: 1, dlyfbk: 42 },
+
+  // [M] drums — hits/rotate/velo per channel, euclidean on a 16-step bar.
+  drums: {
+    0: { hits: 4, rotate: 0,  velo: 110, why: "four on the floor, hard and flat" },
+    1: { hits: 1, rotate: 4,  velo: 68,  why: "one rimshot on beat 2, and nothing else" },
+    2: { hits: 1, rotate: 12, velo: 72,  why: "a single clap on beat 4, drenched" },
+    3: { hits: 8, rotate: 0,  velo: 58,  why: "eighth-note hats, quiet, under everything" }
+  },
+
+  // [M] chords — the literal takes. `step` is a 16th of the bar, `duration`
+  // is in steps, `notes` are MIDI numbers.
+  chords: {
+    5: [ { step: 0, notes: [31], velo: 112, duration: 7.0 },
+         { step: 8, notes: [41], velo: 112, duration: 7.0 } ],
+         // [M] why: "G1 then F1 — root, then the flat seventh under the second
+         // half of the bar." The NUMBERS say G1 (31) then F2 (41): 41 is ten
+         // semitones above 31, the flat seventh, an octave higher than the
+         // prose reads. The numbers are taken, not the prose — the manifest's
+         // note lists are what the rig played.
+    6: [ { step: 2,  notes: [55, 58, 62], velo: 92, duration: 1.6 },
+         { step: 6,  notes: [55, 58, 62], velo: 92, duration: 1.6 },
+         { step: 10, notes: [55, 58, 62], velo: 92, duration: 1.6 },
+         { step: 14, notes: [55, 58, 62], velo: 92, duration: 1.6 } ],
+         // [M] "the same G minor triad on all four offbeat eighths. This is the
+         // figure the genre is built on: it never changes, and the delay and
+         // the filter are what move."
+    7: [ { step: 0, notes: [43, 46, 50], velo: 56, duration: 15.0 } ]
+         // [M] "G minor held under it, fifteen of sixteen steps."
+  },
+
+  // [M] voices — channel 4 is EMPTY and says so. Its `why` is the reason this
+  // file draws it rather than leaving it out.
+  empty: {
+    4: "silent in this piece — rhythm_reg 0 in the manifest. Said explicitly, "
+     + "because a channel that goes quiet with nothing explaining it is the "
+     + "one thing the instrument refuses to produce [G]."
+  },
+
+  // [M] wets — per channel, 0..100, into the delay and the reverb.
+  wets: {
+    1: { delay: 0,  reverb: 6  },
+    2: { delay: 18, reverb: 30 },
+    3: { delay: 30, reverb: 34 },
+    4: { delay: 0,  reverb: 8  },
+    5: { delay: 0,  reverb: 0  },
+    6: { delay: 0,  reverb: 6  },
+    7: { delay: 44, reverb: 36 }
+  },
+
+  // [M] levels — "THE EIGHT CHANNEL FADERS ARE 019'S, moved only where a
+  // channel changes role — every ratio the owner tuned by ear on 2026-09-02".
+  // These are the ratios that made twenty pieces comparable, so they are kept
+  // exactly. Channel "16" is the parent's measured MAIN fader; see MASTER_TRIM
+  // below for why it does not cross to this engine.
+  levels: { 0: 0.77, 1: 0.7065, 2: 0.7826, 3: 0.67, 4: 0.2065, 5: 0.337, 6: 0.3261, 7: 0.2826 },
+  mainFaderOnTheRig: 0.2178,
+
+  // [M] mods — `rate` is an index into MOD_RATES [G].
+  mods: [
+    { channel: 6, verb: "delay",  depth: 34, rate: 4, shape: "tri", phase0: 0.15,
+      why: "the stab's echo swells and recedes over three bars" },
+    { channel: 6, verb: "reverb", depth: 26, rate: 1, shape: "tri", phase0: 0.65,
+      why: "and its room opens over eight, out of phase with the echo" },
+    { channel: 3, verb: "level",  depth: 28, rate: 3, shape: "tri", phase0: 0.8,
+      why: "the hats breathe over four bars" }
+  ]
+};
+
+// [G] "Rates are locked to the bar — nine rates from sixteen bars per cycle
+// down to half a bar." The manifest's `rate` is an index into this list.
+// 3 and 8 are COPRIME, which is the whole point: [D] "the echo over three bars
+// and the room over eight, so the two are never both loud." The reference
+// supports it — both modulators are on the same channel's two sends.
+const MOD_RATES = [16, 8, 6, 4, 3, 2, 1, 0.75, 0.5];
+
+// [M] globals.dlytime is an index into the parent's delay divisions [D]:
+// `1/16 · 1/8 · 3/16 · 1/4 · 3/8 · 1/2`. Index 1 is 1/8 — half a beat.
+const DLY_DIVISIONS = [0.25, 0.5, 0.75, 1, 1.5, 2];  // in beats
+
+// [D] the genre pack's groove row for dub, per channel in channel order:
+//   swing       0, .08, 0, .08, 0, 0, 0, 0
+//   human_time  0, .02, 0, .03, .03, 0, 0, 0
+//   human_velo  0,   5, 0,   8,   8, 0, 0, 0
+// "dub swings the snare and the hat a little (0.08) and nothing else" — the
+// kick and the bass stay dead straight, which is what makes the swing audible.
+const SWING      = { 1: 0.08, 3: 0.08 };   // as a fraction of one 16th step
+const HUMAN_TIME = { 1: 0.02, 3: 0.03, 4: 0.03 };
+const HUMAN_VELO = { 1: 5, 3: 8, 4: 8 };   // in MIDI velocity units
+
+/* ---------------------------------------------------------------------------
+   2. MEASURED NUMBERS — [P]. Rendered offline in Chromium, read, written down
+      once, here, with the date. Nothing else in the file repeats them.
+   --------------------------------------------------------------------------- */
+// THE INPUT GAIN, one per channel — the stage every mixer channel has ahead of
+// its fader, and for the same reason: the things plugged into it do not arrive
+// at the same level. A kick built to [E]'s recipe peaks 17 dB above a clap
+// built to [E]'s recipe; that is a fact about the two voices, not a mix.
+//
+// Measured once, 2026-09-17, and not to be measured again: each voice rendered
+// alone, no fader, at the deck sum (before the saturator and the compressor),
+// four bars at 125 BPM. These bring every voice to the same -12.0 dBFS peak, so
+// that THE FADER ABOVE IS THE ONLY THING DECIDING THE BALANCE and a fader at
+// 0.77 is louder than one at 0.33 by the amount it says.
+//
+// The faders on the surface start at [M]'s values and go anywhere the owner
+// wants. Nothing here is a target the mix is trimmed to — the balance is the
+// owner's, set by ear, by hand, while it plays.
+const INPUT_GAIN = {
+  0: 0.1766,   // kick   alone: peak  +3.06 dBFS, RMS -17.70
+  1: 1.2604,   // rim    alone: peak -14.01 dBFS, RMS -49.00
+  2: 3.6657,   // clap   alone: peak -23.28 dBFS, RMS -54.24
+  3: 1.4248,   // hats   alone: peak -15.08 dBFS, RMS -45.60
+  4: 1,        // (empty — no material behind it; it renders at -180 dBFS)
+  5: 0.4419,   // sub    alone: peak  -4.91 dBFS, RMS  -9.97
+  6: 2.5372,   // stab   alone: peak -20.09 dBFS, RMS -39.27
+  7: 1.0784,   // pad    alone: peak -12.66 dBFS, RMS -27.72
+};
+
+// Measured 2026-09-17, in Chromium. Two windows, because one was not enough:
+//   OFFLINE, 24 bars — the least common multiple of the three modulator
+//   periods (3, 4 and 8 bars), so it holds the loudest combination the
+//   MODULATORS can reach:
+//       trim 0.80 -> peak -6.02 dBFS / RMS -21.28      trim 1.00 -> -4.76 / -19.36
+//       trim 1.24 -> peak -3.69 dBFS / RMS -17.53      trim 1.40 -> -3.08 / -16.52
+//   LIVE, 150 s (78 bars), analysed on the output. Louder every time, because
+//   the humanisation and the per-note component tolerances put a hotter bar
+//   somewhere outside any modulator cycle: trim 1.40 read -2.78 dBFS peak and
+//   trim 1.32 read -2.27 — both OVER the ceiling, and both into the finisher's
+//   soft-clip knee, which begins at 0.75 linear = -2.5 dBFS.
+//   A 24-bar offline render is therefore NOT a ceiling test. The live window is.
+//
+//   trim 1.15: live peak -3.08 dBFS, RMS -17.95 dBFS over 150 s; offline 24-bar
+//   peak -3.74 dBFS, RMS -18.19. That is [M]'s "-3 dBFS of predicted peak"
+//   exactly, with
+//   0.6 dB of clear air under the guard's knee. Nothing clips.
+//
+// [M]'s own main fader (0.2178) is NOT used. It was measured on the rig, over
+// forty-eight bars of zynmixer output, against LV2 engines whose levels are not
+// this engine's — copying it would be carrying a measurement of a different
+// machine, which is the exact mistake the parent lost a day to.
+const MASTER_TRIM = 1.15;
+
+/* ---------------------------------------------------------------------------
+   3. THE GRID — euclidean placement [G]
+   --------------------------------------------------------------------------- */
+// [G] "Given a step count and a hit count, spread the hits as evenly as the
+// grid allows, then rotate." Bjorklund. Checked against [M]'s own whys:
+// (4,16) rot 0 -> 0,4,8,12 (four on the floor); (1,16) rot 4 -> step 4
+// (the rimshot on beat 2); (1,16) rot 12 -> step 12 (the clap on beat 4);
+// (8,16) rot 0 -> every other step (eighth-note hats).
+function euclid(steps, hits) {
+  const out = new Array(steps).fill(0);
+  if (hits <= 0) return out;                      // and the channel says why
+  if (hits >= steps) return out.fill(1);
+  let bucket = 0;
+  for (let i = 0; i < steps; i++) {
+    bucket += hits;
+    if (bucket >= steps) { bucket -= steps; out[i] = 1; }
+  }
+  // that loop places the last hit on the final step; turn it so the pattern
+  // opens on the downbeat, which is what every drum line here expects
+  return out.slice(steps - 1).concat(out.slice(0, steps - 1));
+}
+function rotated(pat, by) {
+  const n = pat.length, r = ((by % n) + n) % n, out = new Array(n);
+  for (let i = 0; i < n; i++) out[(i + r) % n] = pat[i];   // forward in time
+  return out;
+}
+
+/* ---------------------------------------------------------------------------
+   4. SMALL TOOLS
+   --------------------------------------------------------------------------- */
+const mtof = m => 440 * Math.pow(2, (m - 69) / 12);
+const clamp = (x, lo, hi) => Math.max(lo, Math.min(hi, x));
+const dbfs = x => 20 * Math.log10(Math.max(1e-9, x));
+// mulberry32 — a three-line PRNG, used the way [E] uses one: seeded from the
+// event's own time so a hit is never twice identical and a render still
+// reproduces the take it renders.
+function mulberry32(a) {
+  return function () {
+    a |= 0; a = (a + 0x6D2B79F5) | 0;
+    let t = Math.imul(a ^ (a >>> 15), 1 | a);
+    t = (t + Math.imul(t ^ (t >>> 7), 61 | t)) ^ t;
+    return ((t ^ (t >>> 14)) >>> 0) / 4294967296;
+  };
+}
+// [G] "Four shapes: triangle, ramp, square, sample-and-hold." Only the
+// triangle is asked for by [M]; it starts at its base and swells, so a
+// modulator bound at a phase is where its `phase0` puts it.
+function tri(p) {
+  p = p - Math.floor(p);
+  return p < 0.25 ? 4 * p : p < 0.75 ? 2 - 4 * p : 4 * p - 4;   // 0 → +1 → 0 → −1 → 0
+}
+
+/* ---------------------------------------------------------------------------
+   5. THE ENGINE
+      Built against a context rather than against `window`, so the same code
+      renders offline for measurement as plays live. [E] does the same thing
+      and for the same reason: a number the surface shows and a number the
+      engine receives are different claims.
+   --------------------------------------------------------------------------- */
+function createEngine(ctx, opts) {
+  opts = opts || {};
+  const A = {};                       // the graph, kept; voices die, buses do not
+  const cfg = {
+    bpm: PIECE.tempo,
+    master: 0.8,
+    pump: 0.25,
+    dlyBeats: DLY_DIVISIONS[PIECE.globals.dlytime],
+    dlyFbk: PIECE.globals.dlyfbk / 100,
+    dlyTrim: 1,
+    revTrim: 1,
+    revSeconds: 4.5,
+    modDepth: 1,
+    stabCut: 1,
+    bypassFaders: !!opts.bypassFaders,   // calibration render: [M]'s faders off
+    raw: !!opts.raw,                     // …and the input gain off too: the voice exactly as built
+    solo: (opts.solo === undefined ? null : opts.solo)
+  };
+
+  /* --- the noise bank. [E] :7868 — eight independent 1.2 s buffers, drawn per
+     hit, "because identical noise retriggered hundreds of times a minute
+     through the same filter stops reading as noise and starts reading as a
+     tone." Eight on desktop, four on LITE; eight here. --- */
+  const NOISE = [];
+  {
+    const len = Math.floor(ctx.sampleRate * 1.2);
+    for (let k = 0; k < 8; k++) {
+      const b = ctx.createBuffer(1, len, ctx.sampleRate), d = b.getChannelData(0);
+      for (let i = 0; i < len; i++) d[i] = Math.random() * 2 - 1;
+      NOISE.push(b);
+    }
+  }
+  const noise = rnd => NOISE[Math.floor((rnd ? rnd() : Math.random()) * NOISE.length) % NOISE.length];
+
+  /* --- the hall's impulse response. [E] :7587 makeImpulse(seconds, decay):
+     decorrelated noise per channel, a one-pole lowpass whose coefficient falls
+     from .7 to .15 across the tail so the room absorbs its own highs, an
+     exponential amplitude decay, and a 10 ms fade-in so the direct transient is
+     not doubled. [E] builds the chord hall at 4.5 s / decay 2.2.
+     [M] globals.revsize 30 and revtype 3 address TAP Reverberator's
+     forty-three modes. THOSE DO NOT CROSS — there is no TAP here and no way to
+     map a mode index onto a synthesised IR without inventing the mapping. The
+     room is [E]'s, and its length is on a slider so the owner can place it. --- */
+  function makeImpulse(seconds, decay) {
+    const rate = ctx.sampleRate, len = Math.floor(rate * seconds);
+    const buf = ctx.createBuffer(2, len, rate);
+    for (let ch = 0; ch < 2; ch++) {
+      const d = buf.getChannelData(ch);
+      let lp = 0;
+      for (let i = 0; i < len; i++) {
+        const t = i / len, coef = 0.7 - 0.55 * t;
+        lp += coef * ((Math.random() * 2 - 1) - lp);
+        const fadeIn = i < rate * 0.01 ? i / (rate * 0.01) : 1;
+        d[i] = lp * Math.pow(1 - t, decay) * fadeIn;
+      }
+    }
+    return buf;
+  }
+
+  /* --- the saturation curves. [E] :7514 — "a WaveShaper maps only [-1,+1] and
+     CLAMPS everything outside to the curve's end value, so a tanh table written
+     over [-1,+1] stops being a saturator and becomes a hard clipper the instant
+     its input passes 0 dBFS." Every bus shaper therefore gets a curve written
+     over a ±3 domain with a matching 1/3 trim in front: identical below 0 dBFS,
+     still curving at +9.5 dB instead of shearing flat. --- */
+  const SAT_K = 3;                                        // [E] :7512
+  const satCurves = new Map();
+  function satCurve(k) {
+    const q = Math.round(k * 100) / 100;
+    if (satCurves.has(q)) return satCurves.get(q);
+    const n = 2048, c = new Float32Array(n), nrm = Math.tanh(q);
+    for (let i = 0; i < n; i++) { const x = (i / (n - 1) * 2 - 1) * SAT_K; c[i] = Math.tanh(q * x) / nrm; }
+    satCurves.set(q, c);
+    return c;
+  }
+  const satTrim = () => { const g = ctx.createGain(); g.gain.value = 1 / SAT_K; return g; };
+
+  /* --- the ping-pong delay. [E] :7626 — in → L, L → pan −0.8 → out,
+     L → R, R → pan +0.8 → out, R → dark lowpass → feedback → L. One delay line
+     feeds the other, which is what makes the repeats alternate sides, and the
+     feedback path is filtered so each repeat is darker than the last: [D] "dark
+     filtered-out delays is half the genre's own description of itself." --- */
+  function pingPong(time, fb, darkHz) {
+    const inp = ctx.createGain(), L = ctx.createDelay(3), R = ctx.createDelay(3),
+          f = ctx.createGain(), pl = ctx.createStereoPanner(), pr = ctx.createStereoPanner(),
+          out = ctx.createGain();
+    L.delayTime.value = time; R.delayTime.value = time; f.gain.value = fb;
+    pl.pan.value = -0.8; pr.pan.value = 0.8;
+    inp.connect(L);
+    L.connect(pl); pl.connect(out);
+    L.connect(R);
+    R.connect(pr); pr.connect(out);
+    const dk = ctx.createBiquadFilter(); dk.type = "lowpass"; dk.frequency.value = darkHz;
+    R.connect(dk); dk.connect(f);
+    f.connect(L);
+    return { in: inp, out, L, R, fb: f };
+  }
+
+  /* =========================================================================
+     THE BUSES — [E] mkDeckAudio :8087..:8465, with the two-deck machinery
+     (DJ isolator, crossfader, mastering-DNA selector, bitcrush, vinyl bed,
+     flutter line, arp and modular buses) left out: this is one deck playing
+     one piece and they have nothing to do.
+     ========================================================================= */
+  // drums land on `dry`; everything tonal lands on `pump`, the sidechain bus
+  // the kick ducks. [E] :8118.
+  A.dry  = ctx.createGain();
+  A.pump = ctx.createGain(); A.pump.gain.value = 1;
+
+  // [E] :8121 the drum group has its own compressor, transparent until asked,
+  // with a parallel squashed path underneath. Left transparent here.
+  A.drumComp = ctx.createDynamicsCompressor();
+  A.drumComp.threshold.value = 0; A.drumComp.ratio.value = 1;
+  A.drumComp.attack.value = 0.01; A.drumComp.release.value = 0.15; A.drumComp.knee.value = 6;
+
+  A.deck = ctx.createGain();                 // the deck sum
+  A.dry.connect(A.drumComp); A.drumComp.connect(A.deck);
+  A.pump.connect(A.deck);
+
+  // the calibration tap: the deck sum, before anything non-linear. Everything
+  // in INPUT_GAIN was measured here.
+  A.calTap = ctx.createGain(); A.deck.connect(A.calTap);
+
+  /* --- the dub delay. [E] :8244: "a persistent per-deck dub delay bus. Every
+     stab sends into it; the feedback loop runs through a dark lowpass so
+     repeats decay into dub haze." [E] runs it at 1.5 beats with fb .46 into a
+     2400 Hz dark loop and returns it at .4 into the pump bus.
+     [M] asks for 1/8 (globals.dlytime 1) at 42% feedback (globals.dlyfbk), so
+     the time and the feedback are the manifest's and the topology is [E]'s. --- */
+  A.dlyIn = ctx.createGain();
+  A.pp = pingPong(60 / cfg.bpm * cfg.dlyBeats, cfg.dlyFbk, 2400);
+  A.dlyWet = ctx.createGain(); A.dlyWet.gain.value = 0.4;       // [E] :8246 cwet
+  A.dlyIn.connect(A.pp.in); A.pp.out.connect(A.dlyWet); A.dlyWet.connect(A.pump);
+
+  /* --- the room. [E] :8271: a 4.5 s hall on a .28 wet through a FIXED dark
+     lowpass at 3100 Hz — "the darker LP keeps it from washing" — returning to
+     the DECK bus rather than through any one channel's dynamics (their v1.391
+     fix: fourteen voices shared that hall and all of them were being filtered,
+     compressed and gated by the chord lane on the way back). --- */
+  A.revIn = ctx.createGain();
+  A.rev = ctx.createConvolver(); A.rev.buffer = makeImpulse(cfg.revSeconds, 2.2);
+  A.revWet = ctx.createGain(); A.revWet.gain.value = 0.28;
+  A.revLp = ctx.createBiquadFilter(); A.revLp.type = "lowpass";
+  A.revLp.frequency.value = 3100; A.revLp.Q.value = 0.5;
+  A.revIn.connect(A.rev); A.rev.connect(A.revWet); A.revWet.connect(A.revLp);
+  A.revLp.connect(A.pump);
+
+  /* --- the eight channels. Each is one gain (the fader) with two sends. --- */
+  A.chan = {};
+  for (let ch = 0; ch <= 7; ch++) {
+    const c = {};
+    c.in = ctx.createGain();
+    c.gain = ctx.createGain();
+    c.fader = cfg.bypassFaders ? 1 : (PIECE.levels[ch] || 0);   // [M] levels — where the hand starts
+    c.inGain = cfg.raw ? 1 : (INPUT_GAIN[ch] || 1);
+    c.base = c.fader * c.inGain;
+    c.gain.gain.value = c.base;
+    c.in.connect(c.gain);
+    // drums (0-3) go dry; the tonal channels ride the pump [E] :8118
+    c.gain.connect(ch <= 3 ? A.dry : A.pump);
+    const w = PIECE.wets[ch] || { delay: 0, reverb: 0 };
+    c.dlySend = ctx.createGain(); c.dlySend.gain.value = w.delay / 100;
+    c.revSend = ctx.createGain(); c.revSend.gain.value = w.reverb / 100;
+    c.gain.connect(c.dlySend); c.dlySend.connect(A.dlyIn);
+    c.gain.connect(c.revSend); c.revSend.connect(A.revIn);
+    c.wet = w;
+    A.chan[ch] = c;
+  }
+
+  /* --- the deck character stage. [E] :8097 + applyMfx :7982. With a sustained
+     pad and a bass present, [E] relaxes this compressor deliberately so it does
+     not fight the pad compressor and the mastering compressor in series:
+     attack .022, release .38, threshold −6−amt·6, ratio 1.55+amt·1.45.
+     At their bass+pad amount (comp .5 × .48 = .24) that is −7.44 and 1.90. --- */
+  A.satIn = satTrim();
+  A.sat = ctx.createWaveShaper(); A.sat.curve = satCurve(1.0); A.sat.oversample = "2x";
+  A.comp = ctx.createDynamicsCompressor();
+  A.comp.threshold.value = -7.44; A.comp.ratio.value = 1.90; A.comp.knee.value = 8;
+  A.comp.attack.value = 0.022; A.comp.release.value = 0.38;
+  A.deck.connect(A.satIn); A.satIn.connect(A.sat); A.sat.connect(A.comp);
+
+  A.master = ctx.createGain(); A.master.gain.value = cfg.master;
+  A.comp.connect(A.master);
+
+  /* --- the finisher. [E] :7660..:7710 — a fixed, always-on chain with no user
+     parameters, after everything: a sub shelf and an air shelf, a slow glue
+     compressor, one written output make-up, an asymmetric transformer stage,
+     a DC blocker, and a soft clip whose curve is written over ±4 with a 1/4
+     trim so a peak at +6 dB lands at 1.00 instead of being sheared flat.
+     [E]'s own written make-up is +9.3 dB (STAGE_MK 2.92) and cancels the
+     hidden make-up Chrome's compressors add, computed from their knee model.
+     THAT MODEL IS NOT COPIED. One trim, MASTER_TRIM, is measured instead. --- */
+  const sub = ctx.createBiquadFilter(); sub.type = "lowshelf";  sub.frequency.value = 90;    sub.gain.value = 0.7;
+  const air = ctx.createBiquadFilter(); air.type = "highshelf"; air.frequency.value = 12000; air.gain.value = 1.2;
+  const glue = ctx.createDynamicsCompressor();
+  glue.threshold.value = -14; glue.ratio.value = 2; glue.knee.value = 6;
+  glue.attack.value = 0.03; glue.release.value = 0.15;
+  const trim = ctx.createGain();
+  trim.gain.value = (opts.masterTrim === undefined ? MASTER_TRIM : opts.masterTrim);   // [P]
+  const xfIn = satTrim();
+  const xf = ctx.createWaveShaper(); xf.oversample = "2x";
+  {  // [E] :7681 — tanh(1.15) with a +0.06 offset, DC-corrected: gentle even
+     // harmonics, which is what a transformer does and a symmetric tanh cannot.
+    const n = 4096, c = new Float32Array(n), k = 1.15, b = 0.06, z = Math.tanh(k * b);
+    for (let i = 0; i < n; i++) { const x = (i / (n - 1) * 2 - 1) * SAT_K; c[i] = Math.tanh(k * (x + b)) - z; }
+    xf.curve = c;
+  }
+  const dc = ctx.createBiquadFilter(); dc.type = "highpass"; dc.frequency.value = 5; dc.Q.value = 0.5;
+  const clipK = 4, clipIn = ctx.createGain(); clipIn.gain.value = 1 / clipK;
+  const clip = ctx.createWaveShaper(); clip.oversample = "4x";
+  {  // [E] :7699 — unity into a .75 knee, then asymptotic. A guard, not a colour.
+    const n = 4096, c = new Float32Array(n), t = 0.75;
+    for (let i = 0; i < n; i++) {
+      const u = i / (n - 1) * 2 - 1, a = Math.abs(u) * clipK, sg = u < 0 ? -1 : 1;
+      c[i] = sg * (a <= t ? a : t + (1 - t) * Math.tanh((a - t) / (1 - t)));
+    }
+    clip.curve = c;
+  }
+  A.out = ctx.createGain(); A.out.gain.value = 0.97;                // [E] :7709 imcOut
+  A.master.connect(sub); sub.connect(air); air.connect(glue); glue.connect(trim);
+  trim.connect(xfIn); xfIn.connect(xf); xf.connect(dc); dc.connect(clipIn);
+  clipIn.connect(clip); clip.connect(A.out);
+  A.trimNode = trim;
+
+  // in a calibration render the finisher is out of the path: a voice is
+  // measured where the graph is still linear.
+  A.tail = opts.calibrate ? A.calTap : A.out;
+
+  /* =========================================================================
+     THE SIDECHAIN — [E] duck() :8479 and duckSettings :8466
+     "cancelAndHoldAtTime is the correct call — it keeps the value the ramp had
+     actually reached — and the new ramp starts from there, which is also what a
+     real sidechain does when it is retriggered before it has recovered."
+     15 ms linear down, exponential back to 1 over .24 s.
+     NOT IN [M]: the parent's round has no sidechain at all. This is [E]'s
+     architecture, so it is here, but its depth defaults low and it is on a
+     slider — it is an audible decision and the owner makes those.
+     ========================================================================= */
+  function cancelHold(prm, t) {
+    if (prm.cancelAndHoldAtTime) { try { prm.cancelAndHoldAtTime(t); return; } catch (e) {} }
+    prm.cancelScheduledValues(t); prm.setValueAtTime(prm.value, t);
+  }
+  function duck(t) {
+    const floor = clamp(1 - cfg.pump, 0.0008, 1);
+    if (floor >= 0.999) return;
+    cancelHold(A.pump.gain, t);
+    A.pump.gain.linearRampToValueAtTime(floor, t + 0.015);
+    A.pump.gain.exponentialRampToValueAtTime(1, t + 0.24);
+  }
+
+  /* =========================================================================
+     THE VOICES — [E], rebuilt
+     ========================================================================= */
+
+  // KICK — [E] playKick :8487. Body sine 150 → 43 Hz over 110 ms decaying over
+  // 260 ms; a SECOND, slower sub sine at f1×1.6 falling to max(34, f1×.85) over
+  // 200 ms and decaying over 420 ms at mix .55 — "all weight below ~70 Hz";
+  // a noise click through a 1200 Hz highpass, 20 ms.
+  function voiceKick(t, v, out) {
+    const f0 = 150, f1 = 43, dec = 0.26, click = 0.25, subMix = 0.55;
+    const o = ctx.createOscillator(), g = ctx.createGain();
+    o.frequency.setValueAtTime(f0, t);
+    o.frequency.exponentialRampToValueAtTime(f1, t + 0.11);
+    g.gain.setValueAtTime(v * 0.9, t);
+    g.gain.exponentialRampToValueAtTime(0.001, t + dec);
+    o.connect(g); g.connect(out); o.start(t); o.stop(t + dec + 0.05);
+
+    const so = ctx.createOscillator(), sg = ctx.createGain();
+    so.type = "sine";
+    so.frequency.setValueAtTime(f1 * 1.6, t);
+    so.frequency.exponentialRampToValueAtTime(Math.max(34, f1 * 0.85), t + 0.2);
+    sg.gain.setValueAtTime(v * subMix, t);
+    sg.gain.exponentialRampToValueAtTime(0.001, t + 0.42);
+    so.connect(sg); sg.connect(out); so.start(t); so.stop(t + 0.47);
+
+    const n = ctx.createBufferSource(), ng = ctx.createGain(), hp = ctx.createBiquadFilter();
+    n.buffer = noise(); hp.type = "highpass"; hp.frequency.value = 1200;
+    ng.gain.setValueAtTime(v * click, t);
+    ng.gain.exponentialRampToValueAtTime(0.001, t + 0.02);
+    n.connect(hp); hp.connect(ng); ng.connect(out); n.start(t); n.stop(t + 0.03);
+  }
+
+  // CLOSED HAT — [E] playHat :8531. Noise through a 8200 Hz highpass at Q 1.2,
+  // level ×.3, 45 ms decay. (The open hat is the same voice with the corner
+  // 1700 Hz lower and a 320 ms tail, and returns its gain so a closed hat can
+  // choke it — [M] asks for no open hat in this piece, so it is not built.)
+  function voiceHat(t, v, out, pan) {
+    const n = ctx.createBufferSource(), g = ctx.createGain(), hp = ctx.createBiquadFilter();
+    n.buffer = noise(); hp.type = "highpass"; hp.frequency.value = 8200; hp.Q.value = 1.2;
+    const d = 0.045;
+    g.gain.setValueAtTime(v * 0.3, t);
+    g.gain.exponentialRampToValueAtTime(0.001, t + d);
+    const p = ctx.createStereoPanner(); p.pan.value = pan || 0;
+    n.connect(hp); hp.connect(g); g.connect(p); p.connect(out);
+    n.start(t); n.stop(t + d + 0.02);
+  }
+
+  // CLAP — [E] playClap :8576. Three noise bursts 11 ms apart through a 1700 Hz
+  // bandpass at Q 1.4; the first two are short (20 ms) and quieter (×.6), the
+  // third is the body and rings 140 ms. [M] channel 2: "a single clap on beat
+  // 4, drenched" — p01 left it out; it is here.
+  function voiceClap(t, v, out) {
+    for (let i = 0; i < 3; i++) {
+      const n = ctx.createBufferSource(), g = ctx.createGain(), bp = ctx.createBiquadFilter();
+      n.buffer = noise(); bp.type = "bandpass"; bp.frequency.value = 1700; bp.Q.value = 1.4;
+      const tt = t + i * 0.011;
+      g.gain.setValueAtTime(v * 0.28 * (i === 2 ? 1 : 0.6), tt);
+      g.gain.exponentialRampToValueAtTime(0.001, tt + (i === 2 ? 0.14 : 0.02));
+      n.connect(bp); bp.connect(g); g.connect(out);
+      n.start(tt); n.stop(tt + 0.18);
+    }
+  }
+
+  // RIMSHOT — [E] playPerc2 mode "rim" :9047. "A woody rimshot — triangle ping
+  // plus a tiny noise click": a triangle at 1700 Hz through a 900 Hz highpass,
+  // 30 ms decay at ×.4, with raw noise at ×.15 over 15 ms under it.
+  function voiceRim(t, v, out, pan) {
+    const o = ctx.createOscillator(), g = ctx.createGain(), hp = ctx.createBiquadFilter();
+    o.type = "triangle"; o.frequency.value = 1700;
+    hp.type = "highpass"; hp.frequency.value = 900;
+    const rd = 0.03;
+    g.gain.setValueAtTime(v * 0.4, t);
+    g.gain.exponentialRampToValueAtTime(0.001, t + rd);
+    const p = ctx.createStereoPanner(); p.pan.value = pan || 0;
+    o.connect(hp); hp.connect(g); g.connect(p); p.connect(out);
+    o.start(t); o.stop(t + rd + 0.02);
+    const n = ctx.createBufferSource(), ng = ctx.createGain();
+    n.buffer = noise();
+    ng.gain.setValueAtTime(v * 0.15, t);
+    ng.gain.exponentialRampToValueAtTime(0.001, t + 0.015);
+    n.connect(ng); ng.connect(out); n.start(t); n.stop(t + 0.02);
+  }
+
+  // SUB — [E] playBass model "sub" :9170. "Pure sine an octave down with a
+  // whisper of triangle on top — just weight, almost no midrange character."
+  // 12 ms in, held to 85% of its written length, out by 115%. Peak ×.62,
+  // triangle at ×.22. [M] channel 5 is exactly this part: two notes a bar.
+  function voiceSub(t, midi, dur, v, out) {
+    const g = ctx.createGain(), g2 = ctx.createGain();
+    const peak = v * 0.62;
+    g.gain.setValueAtTime(0, t);
+    g.gain.linearRampToValueAtTime(peak, t + 0.012);
+    g.gain.setValueAtTime(peak, t + dur * 0.85);
+    g.gain.linearRampToValueAtTime(0, t + dur * 1.15);
+    const o = ctx.createOscillator(); o.type = "sine"; o.frequency.value = mtof(midi - 12);
+    const o2 = ctx.createOscillator(); o2.type = "triangle"; o2.frequency.value = mtof(midi);
+    g2.gain.value = 0.22;
+    o.connect(g); o2.connect(g2); g2.connect(g); g.connect(out);
+    o.start(t); o.stop(t + dur * 1.2 + 0.05);
+    o2.start(t); o2.stop(t + dur * 1.2 + 0.05);
+  }
+
+  // THE DUB STAB — [E] playChord engine "dubstab" :9737. Its own comment names
+  // the genre: "the Basic Channel / dub techno chord hit whose FILTER does the
+  // talking. Per note: two saws plus a square, widely detuned, into a resonant
+  // lowpass that snaps open in ~8 ms and shuts again inside a fifth of a
+  // second, with a tiny downward pitch sag at the attack (the sproing). Each
+  // note gets its OWN filter and envelope with analog-tolerance variation."
+  // Per-note rather than per-chord is deliberate there and measured: sharing one
+  // shaper across a chord adds 5–9 dB of energy belonging to no note in it.
+  function voiceStab(t, notes, dur, v, out) {
+    const rr = mulberry32((t * 1e4) | 0);
+    const body = ctx.createBiquadFilter();
+    body.type = "highpass"; body.frequency.value = 130; body.Q.value = 0.7;  // [E] :9722
+    const g = ctx.createGain();
+    const vv = v * 0.1 * 0.85;                       // [E] :9706 stab vv, ×.85 for dubstab
+    g.gain.setValueAtTime(0, t);
+    g.gain.linearRampToValueAtTime(vv, t + 0.02);
+    g.gain.setValueAtTime(vv, t + dur * 0.35);
+    g.gain.exponentialRampToValueAtTime(0.001, t + dur);
+    notes.forEach((m, i) => {
+      const f0 = mtof(m), tt = t + rr() * 0.006;
+      const vp = 0.86 + rr() * 0.28;                 // component tolerance per voice
+      const p = ctx.createStereoPanner();
+      p.pan.value = [-0.55, -0.2, 0.2, 0.55, 0][i % 5] * (0.7 + rr() * 0.5);
+      const lp = ctx.createBiquadFilter(), lp2 = ctx.createBiquadFilter();
+      const top = Math.min(6500, (1800 + rr() * 1700) * cfg.stabCut * vp);
+      const floor9 = Math.max(220, (300 + rr() * 180) * cfg.stabCut);
+      [lp, lp2].forEach((f, k) => {
+        f.type = "lowpass";
+        f.Q.value = k ? 1.1 : (3.2 + rr() * 3.4);    // the singing knee
+        f.frequency.setValueAtTime(floor9 * 1.2, tt);
+        f.frequency.linearRampToValueAtTime(top * (k ? 1.25 : 1), tt + 0.008);
+        f.frequency.exponentialRampToValueAtTime(floor9, tt + Math.min(dur * 0.9, 0.1 + rr() * 0.16));
+      });
+      const drv = ctx.createWaveShaper(); drv.curve = satCurve(1.8); drv.oversample = "2x";
+      const drvIn = satTrim();
+      const pre = ctx.createGain(); pre.gain.value = 0.5 / Math.sqrt(notes.length);
+      const env = ctx.createGain();
+      env.gain.setValueAtTime(0, tt);
+      env.gain.linearRampToValueAtTime(vv * 3.4 * vp, tt + 0.005);
+      env.gain.exponentialRampToValueAtTime(0.001, tt + dur * 0.95);
+      [[0, "sawtooth", 1], [1, "sawtooth", 1], [2, "square", 0.55]].forEach(([k, ty, amt]) => {
+        const o = ctx.createOscillator(), og = ctx.createGain();
+        o.type = ty;
+        o.frequency.setValueAtTime(f0 * (1 + (k === 1 ? 0.0009 : 0)), tt);
+        o.frequency.exponentialRampToValueAtTime(f0, tt + 0.03);        // the sag into pitch
+        o.detune.setValueAtTime((k - 1) * (12 + 9) + (rr() * 6 - 3), tt);  // [E] det 12 + 9
+        og.gain.value = amt;
+        o.connect(og); og.connect(pre);
+        o.start(tt); o.stop(tt + dur + 0.05);
+      });
+      pre.connect(drvIn); drvIn.connect(drv); drv.connect(lp); lp.connect(lp2);
+      lp2.connect(env); env.connect(p); p.connect(body);
+    });
+    body.connect(g); g.connect(out);
+    // the sub-octave root. [E] :10150: it skips the 130 Hz highpass, and
+    // "below 40 Hz it plays the octave up — the same note it is there to
+    // reinforce", because otherwise a dub voicing lands at 24–46 Hz, under the
+    // speaker and in the kick's way.
+    let subF = mtof(notes[0] - 12);
+    while (subF < 40) subF *= 2;
+    const so = ctx.createOscillator(), sg = ctx.createGain();
+    so.type = "triangle"; so.frequency.value = subF;
+    sg.gain.setValueAtTime(0, t);
+    sg.gain.linearRampToValueAtTime(v * 0.12, t + 0.02);      // stabs keep .12; pads get .22
+    sg.gain.exponentialRampToValueAtTime(0.001, t + dur);
+    so.connect(sg); sg.connect(out); so.start(t); so.stop(t + dur + 0.05);
+  }
+
+  // THE PAD — [E] playChord engine "ensemble" in mode "pad" :10035..:10145,
+  // with playPadFoundation :10188 underneath it.
+  // Per note: a CENTRE anchor oscillator dead on the pitch plus a detuned pair
+  // fanned into the room, each pair through its own two-pole lowpass that opens
+  // to ~1.55× the cutoff and closes again over the note, a tanh(1.15) drive
+  // (deliberately NOT oversampled: "a source this soft adds almost nothing to
+  // alias, and the polyphase resampler is paid per note, on the one voice that
+  // overlaps itself"), and sqrt(3/n) normalisation so a triad and a five-note
+  // voicing arrive at the same level.
+  // The drift LFOs are POOLED [E] :10019: one for the anchors at 0.14–0.36 Hz
+  // and ±1.8 cents, three for the outer voices at 0.4–1.6 Hz and ±2.5 cents —
+  // "what the ear hears is that neighbouring voices drift APART; it cannot
+  // follow twelve independent rates", and pooling them costs six nodes instead
+  // of twenty-four.
+  function voicePad(t, notes, dur, v, out) {
+    const rr = mulberry32(((t * 1e4) | 0) ^ 0x50AD);
+    const cutoff = 4200;                          // [E] padLp corner :8289
+    const atk = clamp(dur * 0.055, 0.22, 0.72);   // [E] :9705 pad attack
+    const vv = v * 0.075;                         // [E] :9705 pad vv
+    const body = ctx.createBiquadFilter();
+    body.type = "highpass"; body.frequency.value = 130; body.Q.value = 0.7;
+    const g = ctx.createGain(); g.gain.value = 1;  // the per-voice envelopes carry the level
+
+    const dets = [-1, 1], VW = 4;
+    const nrm = 1.15 / Math.sqrt(notes.length * 4) * (dets.length / VW);
+    const ecoLift = Math.sqrt(4 / dets.length);
+    const nCount = Math.sqrt(3 / Math.max(1, notes.length));
+
+    // the pooled drift
+    const CL = (() => {
+      const cl = ctx.createOscillator(), clg = ctx.createGain();
+      cl.type = "sine"; cl.frequency.value = 0.14 + rr() * 0.22; clg.gain.value = 1.8;
+      cl.connect(clg); cl.start(t); cl.stop(t + dur + 0.05);
+      return clg;
+    })();
+    const NL = [];
+    for (let i = 0; i < 3; i++) {
+      const lfo = ctx.createOscillator(), lg = ctx.createGain();
+      lfo.type = "sine"; lfo.frequency.value = 0.4 + rr() * 1.2; lg.gain.value = 2.5;
+      lfo.connect(lg); lfo.start(t); lfo.stop(t + dur + 0.05);
+      NL.push(lg);
+    }
+
+    notes.forEach((m, ni) => {
+      const vp = 0.88 + rr() * 0.24;
+      // [E] :10113 — in pad mode every NOTE takes its own seat: the lowest
+      // stays near the centre because it carries the root and has to survive a
+      // mono sum, the ones above fan out alternately toward the walls.
+      const nBase = (notes.length > 1 && ni > 0)
+        ? (ni % 2 ? 1 : -1) * (0.3 + 0.45 * (ni / (notes.length - 1))) : 0;
+      const vpre = ctx.createGain(); vpre.gain.value = nrm;
+      const drv = ctx.createWaveShaper(); drv.curve = satCurve(1.15); drv.oversample = "none";
+      const drvIn = satTrim();
+      const f1 = ctx.createBiquadFilter(), f2 = ctx.createBiquadFilter();
+      const top = Math.min(10000, cutoff * (1.55 + rr() * 0.55) * vp);
+      const flo = Math.max(520, cutoff * (0.46 + rr() * 0.14));
+      const fA = Math.max(0.006, atk * 0.6);
+      const fD = Math.max(1.2, dur * (0.48 + rr() * 0.22));
+      [f1, f2].forEach((f, k) => {
+        f.type = "lowpass"; f.Q.value = k ? 0.9 : 1.1;
+        f.frequency.setValueAtTime(flo, t);
+        f.frequency.linearRampToValueAtTime(top * (k ? 1.2 : 1), t + fA);
+        f.frequency.exponentialRampToValueAtTime(flo, t + fD);
+      });
+      const env = ctx.createGain();
+      const lvl = vv * 2.35 * vp * ecoLift * nCount;
+      env.gain.setValueAtTime(0, t);
+      env.gain.linearRampToValueAtTime(lvl, t + atk * (0.85 + rr() * 0.3));
+      env.gain.setValueAtTime(lvl, t + dur * 0.68);
+      env.gain.exponentialRampToValueAtTime(0.001, t + dur);
+      vpre.connect(drvIn); drvIn.connect(drv); drv.connect(f1); f1.connect(f2);
+      f2.connect(env); env.connect(body);
+
+      // the anchor: dead centre, dead on the pitch, breathing a third as far
+      // and a quarter as fast as the voices around it
+      const oc = ctx.createOscillator(), ocg = ctx.createGain(), ocp = ctx.createStereoPanner();
+      oc.type = "sawtooth"; oc.frequency.value = mtof(m);
+      oc.detune.setValueAtTime(rr() * 1.6 - 0.8, t);
+      oc.detune.linearRampToValueAtTime(-2, t + dur);        // half the outer voices' sag
+      CL.connect(oc.detune);
+      ocg.gain.value = 0.62;                                  // [E] CTR
+      ocp.pan.value = clamp(nBase, -1, 1);
+      oc.connect(ocg); ocg.connect(ocp); ocp.connect(vpre);
+      oc.start(t + rr() * 0.006); oc.stop(t + dur + 0.05);
+
+      dets.forEach((dd, i) => {
+        const o = ctx.createOscillator(), p = ctx.createStereoPanner();
+        o.type = "sawtooth"; o.frequency.value = mtof(m);
+        o.detune.setValueAtTime(dd * 12 + (rr() * 2 - 1), t);   // [E] det 12
+        o.detune.linearRampToValueAtTime(dd * 12 - 4, t + dur); // pitch sag
+        NL[(ni * dets.length + i) % NL.length].connect(o.detune);
+        p.pan.value = clamp(nBase + [-0.5, 0.5][i] * (0.8 + rr() * 0.4) * 1.15, -1, 1);
+        o.connect(p); p.connect(vpre);
+        o.start(t + rr() * 0.015); o.stop(t + dur + 0.05);
+      });
+    });
+
+    // the breath: barely-there air on the same envelope [E] :10143
+    const n = ctx.createBufferSource(), ng = ctx.createGain(), nf = ctx.createBiquadFilter();
+    n.buffer = noise(rr); n.loop = true;
+    nf.type = "bandpass"; nf.frequency.value = Math.min(3800, cutoff * 1.2); nf.Q.value = 0.8;
+    ng.gain.setValueAtTime(0, t);
+    ng.gain.linearRampToValueAtTime(0.09, t + Math.min(atk * 2, dur * 0.5));
+    ng.gain.exponentialRampToValueAtTime(0.0005, t + dur);
+    n.connect(nf); nf.connect(ng); ng.connect(body);
+    n.start(t); n.stop(t + dur + 0.05);
+
+    body.connect(g); g.connect(out);
+
+    // the sub-octave root, at the pad's share [E] :10150
+    let subF = mtof(notes[0] - 12);
+    while (subF < 40) subF *= 2;
+    const so = ctx.createOscillator(), sg = ctx.createGain();
+    so.type = "triangle"; so.frequency.value = subF;
+    sg.gain.setValueAtTime(0, t);
+    sg.gain.linearRampToValueAtTime(v * 0.22, t + 0.02);
+    sg.gain.exponentialRampToValueAtTime(0.001, t + dur);
+    so.connect(sg); sg.connect(out); so.start(t); so.stop(t + dur + 0.05);
+
+    // PAD FOUNDATION [E] :10188 — "width alone cannot make a small source sound
+    // deep": root/fifth/octave in a compact register, triangle and two sines,
+    // through a lowpass at .34–.44 of the pad cutoff clamped to 850–1900 Hz.
+    // It does not enter the sub region; bass keeps that.
+    const base = v * (0.105 + 0.085 * 0.82);
+    let root = notes[0]; while (root < 45) root += 12; while (root > 60) root -= 12;
+    const fbus = ctx.createGain(), flp = ctx.createBiquadFilter(), fenv = ctx.createGain();
+    flp.type = "lowpass"; flp.frequency.value = clamp(cutoff * 0.42, 850, 1900); flp.Q.value = 0.35;
+    const fatk = clamp(atk * 1.25, 0.28, 0.9);
+    fenv.gain.setValueAtTime(0, t);
+    fenv.gain.linearRampToValueAtTime(base, t + fatk);
+    fenv.gain.setValueAtTime(base, t + dur * 0.72);
+    fenv.gain.exponentialRampToValueAtTime(0.001, t + dur);
+    [root, root + 7, root + 12].forEach((mm, i) => {
+      const o = ctx.createOscillator(), gg = ctx.createGain(), pp = ctx.createStereoPanner();
+      o.type = i === 0 ? "triangle" : "sine"; o.frequency.value = mtof(mm);
+      o.detune.value = [0, -2.5, 2.5][i];
+      gg.gain.value = [1, 0.58, 0.34][i]; pp.pan.value = [0, -0.12, 0.12][i];
+      o.connect(gg); gg.connect(pp); pp.connect(fbus);
+      o.start(t); o.stop(t + dur + 0.05);
+    });
+    fbus.connect(flp); flp.connect(fenv); fenv.connect(out);
+  }
+
+  /* =========================================================================
+     THE PATTERNS — built once from [M]
+     ========================================================================= */
+  const DRUM_PAT = {};
+  for (const ch of Object.keys(PIECE.drums)) {
+    const d = PIECE.drums[ch];
+    DRUM_PAT[ch] = rotated(euclid(16, d.hits), d.rotate);
+  }
+
+  /* =========================================================================
+     THE MODULATORS — [M] mods, rates from [G]
+     Bound at phase0, read per step, written with setTargetAtTime so a send
+     moves rather than steps. Depth is bipolar over the parameter's own range
+     and the centre is off [G]; with a base of 0 the echo is silent for half
+     its cycle, which is what "swells and recedes" means here.
+     ========================================================================= */
+  const modState = {};   // for the surface to read what the engine received
+  function applyMods(barPos, t) {
+    for (const mod of PIECE.mods) {
+      const rate = MOD_RATES[mod.rate];
+      const phase = barPos / rate + mod.phase0;
+      const amount = (mod.depth / 100) * tri(phase) * cfg.modDepth;
+      const c = A.chan[mod.channel];
+      let value, param;
+      if (mod.verb === "delay")       { value = clamp(c.wet.delay / 100 + amount, 0, 2) * cfg.dlyTrim; param = c.dlySend.gain; }
+      else if (mod.verb === "reverb") { value = clamp(c.wet.reverb / 100 + amount, 0, 2) * cfg.revTrim; param = c.revSend.gain; }
+      // [M] mods_why: "THE BASES ARE NOT WRITTEN HERE — the builder reads each
+      // one back off the mixer strip... a piece that moves a send moves the
+      // modulator sweeping around it." So the depth is in FADER UNITS and the
+      // sweep follows the fader wherever the owner's hand puts it.
+      else { value = clamp(c.fader + amount, 0, 4) * c.inGain; param = c.gain.gain; }
+      param.setTargetAtTime(value, t, 0.05);
+      modState[mod.channel + ":" + mod.verb] = value;
+    }
+  }
+
+  /* =========================================================================
+     ONE STEP
+     ========================================================================= */
+  const silences = {};
+  function audible(ch) { return cfg.solo === null || cfg.solo === ch; }
+
+  function scheduleStep(absStep, when, stepDur) {
+    const s = ((absStep % 16) + 16) % 16;
+    const bar = Math.floor(absStep / 16);
+    const barPos = bar + s / 16;
+    // [G] "a modulator writes several times a second" — DRIFT is what waits for
+    // the bar, and none of [M]'s three are drift. Written every step (8.3 times
+    // a second at 125 BPM) with a 50 ms time constant, so a send MOVES rather
+    // than steps.
+    applyMods(barPos, when);
+
+    const rnd = mulberry32((absStep * 2654435761) >>> 0);   // per-step, reproducible
+
+    // the drums
+    for (const ch of [0, 1, 2, 3]) {
+      if (!audible(ch)) continue;
+      const pat = DRUM_PAT[ch];
+      if (!pat[s]) continue;
+      const d = PIECE.drums[ch];
+      // [D] swing is a shape and humanisation is a coin toss; they are
+      // different things and both are per channel.
+      const sw = (SWING[ch] || 0) * (s % 2 ? 1 : 0) * stepDur;
+      const hm = (HUMAN_TIME[ch] || 0) * (rnd() * 2 - 1) * stepDur;
+      const hv = (HUMAN_VELO[ch] || 0) * (rnd() * 2 - 1);
+      const v = clamp((d.velo + hv) / 127, 0, 1);
+      const t = when + sw + hm;
+      const out = A.chan[ch].in;
+      if (ch === 0) { voiceKick(t, v, out); duck(t); }
+      else if (ch === 1) voiceRim(t, v, out, -0.18);
+      else if (ch === 2) voiceClap(t, v, out);
+      else voiceHat(t, v, out, 0.12);
+    }
+
+    // the takes — channels 5, 6, 7
+    for (const ch of [5, 6, 7]) {
+      if (!audible(ch)) continue;
+      const take = PIECE.chords[ch];
+      if (!take) continue;
+      for (const ev of take) {
+        if (ev.step !== s) continue;
+        const v = ev.velo / 127;
+        const dur = ev.duration * stepDur;
+        const out = A.chan[ch].in;
+        if (ch === 5) voiceSub(when, ev.notes[0], dur, v, out);
+        else if (ch === 6) voiceStab(when, ev.notes, dur, v, out);
+        else voicePad(when, ev.notes, dur, v, out);
+      }
+    }
+  }
+
+  /* --- the eight faders. The owner's hand owns these; nothing else writes
+     them. A fader sits UPSTREAM of the deck saturator, the compressor and the
+     finisher, so pulling a channel down makes it quieter rather than changing
+     the compressor's mind about it. --- */
+  function setLevel(ch, v) {
+    const c = A.chan[ch]; if (!c) return;
+    c.fader = v;
+    c.base = v * c.inGain;
+    // a channel with a level modulator is written by applyMods on the next
+    // step, around its new base; everything else moves now.
+    if (!PIECE.mods.some(m => m.channel === ch && m.verb === "level"))
+      c.gain.gain.setTargetAtTime(c.base, ctx.currentTime, 0.02);
+  }
+
+  /* --- what the surface is allowed to change, and the one place it lands --- */
+  function set(key, value) {
+    cfg[key] = value;
+    const t = ctx.currentTime;
+    if (key === "master") A.master.gain.setTargetAtTime(value, t, 0.02);
+    if (key === "bpm" || key === "dlyBeats") {
+      const dt = 60 / cfg.bpm * cfg.dlyBeats;
+      A.pp.L.delayTime.setTargetAtTime(dt, t, 0.05);
+      A.pp.R.delayTime.setTargetAtTime(dt, t, 0.05);
+    }
+    if (key === "dlyFbk") A.pp.fb.gain.setTargetAtTime(value, t, 0.05);
+    if (key === "revSeconds") A.rev.buffer = makeImpulse(value, 2.2);
+    if (key === "dlyTrim" || key === "revTrim") {
+      for (let ch = 0; ch <= 7; ch++) {
+        const c = A.chan[ch];
+        if (!PIECE.mods.some(m => m.channel === ch && m.verb === "delay"))
+          c.dlySend.gain.setTargetAtTime(c.wet.delay / 100 * cfg.dlyTrim, t, 0.05);
+        if (!PIECE.mods.some(m => m.channel === ch && m.verb === "reverb"))
+          c.revSend.gain.setTargetAtTime(c.wet.reverb / 100 * cfg.revTrim, t, 0.05);
+      }
+    }
+  }
+  // the un-modulated sends start where [M] put them
+  set("dlyTrim", 1); set("revTrim", 1);
+
+  return { A, cfg, set, setLevel, scheduleStep, modState, silences, tail: A.tail, DRUM_PAT };
+}
+
+/* ---------------------------------------------------------------------------
+   6. THE TRANSPORT — [E] tick() :15299
+   "Standard Web Audio lookahead scheduler: a 25 ms timer schedules every
+   16th-note up to 140 ms ahead on the sample-accurate audio clock."
+   Everything defensive in it is kept, because each one is a scar:
+     - the tempo is clamped and NaN-proofed BEFORE stepDur is computed, or "a
+       tiny stepDur would let the lookahead loop schedule thousands of steps in
+       one tick — a main-thread hang, a distorted burst, the last bar looping";
+     - a burst is capped at 400 steps per tick, absolutely;
+     - a stall SKIPS AHEAD rather than replaying every missed step, because
+       replaying them is a burst of piled-up notes and tangled envelopes;
+     - lateness is measured against the lookahead window, because inside the
+       window a late tick is inaudible and past it the step is scheduled in the
+       past and fires immediately — which is the flam you hear.
+   --------------------------------------------------------------------------- */
+const TICK_MS = 25, LOOKAHEAD = 0.14, BURST_CAP = 400;
+
+const T = { running: false, bpm: PIECE.tempo, nextT: 0, step: 0 };
+/* Two different numbers, and the difference matters.
+   `late` is [E]'s measure: how far past its due time a step was scheduled. It
+   is CENSORED BY CONSTRUCTION — inside the lookahead window a late tick is
+   inaudible, because the events were scheduled ahead and the audio clock is
+   sample-accurate, so this reads zero until the window is actually blown and
+   the flam has happened.
+   `slack` is the headroom that was left: how far ahead of the audio clock the
+   scheduler was when it woke. That is the number that says how close the
+   margin came to going, and it is the one to watch. */
+const PERF = { late: [], task: [], slack: [], worstLate: 0, worstTask: 0, minSlack: Infinity, ticks: 0, stalls: 0, capped: 0 };
+
+let ctx = null, engine = null, timer = null;
+let muted = localStorage.getItem("p02.muted") === "1";
+
+function tick() {
+  if (!T.running || !engine) return;
+  const t0 = performance.now();
+  const due = T.nextT;
+
+  if (!isFinite(T.bpm)) T.bpm = PIECE.tempo;
+  T.bpm = clamp(T.bpm, 60, 200);
+  if (!isFinite(T.nextT)) T.nextT = ctx.currentTime + 0.05;
+
+  if (ctx.currentTime - T.nextT > 0.5) {
+    PERF.stalls++;
+    say(`the scheduler stalled ${(ctx.currentTime - T.nextT).toFixed(1)}s — skipping ahead, not replaying`);
+    T.nextT = ctx.currentTime + 0.05;
+  }
+
+  let burst = 0;
+  while (T.nextT < ctx.currentTime + LOOKAHEAD) {
+    if (++burst > BURST_CAP) {
+      PERF.capped++;
+      T.nextT = ctx.currentTime + 0.05;
+      say(`scheduler burst capped — skipped ahead (tempo was ${T.bpm.toFixed(0)})`);
+      break;
+    }
+    const stepDur = 60 / T.bpm / 4;
+    engine.scheduleStep(T.step, T.nextT, stepDur);
+    uiQueue.push({ step: T.step, at: T.nextT });
+    T.nextT += stepDur;
+    T.step++;
+  }
+
+  const late = Math.max(0, ctx.currentTime - due);
+  const slack = due - ctx.currentTime;
+  const task = (performance.now() - t0) / 1000;
+  PERF.late.push(late); PERF.task.push(task); PERF.slack.push(slack); PERF.ticks++;
+  if (PERF.late.length > 4096) { PERF.late.shift(); PERF.task.shift(); PERF.slack.shift(); }
+  if (slack < PERF.minSlack) PERF.minSlack = slack;
+  if (late > PERF.worstLate) PERF.worstLate = late;
+  if (task > PERF.worstTask) PERF.worstTask = task;
+}
+
+function pct(arr, p) {
+  if (!arr.length) return 0;
+  const a = arr.slice().sort((x, y) => x - y);
+  return a[Math.min(a.length - 1, Math.floor(p * a.length))];
+}
+function perfReport() {
+  const ms = x => (x * 1000).toFixed(2) + " ms";
+  if (!PERF.ticks) return "scheduler: not running";
+  return `scheduler over ${PERF.ticks} ticks · lateness p50 ${ms(pct(PERF.late, .5))} `
+       + `p95 ${ms(pct(PERF.late, .95))} worst ${ms(PERF.worstLate)} against a ${LOOKAHEAD * 1000} ms window · `
+       + `slack p50 ${ms(pct(PERF.slack, .5))} p05 ${ms(pct(PERF.slack, .05))} min ${ms(PERF.minSlack)} · `
+       + `tick p50 ${ms(pct(PERF.task, .5))} p95 ${ms(pct(PERF.task, .95))} worst ${ms(PERF.worstTask)}`
+       + (PERF.stalls ? ` · ${PERF.stalls} stall(s)` : "")
+       + (PERF.capped ? ` · ${PERF.capped} burst cap(s)` : "");
+}
+
+/* ---------------------------------------------------------------------------
+   7. THE SURFACE
+   --------------------------------------------------------------------------- */
+const ui = id => document.getElementById(id);
+const val = id => parseFloat(ui(id).value);
+const uiQueue = [];
+let sayUntil = 0;
+
+function say(msg, sticky) {
+  ui("status").textContent = msg;
+  sayUntil = sticky ? Infinity : performance.now() + 6000;
+}
+
+// Named for what they are, not for the slot they live in.
+const CHANNELS = [
+  { ch: 0, voice: "kick",    from: "[E] playKick :8487" },
+  { ch: 1, voice: "rimshot", from: "[E] playPerc2 rim :9047" },
+  { ch: 2, voice: "clap",    from: "[E] playClap :8576" },
+  { ch: 3, voice: "hats",    from: "[E] playHat :8531" },
+  { ch: 4, voice: "—",       from: "—" },
+  { ch: 5, voice: "sub",     from: "[E] playBass sub :9170" },
+  { ch: 6, voice: "stab",    from: "[E] playChord dubstab :9737" },
+  { ch: 7, voice: "pad",     from: "[E] playChord ensemble/pad :10035" }
+];
+
+function patternText(ch) {
+  if (PIECE.empty[ch]) return "empty";
+  const d = PIECE.drums[ch];
+  if (d) {
+    const pat = rotated(euclid(16, d.hits), d.rotate);
+    return pat.map(x => x ? "x" : ".").join("");
+  }
+  const take = PIECE.chords[ch];
+  if (take) {
+    const line = new Array(16).fill(".");
+    take.forEach(e => { line[e.step] = "x"; });
+    return line.join("");
+  }
+  return "—";
+}
+
+function buildTable() {
+  const tb = ui("chans").querySelector("tbody");
+  tb.innerHTML = "";
+  for (const c of CHANNELS) {
+    const tr = document.createElement("tr");
+    tr.id = "ch" + c.ch;
+    const empty = !!PIECE.empty[c.ch];
+    if (empty) tr.className = "silent";
+    const w = PIECE.wets[c.ch] || { delay: 0, reverb: 0 };
+    const lvl = PIECE.levels[c.ch];
+    tr.innerHTML =
+      `<td>${c.ch}</td>`
+      + `<td>${empty ? "—" : c.voice}</td>`
+      + `<td style="letter-spacing:.12em">${patternText(c.ch)}</td>`
+      + `<td><input type="range" id="fad${c.ch}" min="0" max="1.2" step="0.005" value="${lvl}"`
+      + `${empty ? ' disabled title="nothing is written on this channel — see the note"' : ''}`
+      + ` style="width:100px;accent-color:var(--hot)"> <span class="n" id="lvl${c.ch}">${lvl.toFixed(3)}</span></td>`
+      + `<td class="n" id="dly${c.ch}">${(w.delay / 100).toFixed(2)}</td>`
+      + `<td class="n" id="rev${c.ch}">${(w.reverb / 100).toFixed(2)}</td>`
+      + `<td class="why">${empty ? PIECE.empty[c.ch] : c.from}</td>`;
+    tb.appendChild(tr);
+  }
+}
+
+function wireFaders() {
+  for (const c of CHANNELS) {
+    const el = ui("fad" + c.ch);
+    el.addEventListener("input", () => {
+      const v = parseFloat(el.value);
+      if (engine) engine.setLevel(c.ch, v);
+      if (c.ch !== 3) ui("lvl" + c.ch).textContent = v.toFixed(3);   // ch3 shows base ▸ live
+    });
+  }
+  ui("reset").addEventListener("click", () => {
+    for (const c of CHANNELS) {
+      const v = PIECE.levels[c.ch];
+      ui("fad" + c.ch).value = v;
+      if (engine) engine.setLevel(c.ch, v);
+      if (c.ch !== 3) ui("lvl" + c.ch).textContent = v.toFixed(3);
+    }
+    say("the faders are back where 221-dub-basic put them.");
+  });
+}
+
+function buildSteps() {
+  const box = ui("steps");
+  box.innerHTML = "";
+  for (let i = 0; i < 16; i++) {
+    const el = document.createElement("i");
+    if (i % 4 === 0) el.className = "beat";
+    box.appendChild(el);
+  }
+}
+
+function paint() {
+  requestAnimationFrame(paint);
+  if (sayUntil !== Infinity && performance.now() > sayUntil && ui("status").textContent) {
+    ui("status").textContent = ""; sayUntil = 0;
+  }
+  if (!ctx || !engine) return;
+  // drain the queue to whatever step should be sounding NOW
+  let cur = null;
+  while (uiQueue.length && uiQueue[0].at <= ctx.currentTime) cur = uiQueue.shift();
+  if (cur) {
+    const s = ((cur.step % 16) + 16) % 16, bar = Math.floor(cur.step / 16);
+    ui("bars").textContent = `bar ${bar + 1} · step ${s + 1} of 16`;
+    const lamps = ui("steps").children;
+    for (let i = 0; i < 16; i++) lamps[i].classList.toggle("on", i === s);
+  }
+  // what the ENGINE received for the three modulated parameters, not what the
+  // surface thinks it sent
+  // [G] "The displayed value is always the base, the number your hand owns;
+  // the motion is shown as a span, not an animated number." The base is kept on
+  // the left; what the ENGINE actually received is on the right, because a
+  // number the surface shows and a number the engine receives are different
+  // claims and this is the one place they are put side by side.
+  const ms = engine.modState;
+  if (ms["6:delay"]  !== undefined) ui("dly6").textContent = "0.00\u25b8" + ms["6:delay"].toFixed(2);
+  if (ms["6:reverb"] !== undefined) ui("rev6").textContent = "0.06\u25b8" + ms["6:reverb"].toFixed(2);
+  if (ms["3:level"]  !== undefined)
+    ui("lvl3").textContent = parseFloat(ui("fad3").value).toFixed(2) + "\u25b8"
+                           + (ms["3:level"] / (INPUT_GAIN[3] || 1)).toFixed(2);
+  ui("perf").textContent = perfReport();
+}
+
+function outputs() {
+  const pairs = [
+    ["bpm", v => v + " BPM"], ["vol", v => v.toFixed(2)], ["pump", v => v.toFixed(2)],
+    ["fbk", v => v.toFixed(2)], ["dlytrim", v => "×" + v.toFixed(2)],
+    ["revsize", v => v.toFixed(1) + " s"], ["revtrim", v => "×" + v.toFixed(2)],
+    ["moddepth", v => "×" + v.toFixed(2)], ["stabcut", v => "×" + v.toFixed(2)]
+  ];
+  for (const [id, fmt] of pairs) {
+    const el = ui(id), out = ui(id + "_v");
+    const upd = () => { out.textContent = fmt(parseFloat(el.value)); };
+    el.addEventListener("input", upd); upd();
+  }
+  const dv = ui("dlydiv"), dvo = ui("dlydiv_v");
+  const updDv = () => {
+    const beats = parseFloat(dv.value);
+    dvo.textContent = (60 / (engine ? engine.cfg.bpm : PIECE.tempo) * beats * 1000).toFixed(0) + " ms";
+  };
+  dv.addEventListener("change", updDv); updDv();
+  ui("bpm").addEventListener("input", updDv);
+}
+
+function wire() {
+  const bind = (id, key, scale) => ui(id).addEventListener("input", () => {
+    if (!engine) return;
+    engine.set(key, scale ? scale(val(id)) : val(id));
+  });
+  ui("bpm").addEventListener("input", () => {
+    T.bpm = val("bpm");
+    if (engine) { engine.cfg.bpm = T.bpm; engine.set("bpm", T.bpm); }
+  });
+  bind("vol", "master");
+  bind("pump", "pump");
+  bind("fbk", "dlyFbk");
+  bind("dlytrim", "dlyTrim");
+  bind("revtrim", "revTrim");
+  bind("moddepth", "modDepth");
+  bind("stabcut", "stabCut");
+  ui("revsize").addEventListener("change", () => { if (engine) engine.set("revSeconds", val("revsize")); });
+  ui("dlydiv").addEventListener("change", () => { if (engine) engine.set("dlyBeats", parseFloat(ui("dlydiv").value)); });
+}
+
+/* --- MUTE. Honoured immediately, remembered, and never re-enabled by an
+   update: nothing in this file writes `muted = false` except the button. --- */
+function applyMute() {
+  ui("mute").setAttribute("aria-pressed", String(muted));
+  ui("mute").textContent = muted ? "muted" : "mute";
+  if (engine) engine.A.out.gain.setTargetAtTime(muted ? 0 : 0.97, ctx.currentTime, 0.01);
+  if (muted) say("muted — the transport is still running and nothing reaches the output. Press mute again to hear it.", true);
+  else if (sayUntil === Infinity) { ui("status").textContent = ""; sayUntil = 0; }
+}
+
+/* --- START. No context before a gesture: browsers block it and it is rude. --- */
+async function start() {
+  if (T.running) { stop(); return; }
+  if (!ctx) {
+    ctx = new (window.AudioContext || window.webkitAudioContext)();
+    engine = createEngine(ctx, {});
+    engine.tail.connect(ctx.destination);
+    engine.set("master", val("vol"));
+    engine.set("pump", val("pump"));
+    engine.set("dlyFbk", val("fbk"));
+    engine.set("stabCut", val("stabcut"));
+    engine.cfg.bpm = val("bpm");
+    engine.set("dlyBeats", parseFloat(ui("dlydiv").value));
+    for (const c of CHANNELS) engine.setLevel(c.ch, parseFloat(ui("fad" + c.ch).value));
+  }
+  if (ctx.state !== "running") await ctx.resume();
+  T.bpm = val("bpm");
+  T.step = 0;
+  T.nextT = ctx.currentTime + 0.1;
+  T.running = true;
+  timer = setInterval(tick, TICK_MS);
+  ui("go").textContent = "stop";
+  applyMute();
+  if (!muted) say("playing — channel 4 is silent on purpose; see the table.");
+}
+function stop() {
+  T.running = false;
+  clearInterval(timer); timer = null;
+  ui("go").textContent = "start";
+  uiQueue.length = 0;
+  say("stopped.");
+}
+
+/* ---------------------------------------------------------------------------
+   8. THE MEASUREMENT HOOK
+   A screenshot cannot hear. This renders the piece offline and reports peak
+   and RMS per channel, so a claim that a voice makes a sound is a number and
+   not an opinion. Used by bin/browser/p02-measure.mjs.
+   --------------------------------------------------------------------------- */
+async function renderOffline(o) {
+  o = o || {};
+  const bars = o.bars || 4, bpm = o.bpm || PIECE.tempo, rate = 44100;
+  const stepDur = 60 / bpm / 4;
+  const seconds = bars * 16 * stepDur + (o.tail === undefined ? 2 : o.tail);
+  const off = new OfflineAudioContext(2, Math.ceil(seconds * rate), rate);
+  const eng = createEngine(off, {
+    solo: o.solo === undefined ? null : o.solo,
+    bypassFaders: !!o.bypassFaders,
+    raw: !!o.raw,
+    calibrate: !!o.calibrate,
+    masterTrim: o.masterTrim
+  });
+  eng.cfg.bpm = bpm;
+  if (o.set) for (const k of Object.keys(o.set)) eng.set(k, o.set[k]);
+  eng.tail.connect(off.destination);
+  for (let s = 0; s < bars * 16; s++) eng.scheduleStep(s, s * stepDur + 0.05, stepDur);
+  const buf = await off.startRendering();
+  let peak = 0, sum = 0, n = 0;
+  for (let c = 0; c < buf.numberOfChannels; c++) {
+    const d = buf.getChannelData(c);
+    for (let i = 0; i < d.length; i++) { const x = Math.abs(d[i]); if (x > peak) peak = x; sum += d[i] * d[i]; n++; }
+  }
+  return { peak, peakDb: dbfs(peak), rmsDb: dbfs(Math.sqrt(sum / n)), seconds };
+}
+
+window.p02 = {
+  state: () => ({
+    contextCreated: !!ctx, running: T.running, muted,
+    step: T.step, bpm: T.bpm, perf: perfReport()
+  }),
+  renderOffline,
+  PIECE, INPUT_GAIN, MASTER_TRIM,
+  setLevel: (ch, v) => engine && engine.setLevel(ch, v),
+  patterns: () => { const e = createEngine(new OfflineAudioContext(2, 1024, 44100), {}); return e.DRUM_PAT; }
+};
+
+/* --- boot --- */
+buildTable();
+wireFaders();
+buildSteps();
+outputs();
+wire();
+ui("go").addEventListener("click", start);
+ui("mute").addEventListener("click", () => {
+  muted = !muted;
+  localStorage.setItem("p02.muted", muted ? "1" : "0");
+  applyMute();
+});
+applyMute();
+if (!muted) say("nothing is playing yet — press start. Audio needs a gesture before a browser will allow it.");
+paint();
+</script>
 </body>
 </html>
