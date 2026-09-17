@@ -76,7 +76,7 @@
 // "Dub 221 Basic", 125 BPM, G minor: a four-on-the-floor, the chord on EVERY
 // offbeat eighth (the Basic Channel figure), eighth-note hats, ONE rimshot a
 // bar, and a sub that plays the root then the flat seventh under the second
-// half of the bar.  notes/reference/dub-techno.md, "The centre".
+// half of the bar.  The centre of the dub round.
 //
 // Two things from that document are in here on purpose, because they are what
 // makes it dub rather than house:
@@ -234,7 +234,7 @@ function sub(t, midi, dur) {
 
 function stab(t) {
   // Saw, 24 dB low-pass, sustain zero, a second envelope snapping the cutoff.
-  // notes/reference/dub-techno.md names this as where the genre lives.
+  // This is where the genre lives.
   const g = ac.createGain();
   const f1 = ac.createBiquadFilter(), f2 = ac.createBiquadFilter();
   f1.type = f2.type = 'lowpass';
