@@ -24,6 +24,16 @@ jobs:
           echo "serves /dub/"
           docker rm -f ci
 
+      - name: The composition layer, and the loop detector
+        run: |
+          set -e
+          # Green, then RED ON PURPOSE. A suite that is only ever run in the
+          # direction where it passes is a decoration: `--prove-red` pins the
+          # frozen loop back on and the run must fail, which is the only
+          # evidence that the detector detects anything.
+          node tools/tests/composition.test.mjs
+          node tools/tests/composition.test.mjs --prove-red
+
   hygiene:
     runs-on: ubuntu-latest
     steps:
