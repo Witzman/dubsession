@@ -246,6 +246,29 @@
       title="Tape air, dust ticks breathing once per revolution (0.55 Hz = 33 rpm) and a few pops, band-limited 140 Hz to 9 kHz and injected after the reverb and the delay so the deck saturator and the finisher act on it the way they act on the room. It never ducks with the kick and it never moves on its own: a floor you can hear arrive is not a floor."><output id="bed_v"></output></div>
   </fieldset>
 
+  <!-- ===================================================================
+       THE VOICES. What a channel SOUNDS like, as against when it fires. It is
+       here, under the room, because it lands NOW the way the room does —
+       timbre lands now [G rule 5] — and a voice trim lands on the NEXT HIT of
+       that voice, because a hit is when the voice is built.
+
+       EVERY ROW IS A MULTIPLIER ON THE RECIPE'S OWN NUMBER, x1.00 being the
+       recipe exactly, the same shape as the two send trims above. The rows are
+       drawn from VOICE_PARAMS (section 4d), which is also the table the engine
+       multiplies by, so the figure printed here and the figure a filter
+       receives cannot drift apart.
+       =================================================================== -->
+  <fieldset>
+    <legend>the voices · LANDS NOW</legend>
+    <div id="voices"></div>
+    <div class="note">
+      <button id="voicereset" style="padding:3px 10px">voices back to the recipe</button>
+      <p class="src">Every figure here is what the voice will be built with on
+      its next hit. The kit is set and left; the three filters are the ones
+      worth moving mid-set.</p>
+    </div>
+  </fieldset>
+
   <fieldset>
     <legend>the set · LANDS NOW</legend>
     <div class="row"><label>tempo</label><input id="bpm" type="range" min="110" max="140" step="1" value="125"><output id="bpm_v"></output></div>
@@ -1410,6 +1433,157 @@ function releaseFrom(holds, param, ch) {
 const HOLDS = emptyHolds();
 
 /* ---------------------------------------------------------------------------
+   4d. THE VOICE PARAMETERS — THE NUMBERS INSIDE THE VOICES, DECLARED ONCE
+   ---------------------------------------------------------------------------
+   Every voice below is built from literals with a comment beside each one
+   saying where it came from, and until now those literals were unreachable
+   while the piece played. This table is the door. Nine of them are named here,
+   each with the range a hand may move it over and the provenance the number
+   already carried; the voice reads its number FROM HERE, so there is still
+   exactly one copy of it in this file.
+
+   EVERY ONE OF THESE IS A MULTIPLIER, AND x1.00 IS THE RECIPE EXACTLY. The
+   page already does this for `dlyTrim`, `revTrim` and `bedTrim`, for the same
+   reason: the number in the code is [M]'s or [E]'s opinion about this piece
+   and the hand's is a TRIM on it, not a replacement. An absolute control makes
+   the recipe unreachable the moment a slider moves, and "back to the manifest"
+   then needs a second copy of every default to find its way home. With a
+   multiplier, home is 1.
+
+   THE SPLIT IS THE OWNER'S, 2026-09-18: "both, and the surface says which."
+
+     hand: "live"  MOVED WHILE IT PLAYS. Safe everywhere in its range, because
+                   the middle of it is heard on the way past. All three are
+                   filters, which is what a dub hand actually sweeps.
+     hand: "set"   SET AND LEFT. May reach further from the recipe precisely
+                   because nobody passes through it: tuning, decay, the
+                   amount of a component.
+
+   A RANGE IS A MUSICAL DECISION AND NOT A SAFETY MARGIN. #27 says it exactly:
+   a tuning control that spans an octave is a different instrument from one
+   that spans a fifth of a semitone, and only one of those is still
+   221-dub-basic. So each `min`/`max` below says what is at the end of it and
+   why the next step out was refused. The engine clamps to these — `set` is the
+   one door and it clamps at the door, so a measurement harness cannot drive a
+   corner to 0 Hz and get silence with nothing to explain it.
+
+   WHAT IS DELIBERATELY NOT HERE: the rumble's band and its cap (RUMBLE_CAP is
+   a measured ceiling, and a hand that lifts it walks past the measurement that
+   chose it), the input gains and MASTER_TRIM (a voice control that changes a
+   channel's level by the back door breaks the calibration invisibly — #27
+   names this), and the stab's detune and the pad's drift (they are what makes
+   these voices [E]'s voices rather than a session's).
+   --------------------------------------------------------------------------- */
+const VOICE_PARAMS = {
+
+  /* --- THE KIT. Set and left. "able to tune drums etc" — the owner, and this
+         group is the headline of #27. ------------------------------------- */
+
+  "voice.kick.tune": {
+    id: "vkicktune", label: "kick tune", hand: "set", unit: "Hz",
+    base: 43, min: 0.82, max: 1.25, step: 0.01, def: 1,
+    of: "the kick body's landing pitch — [E] playKick :8487, a sine 150 Hz "
+      + "falling to 43 Hz over 110 ms. The 150 and the slower sub sine under "
+      + "it move with the same trim, so the whole drum transposes instead of "
+      + "the sweep changing shape.",
+    why: "35 Hz at the bottom and 54 Hz at the top: a fifth, not an octave. "
+       + "Lower and the weight is under the speaker and inside the rumble's "
+       + "own 32-120 Hz band; higher and it stops being weight and becomes a "
+       + "tom."
+  },
+
+  "voice.kick.decay": {
+    id: "vkickdecay", label: "kick decay", hand: "set", unit: "ms",
+    base: 0.26, min: 0.5, max: 1.8, step: 0.01, def: 1,
+    of: "the kick body's 260 ms decay — [E] playKick :8487. The sub sine's "
+      + "420 ms tail takes the same trim; they are one drum ringing, not two.",
+    why: "130 ms is a tight closed kick; 468 ms is four sixteenths at 125 BPM "
+       + "and is already a dub kick that sings. Past that it eats the offbeat "
+       + "and the piece has a groove problem rather than a kick."
+  },
+
+  "voice.kick.click": {
+    id: "vkickclick", label: "kick click", hand: "set", unit: "x", zero: "no click",
+    base: 0.25, min: 0, max: 2, step: 0.01, def: 1,
+    of: "the noise click through the 1200 Hz highpass, 20 ms, at 0.25 of the "
+      + "hit's velocity — [E] playKick :8487.",
+    why: "0 is the click GONE, and the readout says so rather than showing a "
+       + "number that could be a rounding: at zero the three nodes are not "
+       + "built at all. 2 is as far as the attack can go before the kick reads "
+       + "as a kick plus a separate tick."
+  },
+
+  "voice.clap.tone": {
+    id: "vclaptone", label: "clap tone", hand: "set", unit: "Hz",
+    base: 1700, min: 0.7, max: 1.6, step: 0.01, def: 1,
+    of: "the 1700 Hz bandpass at Q 1.4 the three bursts pass through — "
+      + "[E] playClap :8576.",
+    why: "1190 Hz is a clap in a room with a blanket over it; 2720 Hz is the "
+       + "hands-up end. Further down it is a thud with no hands in it, "
+       + "further up it is indistinguishable from the hats' band."
+  },
+
+  "voice.rim.tune": {
+    id: "vrimtune", label: "rim tune", hand: "set", unit: "Hz",
+    base: 1700, min: 0.7, max: 1.7, step: 0.01, def: 1,
+    of: "the woody rimshot's triangle ping at 1700 Hz — [E] playPerc2 rim "
+      + ":9047. The 900 Hz highpass under it moves with the same trim, so the "
+      + "body follows the pitch instead of being cut away from it.",
+    why: "a rim is a colour rather than a pitch, so this one is allowed to "
+       + "travel: 1190 Hz to 2890 Hz. Below that the triangle is in the stab's "
+       + "way; above it the ping is all air and the wood is gone."
+  },
+
+  "voice.sub.tone": {
+    id: "vsubtone", label: "sub tone", hand: "set", unit: "x", zero: "sine only",
+    base: 0.22, min: 0, max: 2.5, step: 0.01, def: 1,
+    of: "the whisper of triangle on top of the sub's sine, at 0.22 — "
+      + "[E] playBass sub :9170, \"just weight, almost no midrange character\".",
+    why: "the sub is the one voice with no filter to open, so its character "
+       + "control is the only thing in it that is not the fundamental. 0 is "
+       + "the pure sine and says so; 2.5 puts the triangle at 0.55 and gives "
+       + "the bass a midrange edge that a small speaker can find."
+  },
+
+  /* --- THE FILTERS. Moved while it plays. ---------------------------------- */
+
+  "voice.hats.tone": {
+    id: "vhattone", label: "hats tone", hand: "live", unit: "Hz",
+    base: 8200, min: 0.55, max: 1.6, step: 0.01, def: 1,
+    of: "the closed hat's 8200 Hz highpass corner at Q 1.2 — [E] playHat "
+      + ":8531.",
+    why: "4510 Hz is still a hat and not a shaker; 13.1 kHz is where the "
+       + "finisher's 12 kHz air shelf is already lifting what is left, so "
+       + "past it the control stops arriving."
+  },
+
+  "voice.stab.reso": {
+    id: "vstabreso", label: "stab resonance", hand: "live", unit: "x",
+    base: 1, min: 0.4, max: 1.8, step: 0.01, def: 1,
+    of: "the singing knee — the Q of the first of the stab's two lowpass "
+      + "poles, 3.2 + up to 3.4 per note of analog tolerance. [E] playChord "
+      + "dubstab :9737: \"the chord hit whose FILTER does the talking\". The "
+      + "second pole's fixed 1.1 shoulder is left alone, because it is what "
+      + "stops the knee becoming a whistle.",
+    why: "x1.8 is Q 5.8-11.9, which sings; x0.4 is Q 1.3-2.6, which is the "
+       + "same chord with the talking taken out of it. Higher than 1.8 and the "
+       + "filter is louder than the note going through it."
+  },
+
+  "voice.pad.tone": {
+    id: "vpadtone", label: "pad tone", hand: "live", unit: "Hz",
+    base: 4200, min: 0.45, max: 1.8, step: 0.01, def: 1,
+    of: "the pad's cutoff — [E] padLp corner :8289, already multiplied by the "
+      + "`cutoff` modulator on channel 7. The breath's bandpass and the pad "
+      + "foundation's lowpass are derived from it and follow.",
+    why: "1890 Hz is a pad under cloth, which is where this genre keeps it "
+       + "half the time; 7560 Hz is as open as it goes before the detuned "
+       + "saws stop being a pad and start being a string section."
+  }
+};
+const VOICE_KEYS = Object.keys(VOICE_PARAMS);
+
+/* ---------------------------------------------------------------------------
    5. THE ENGINE
       Built against a context rather than against `window`, so the same code
       renders offline for measurement as plays live. [E] does the same thing
@@ -1464,6 +1638,17 @@ function createEngine(ctx, opts) {
     // is MEMOISED and the memo has to be told that its input changed.
     holds: opts.holds || emptyHolds()
   };
+
+  /* --- THE VOICE TRIMS. Section 4d declares them; this is where they start,
+     and they start at 1, which is the recipe exactly. Nothing here is a second
+     copy of a default: the default IS the literal still standing inside the
+     voice, and 1 times it is it. --- */
+  for (const k of VOICE_KEYS) cfg[k] = VOICE_PARAMS[k].def;
+  // the hand's multiplier, and the voice's own number times it. `vnum` is the
+  // only place `VOICE_PARAMS[k].base` is read by the audio, so the figure the
+  // surface prints and the figure a filter receives come from one number.
+  const vtrim = k => cfg[k];
+  const vnum = k => VOICE_PARAMS[k].base * cfg[k];
 
   /* --- EVERYTHING RANDOM IN THIS ENGINE IS NOW SEEDED, AND HERE IS WHY. -----
      Three things in this file drew from the global RNG or from the wall clock:
@@ -2027,13 +2212,23 @@ function createEngine(ctx, opts) {
      THE VOICES — [E], rebuilt
      ========================================================================= */
 
-  // KICK — [E] playKick :8487. Body sine 150 → 43 Hz over 110 ms decaying over
-  // 260 ms; a SECOND, slower sub sine at f1×1.6 falling to max(34, f1×.85) over
-  // 200 ms and decaying over 420 ms at mix .55 — "all weight below ~70 Hz";
-  // a noise click through a 1200 Hz highpass, 20 ms.
+  // KICK — [E] playKick :8487. Body sine 150 Hz falling over 110 ms to the
+  // pitch section 4d declares as `voice.kick.tune`, decaying over the time it
+  // declares as `voice.kick.decay`; a SECOND, slower sub sine at f1×1.6
+  // falling to max(34, f1×.85) over 200 ms and decaying over 420 ms at mix .55
+  // — "all weight below ~70 Hz"; a noise click through a 1200 Hz highpass,
+  // 20 ms, at the amount `voice.kick.click` declares.
+  //
+  // THE THREE TRIMS MOVE THE WHOLE DRUM, not one number in it: the 150 Hz
+  // start transposes with the landing pitch so the sweep keeps its shape, and
+  // the sub sine's 420 ms tail takes the body's decay trim because they are
+  // one drum ringing rather than two.
   function voiceKick(t, v, out, sd) {
     const rr = mulberry32(sd | 0);
-    const f0 = 150, f1 = 43, dec = 0.26, click = 0.25, subMix = 0.55;
+    const kt = vtrim("voice.kick.tune"), kd = vtrim("voice.kick.decay");
+    const f0 = 150 * kt, f1 = vnum("voice.kick.tune");
+    const dec = vnum("voice.kick.decay"), subDec = 0.42 * kd;
+    const click = 0.25 * vtrim("voice.kick.click"), subMix = 0.55;
     const o = ctx.createOscillator(), g = ctx.createGain();
     o.frequency.setValueAtTime(f0, t);
     o.frequency.exponentialRampToValueAtTime(f1, t + 0.11);
@@ -2046,24 +2241,31 @@ function createEngine(ctx, opts) {
     so.frequency.setValueAtTime(f1 * 1.6, t);
     so.frequency.exponentialRampToValueAtTime(Math.max(34, f1 * 0.85), t + 0.2);
     sg.gain.setValueAtTime(v * subMix, t);
-    sg.gain.exponentialRampToValueAtTime(0.001, t + 0.42);
-    so.connect(sg); sg.connect(out); so.start(t); so.stop(t + 0.47);
+    sg.gain.exponentialRampToValueAtTime(0.001, t + subDec);
+    so.connect(sg); sg.connect(out); so.start(t); so.stop(t + subDec + 0.05);
 
-    const n = ctx.createBufferSource(), ng = ctx.createGain(), hp = ctx.createBiquadFilter();
-    n.buffer = noise(rr); hp.type = "highpass"; hp.frequency.value = 1200;
-    ng.gain.setValueAtTime(v * click, t);
-    ng.gain.exponentialRampToValueAtTime(0.001, t + 0.02);
-    n.connect(hp); hp.connect(ng); ng.connect(out); n.start(t); n.stop(t + 0.03);
+    // THE CLICK, AND ONLY IF THERE IS ONE. At a trim of 0 these three nodes
+    // are not built at all: an exponential ramp away from a gain of exactly 0
+    // is undefined in the spec and a step at the far end of it in practice,
+    // and the cheapest way to have no click is to have no click.
+    if (click > 0) {
+      const n = ctx.createBufferSource(), ng = ctx.createGain(), hp = ctx.createBiquadFilter();
+      n.buffer = noise(rr); hp.type = "highpass"; hp.frequency.value = 1200;
+      ng.gain.setValueAtTime(v * click, t);
+      ng.gain.exponentialRampToValueAtTime(0.001, t + 0.02);
+      n.connect(hp); hp.connect(ng); ng.connect(out); n.start(t); n.stop(t + 0.03);
+    }
   }
 
-  // CLOSED HAT — [E] playHat :8531. Noise through a 8200 Hz highpass at Q 1.2,
-  // level ×.3, 45 ms decay. (The open hat is the same voice with the corner
+  // CLOSED HAT — [E] playHat :8531. Noise through the highpass corner section
+  // 4d declares as `voice.hats.tone`, at Q 1.2, level ×.3, 45 ms decay. (The open hat is the same voice with the corner
   // 1700 Hz lower and a 320 ms tail, and returns its gain so a closed hat can
   // choke it — [M] asks for no open hat in this piece, so it is not built.)
   function voiceHat(t, v, out, pan, sd) {
     const rr = mulberry32(sd | 0);
     const n = ctx.createBufferSource(), g = ctx.createGain(), hp = ctx.createBiquadFilter();
-    n.buffer = noise(rr); hp.type = "highpass"; hp.frequency.value = 8200; hp.Q.value = 1.2;
+    n.buffer = noise(rr); hp.type = "highpass";
+    hp.frequency.value = vnum("voice.hats.tone"); hp.Q.value = 1.2;
     const d = 0.045;
     g.gain.setValueAtTime(v * 0.3, t);
     g.gain.exponentialRampToValueAtTime(0.001, t + d);
@@ -2072,15 +2274,16 @@ function createEngine(ctx, opts) {
     n.start(t); n.stop(t + d + 0.02);
   }
 
-  // CLAP — [E] playClap :8576. Three noise bursts 11 ms apart through a 1700 Hz
-  // bandpass at Q 1.4; the first two are short (20 ms) and quieter (×.6), the
+  // CLAP — [E] playClap :8576. Three noise bursts 11 ms apart through the
+  // bandpass section 4d declares as `voice.clap.tone`, at Q 1.4; the first two are short (20 ms) and quieter (×.6), the
   // third is the body and rings 140 ms. [M] channel 2: "a single clap on beat
   // 4, drenched" — p01 left it out; it is here.
   function voiceClap(t, v, out, sd) {
     const rr = mulberry32(sd | 0);
     for (let i = 0; i < 3; i++) {
       const n = ctx.createBufferSource(), g = ctx.createGain(), bp = ctx.createBiquadFilter();
-      n.buffer = noise(rr); bp.type = "bandpass"; bp.frequency.value = 1700; bp.Q.value = 1.4;
+      n.buffer = noise(rr); bp.type = "bandpass";
+      bp.frequency.value = vnum("voice.clap.tone"); bp.Q.value = 1.4;
       const tt = t + i * 0.011;
       g.gain.setValueAtTime(v * 0.28 * (i === 2 ? 1 : 0.6), tt);
       g.gain.exponentialRampToValueAtTime(0.001, tt + (i === 2 ? 0.14 : 0.02));
@@ -2090,13 +2293,15 @@ function createEngine(ctx, opts) {
   }
 
   // RIMSHOT — [E] playPerc2 mode "rim" :9047. "A woody rimshot — triangle ping
-  // plus a tiny noise click": a triangle at 1700 Hz through a 900 Hz highpass,
-  // 30 ms decay at ×.4, with raw noise at ×.15 over 15 ms under it.
+  // plus a tiny noise click": a triangle at the pitch section 4d declares as
+  // `voice.rim.tune` through a highpass at .53 of it, 30 ms decay at ×.4, with
+  // raw noise at ×.15 over 15 ms under it. The highpass moves with the ping so
+  // the wood follows the pitch instead of being cut away from it.
   function voiceRim(t, v, out, pan, sd) {
     const rr = mulberry32(sd | 0);
     const o = ctx.createOscillator(), g = ctx.createGain(), hp = ctx.createBiquadFilter();
-    o.type = "triangle"; o.frequency.value = 1700;
-    hp.type = "highpass"; hp.frequency.value = 900;
+    o.type = "triangle"; o.frequency.value = vnum("voice.rim.tune");
+    hp.type = "highpass"; hp.frequency.value = 900 * vtrim("voice.rim.tune");
     const rd = 0.03;
     g.gain.setValueAtTime(v * 0.4, t);
     g.gain.exponentialRampToValueAtTime(0.001, t + rd);
@@ -2112,8 +2317,9 @@ function createEngine(ctx, opts) {
 
   // SUB — [E] playBass model "sub" :9170. "Pure sine an octave down with a
   // whisper of triangle on top — just weight, almost no midrange character."
-  // 12 ms in, held to 85% of its written length, out by 115%. Peak ×.62,
-  // triangle at ×.22. [M] channel 5 is exactly this part: two notes a bar.
+  // 12 ms in, held to 85% of its written length, out by 115%. Peak ×.62, and
+  // the triangle at the amount section 4d declares as `voice.sub.tone` — the
+  // one control this voice has, because it has no filter to open. [M] channel 5 is exactly this part: two notes a bar.
   function voiceSub(t, midi, dur, v, out, sd) {
     const rr = mulberry32(sd | 0);
     const g = ctx.createGain(), g2 = ctx.createGain();
@@ -2124,7 +2330,7 @@ function createEngine(ctx, opts) {
     g.gain.linearRampToValueAtTime(0, t + dur * 1.15);
     const o = ctx.createOscillator(); o.type = "sine"; o.frequency.value = mtof(midi - 12);
     const o2 = ctx.createOscillator(); o2.type = "triangle"; o2.frequency.value = mtof(midi);
-    g2.gain.value = 0.22;
+    g2.gain.value = vnum("voice.sub.tone");
     o.connect(g); o2.connect(g2); g2.connect(g); g.connect(out);
     o.start(t); o.stop(t + dur * 1.2 + 0.05);
     o2.start(t); o2.stop(t + dur * 1.2 + 0.05);
@@ -2159,7 +2365,10 @@ function createEngine(ctx, opts) {
       const floor9 = Math.max(220, (300 + rr() * 180) * cfg.stabCut * cm);
       [lp, lp2].forEach((f, k) => {
         f.type = "lowpass";
-        f.Q.value = k ? 1.1 : (3.2 + rr() * 3.4);    // the singing knee
+        // THE SINGING KNEE, and the one the hand owns: `voice.stab.reso`
+        // trims it. The second pole's fixed 1.1 shoulder is left alone,
+        // because it is what keeps the knee from becoming a whistle.
+        f.Q.value = k ? 1.1 : (3.2 + rr() * 3.4) * vtrim("voice.stab.reso");
         f.frequency.setValueAtTime(floor9 * 1.2, tt);
         f.frequency.linearRampToValueAtTime(top * (k ? 1.25 : 1), tt + 0.008);
         f.frequency.exponentialRampToValueAtTime(floor9, tt + Math.min(dur * 0.9, 0.1 + rr() * 0.16));
@@ -2215,7 +2424,10 @@ function createEngine(ctx, opts) {
   // of twenty-four.
   function voicePad(t, notes, dur, v, out, sd) {
     const rr = mulberry32((sd | 0) ^ 0x50AD);   // WAS the wall clock. See the seed block.
-    const cutoff = 4200 * cutoffMod[7];           // [E] padLp corner :8289, times the cutoff modulator
+    // [E] padLp corner :8289 — section 4d's `voice.pad.tone`, times the
+    // cutoff modulator. The breath's bandpass and the pad foundation's lowpass
+    // are derived from this below and follow it.
+    const cutoff = vnum("voice.pad.tone") * cutoffMod[7];
     const atk = clamp(dur * 0.055, 0.22, 0.72);   // [E] :9705 pad attack
     const vv = v * 0.075;                         // [E] :9705 pad vv
     const body = ctx.createBiquadFilter();
@@ -2579,7 +2791,19 @@ function createEngine(ctx, opts) {
 
   /* --- what the surface is allowed to change, and the one place it lands --- */
   function set(key, value) {
+    // A VOICE TRIM IS CLAMPED WHERE IT LANDS, not only where it is drawn. The
+    // slider's min/max come from the same table, so the two agree by
+    // construction — but `renderOffline({set:{...}})` and `p02` reach this
+    // door directly, and a corner driven to 0 Hz is a channel gone quiet with
+    // nothing to explain it, which is the one thing this instrument refuses.
+    if (VOICE_PARAMS[key]) value = clamp(value, VOICE_PARAMS[key].min, VOICE_PARAMS[key].max);
     cfg[key] = value;
+    // ...and then nothing. A voice trim needs no branch below: every voice is
+    // built from `cfg` at NOTE TIME, so the next hit is the new sound and the
+    // one already scheduled is the old one. That is [G] rule 5's "timbre lands
+    // now" as this engine can honestly offer it — and it is also why there is
+    // no zipper to smooth: the value is read once per note, never ramped on a
+    // node that is already running.
     const t = ctx.currentTime;
     if (key === "master") A.master.gain.setTargetAtTime(value, t, 0.02);
     if (key === "bpm" || key === "dlyBeats") {
@@ -3381,6 +3605,49 @@ function paintMovement(bar) {
   paintHand();
 }
 
+/* --- THE VOICE ROWS, DRAWN FROM THE TABLE THAT DECLARES THEM --------------
+   Not typed into the markup. Section 4d holds the range, the default and the
+   provenance in one place and the engine multiplies by the same entry: two
+   hand-written copies of one range is how a slider comes to offer a value the
+   engine quietly clamps away.
+
+   THE TWO GROUPS ARE THE OWNER'S SPLIT (2026-09-18, "both, and the surface
+   says which") AND THEY ARE CARRIED BY POSITION — the way this page carries
+   every other distinction of timing and reach. Not a colour, not a badge:
+   `--time` means moving, and nothing else on this page is ever coloured. The
+   kit is first because "able to tune drums etc" is what was asked for. */
+const VOICE_GROUPS = [
+  ["set",  "the kit \u2014 set it and leave it"],
+  ["live", "the filters \u2014 move them while it plays"]
+];
+function buildVoices() {
+  let html = "";
+  for (const g of VOICE_GROUPS) {
+    html += '<div style="color:var(--dim);margin:12px 0 4px">' + g[1] + '</div>';
+    for (const k of VOICE_KEYS) {
+      const p = VOICE_PARAMS[k];
+      if (p.hand !== g[0]) continue;
+      html += '<div class="row"><label>' + p.label + '</label>'
+            + '<input id="' + p.id + '" type="range" min="' + p.min + '" max="' + p.max
+            + '" step="' + p.step + '" value="' + p.def + '">'
+            + '<output id="' + p.id + '_v"></output></div>';
+    }
+  }
+  ui("voices").innerHTML = html;
+}
+
+/* The figure a voice row prints is derived from the SAME base the engine
+   multiplies by, so the surface's number and the engine's number are one
+   claim and not two. A trim of 0 prints a word rather than `x0.00`, which
+   could be a rounding — the noise floor's `off` set that precedent. */
+const fmtVoice = k => v => {
+  const p = VOICE_PARAMS[k];
+  if (v === 0 && p.zero) return p.zero;
+  if (p.unit === "Hz") return (p.base * v).toFixed(0) + " Hz";
+  if (p.unit === "ms") return (p.base * v * 1000).toFixed(0) + " ms";
+  return "\u00d7" + v.toFixed(2);
+};
+
 function outputs() {
   const pairs = [
     ["bpm", v => v + " BPM"], ["vol", v => v.toFixed(2)], ["pump", v => v.toFixed(2)],
@@ -3391,6 +3658,7 @@ function outputs() {
     // could be a rounding; `off` is not.
     ["bed", v => v === 0 ? "off" : "×" + v.toFixed(2)]
   ];
+  for (const k of VOICE_KEYS) pairs.push([VOICE_PARAMS[k].id, fmtVoice(k)]);
   for (const [id, fmt] of pairs) {
     const el = ui(id), out = ui(id + "_v");
     const upd = () => { out.textContent = fmt(parseFloat(el.value)); };
@@ -3442,6 +3710,20 @@ function wire() {
   bind("moddepth", "modDepth");
   bind("stabcut", "stabCut");
   bind("bed", "bedTrim");
+  // THE VOICE TRIMS, THROUGH THE SAME ONE DOOR. The row's id and the engine's
+  // key come from the same entry, so there is nothing here to keep in step.
+  for (const k of VOICE_KEYS) bind(VOICE_PARAMS[k].id, k);
+  // BACK TO THE RECIPE. It moves the slider and then dispatches the event the
+  // hand would have caused, so the reset takes exactly the path a hand takes —
+  // a second path to the engine is a second place for the two to disagree.
+  ui("voicereset").addEventListener("click", () => {
+    for (const k of VOICE_KEYS) {
+      const el = ui(VOICE_PARAMS[k].id);
+      el.value = String(VOICE_PARAMS[k].def);
+      el.dispatchEvent(new Event("input"));
+    }
+    say("the voices are back at the recipe.");
+  });
   const sk = ui("seek"), sko = ui("seek_v");
   sk.max = String(MOVEMENT.bars - 1);
   const updSeek = () => {
@@ -3496,6 +3778,9 @@ async function start() {
     engine.set("dlyFbk", val("fbk"));
     engine.set("stabCut", val("stabcut"));
     engine.set("bedTrim", val("bed"));
+    // the voice trims, from wherever the hand left them before the gesture —
+    // the same reason every other control is replayed here
+    for (const k of VOICE_KEYS) engine.set(k, val(VOICE_PARAMS[k].id));
     engine.cfg.bpm = val("bpm");
     engine.set("dlyBeats", parseFloat(ui("dlydiv").value));
     for (const c of CHANNELS) engine.setLevel(c.ch, parseFloat(ui("fad" + c.ch).value));
@@ -3636,10 +3921,20 @@ window.p02 = {
     // by. A surface, a config and a parameter are three places for one number
     // to be wrong in, and only the last one is audible.
     bedTrim: engine ? engine.cfg.bedTrim : null,
-    bedGain: engine ? engine.A.bedGain.gain.value : null
+    bedGain: engine ? engine.A.bedGain.gain.value : null,
+    // THE VOICE TRIMS, TWICE, AND ON PURPOSE. `voiceUI` is what the sliders
+    // read and `voice` is what the engine was told; they are two places for
+    // one number to be wrong in and only the second one is audible. Before the
+    // first gesture there is no engine and `voice` is null — which is the
+    // honest answer, not a zero.
+    voiceUI: VOICE_KEYS.reduce((o, k) => (o[k] = parseFloat(ui(VOICE_PARAMS[k].id).value), o), {}),
+    voice: engine ? VOICE_KEYS.reduce((o, k) => (o[k] = engine.cfg[k], o), {}) : null
   }),
   renderOffline,
   PIECE, INPUT_GAIN, MASTER_TRIM, BED_LEVEL, MOVEMENT, MOD_RATE_BARS, MOD_RATES, HOLD_PARAMS,
+  // the voice table itself, so a measurement can sweep every control to its own
+  // declared ends without a second list of them to fall out of date
+  VOICE_PARAMS, VOICE_KEYS,
 
   /* --- THE SWITCH AND THE HAND, FOR A SURFACE AND FOR A MEASUREMENT --------
      `auto` is the ring: off by default, and off again on every load. `hold`
@@ -3706,6 +4001,7 @@ wireHand();
 wireMix();
 buildSections();
 buildSteps();
+buildVoices();
 ui("seedline").textContent = "seed " + SEED + (location.search.indexOf("seed=") === -1 ? " (the default piece)" : "");
 ui("seedin").value = (/(?:^|[?&])seed=([^&]+)/.exec(location.search || "") || [, String(SEED)])[1];
 ui("seedin_v").textContent = String(SEED);
