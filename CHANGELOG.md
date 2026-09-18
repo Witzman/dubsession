@@ -2,8 +2,25 @@
 
 ## Unreleased
 
-**2026-09-18 — the material moves. The loop was 46 seconds long and is now
-eight and a half minutes.**
+**The noise floor — a bed that never stops, and a switch for it.**
+On the branch, measured, *not yet merged and therefore not yet heard.*
+
+- Hiss, crackle and hum are not a byproduct of this genre, they are part
+  of it: a patch with no noise floor sounds like a demo of an oscillator.
+  Three passes over one eight-second buffer, built once and looped for
+  ever — air, dust and a second slower record. Nothing allocates per bar.
+- **On by default, one slider from off.** The surface's `noise floor` is a
+  trim on it.
+- It does not eat the bottom end. Measured inside 30–120 Hz, the mix reads
+  RMS −15.70 dBFS with the bed off and −15.71 with it on; the bed's own
+  energy in that band is −61.69 dBFS. The finisher's soft-clip knee is at
+  −2.50 dBFS and the worst peak measured is −5.02, so the air is untouched.
+- The loop seam is 110× smaller than the sharpest dust tick, which is to
+  say it is not a seam.
+
+## 2026-09-18 — the material moves
+
+The loop was 46 seconds long and is now eight and a half minutes.
 
 - The piece has a **composition layer** above the bar: a phrase of 8 bars and a
   section of 32, one perceptible change per section, eight sections to a
@@ -33,7 +50,7 @@ eight and a half minutes.**
   ever be rolled once now records the reason rather than going quiet with
   nothing explaining it.
 
-**2026-09-17 — the instrument makes a sound, and it is not an invented one.**
+## 2026-09-17 — the instrument makes a sound, and it is not an invented one
 
 - Serves at `/dub/` itself. There is one deployed thing; versions are kept
   outside this repository rather than offered as a menu.
