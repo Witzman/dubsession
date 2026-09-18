@@ -1,5 +1,14 @@
 # Changelog
 
+## 2026-09-18 — the gate is required, not advised
+
+- The audio gate runs in CI against the built image on every pull request, and
+  it is a required check on `main`. It was a command nobody had to run, which
+  is the same fault this project already documented about the gate before it:
+  a check that runs when somebody remembers it is advice.
+- It runs green and then **red on purpose** in the same job. A gate only ever
+  run in the direction where it passes is a decoration.
+
 ## 2026-09-18 — a measurement can tell quiet from broken
 
 - `renderOffline` reports which channels are silent and why, beside the peak.
