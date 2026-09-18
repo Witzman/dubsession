@@ -1,5 +1,28 @@
 # Changelog
 
+## 2026-09-18 — the channels become a grid
+
+- **Nine channels are nine rows and every control is a column.** The
+  per-channel blocks are gone; the grid replaced them rather than sitting above
+  them, because two surfaces telling one story disagree the first time one of
+  them is changed. Nothing became unreachable: the fader, the level, the input
+  gain, mute, solo, the five composition verbs with their sliders and their
+  releases, LOCK, `release channel` and the reason line are all still there.
+- **A column is named once.** The five verb names used to be printed under
+  every channel — forty-five words of reading for nine values. They are a
+  header now, in the same tracks as the rows, and the reason line got a name it
+  never had.
+- **One grid, three widths.** From 1260 px a channel is one line of eleven
+  columns; down to 921 px the same tracks fold onto three lines so the columns
+  still line up down all nine channels; under that the grid stacks, the header
+  goes away and each cell says what it is again, because there are no columns
+  left to name. Both numbers are measurements: the wide form needs 1188 px and
+  a real 1280 desktop only has 1265 once its scrollbar is taken.
+  The header and every row are laid out from the same two custom properties, so
+  a column cannot drift between them.
+- The four looks a control can have — held, waiting, running, dead — did not
+  change and did not gain a fifth.
+
 ## 2026-09-18 — the voices are reachable while they play
 
 - **Nine controls for what a channel SOUNDS like**, in their own block under
