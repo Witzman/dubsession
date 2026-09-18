@@ -50,7 +50,7 @@
 </head>
 <body>
 <main>
-  <h1>dubsession playing <b>221-dub-basic</b> · 125 BPM · G minor</h1>
+  <h1>dubsession playing <b>221-dub-basic</b> · 125 BPM · G minor · <span id="seedline">seed —</span></h1>
 
   <div class="top">
     <button id="go">start</button>
@@ -61,6 +61,24 @@
 
   <div id="bars">bar — · step —</div>
   <div id="steps"></div>
+
+  <fieldset>
+    <legend>the movement — 256 bars, 8 sections of 32, one event each</legend>
+    <div class="row"><label>seek to bar</label>
+      <input id="seek" type="range" min="0" max="255" step="1" value="0"><output id="seek_v"></output>
+      <button id="seekgo" style="padding:3px 10px;margin-left:8px">go</button></div>
+    <p id="seekwhy" style="color:var(--dim);margin:4px 0 10px">
+      Seek is not a convenience. Composition state at bar N is a pure function of
+      (seed, N) — no counters, no memory of what happened last bar — so bar 200
+      reached by seeking is bar 200 reached by playing, sample for sample once
+      the echo and the room have settled. That is what makes a two-hour set
+      judgeable: nobody can listen to two hours in order at every gate.
+    </p>
+    <div id="movenow" style="color:var(--dim)">not running</div>
+    <table id="sections" style="margin-top:10px"><thead><tr>
+      <th style="width:52px">bar</th><th style="width:210px">event</th><th>why</th>
+    </tr></thead><tbody></tbody></table>
+  </fieldset>
 
   <fieldset>
     <legend>the set</legend>
@@ -93,7 +111,7 @@
   <fieldset>
     <legend>the mix</legend>
     <table id="chans"><thead><tr>
-      <th>ch</th><th>voice</th><th>pattern</th><th style="width:150px">fader</th><th title="the input gain: a fixed stage BEFORE the fader, so the fader values mean the same thing from one channel to the next">in</th><th>echo</th><th>room</th><th>from</th>
+      <th>ch</th><th>voice</th><th>pattern</th><th style="width:150px">fader</th><th title="the input gain: a fixed stage BEFORE the fader, so the fader values mean the same thing from one channel to the next">in</th><th title="phrase length in bars. Lengths that disagree are the point: 3 against 4 comes round every 12 bars">phr</th><th title="how often a step of this channel actually fires. On a tonal channel the odds are rolled once per NOTE">chn</th><th title="how often the machine may touch this channel at all. LOCK means it holds, bar to bar">mov</th><th>echo</th><th>room</th><th>from</th>
     </tr></thead><tbody></tbody></table>
     <div style="color:var(--dim);margin-top:10px">
       eight faders start where <b>221-dub-basic</b> put them; the rumble is the
@@ -142,6 +160,16 @@
    deck playing one fixed piece. The renderer is the part that was worth
    having.
    =========================================================================== */
+
+/* ===========================================================================
+   SECTIONS 1 TO 4b ARE PURE, AND THE SENTINELS BELOW SAY SO IN A WAY A TEST
+   CAN READ. No DOM, no AudioContext, no clock, nothing written after load.
+   tools/tests/composition.test.mjs extracts exactly this region and evaluates
+   it with no browser at all — which is how the loop detector can run in CI on
+   a machine with no audio device. Move a sentinel and the test says so rather
+   than silently testing nothing.
+   =========================================================================== */
+/* ==== COMPOSITION LAYER START ==== */
 
 /* ---------------------------------------------------------------------------
    1. THE PIECE — [M], transcribed from the manifest entry, field for field
@@ -220,12 +248,12 @@ const PIECE = {
   ]
 };
 
-// [G] "Rates are locked to the bar — nine rates from sixteen bars per cycle
-// down to half a bar." The manifest's `rate` is an index into this list.
-// 3 and 8 are COPRIME, which is the whole point: [D] "the echo over three bars
-// and the room over eight, so the two are never both loud." The reference
-// supports it — both modulators are on the same channel's two sends.
-const MOD_RATES = [16, 8, 6, 4, 3, 2, 1, 0.75, 0.5];
+// [G] "Rates are locked to the bar." `PIECE.mods.rate` is an INDEX into
+// MOD_RATES, which lives in the composition layer (section 4b) together with
+// MOD_RATE_BARS, the extended set sprint 2 added. 3 and 8 are COPRIME, which
+// is the whole point: [D] "the echo over three bars and the room over eight,
+// so the two are never both loud." Sprint 2 takes that argument seriously —
+// see MOD_RATE_BARS.
 
 // [M] globals.dlytime is an index into the parent's delay divisions [D]:
 // `1/16 · 1/8 · 3/16 · 1/4 · 3/8 · 1/2`. Index 1 is 1/8 — half a beat.
@@ -333,8 +361,9 @@ function rotated(pat, by) {
    4. SMALL TOOLS
    --------------------------------------------------------------------------- */
 const mtof = m => 440 * Math.pow(2, (m - 69) / 12);
-const clamp = (x, lo, hi) => Math.max(lo, Math.min(hi, x));
 const dbfs = x => 20 * Math.log10(Math.max(1e-9, x));
+// `clamp` is defined inside the composition layer below, because the layer is
+// extracted and tested with no browser and must carry what it uses.
 // mulberry32 — a three-line PRNG, used the way [E] uses one: seeded from the
 // event's own time so a hit is never twice identical and a render still
 // reproduces the take it renders.
@@ -346,13 +375,476 @@ function mulberry32(a) {
     return ((t ^ (t >>> 14)) >>> 0) / 4294967296;
   };
 }
-// [G] "Four shapes: triangle, ramp, square, sample-and-hold." Only the
-// triangle is asked for by [M]; it starts at its base and swells, so a
-// modulator bound at a phase is where its `phase0` puts it.
-function tri(p) {
-  p = p - Math.floor(p);
-  return p < 0.25 ? 4 * p : p < 0.75 ? 2 - 4 * p : 4 * p - 4;   // 0 → +1 → 0 → −1 → 0
+// [G]'s four shapes — triangle, ramp, square and sample-and-hold — are all in
+// `shapeAt` in the composition layer below. [M] asks only for the triangle;
+// the other three are what sprint 2 added, and the rates with them.
+
+/* ===========================================================================
+   4b. THE COMPOSITION LAYER — the phrase (8 bars) and the section (32 bars)
+   ---------------------------------------------------------------------------
+   Everything between the two sentinel comments below is PURE: no DOM, no
+   AudioContext, no clock, no module scope that is written after load. That is
+   not tidiness, it is the whole design.
+
+   THE RULE THIS LAYER EXISTS TO KEEP:
+
+       Composition state at bar N is a pure function of (seed, N).
+
+   No accumulating counters. No "what happened last bar". Ask for bar 3000 and
+   you get bar 3000's state without having played bars 0..2999, which is what
+   makes deterministic SEEK possible — and seek is a gate requirement, not a
+   feature, because nobody can listen to two hours in order at every gate. It
+   also bounds memory by construction rather than by policing it.
+
+   Effect tails — delay feedback, reverb, envelopes — are stateful and exempt.
+   They settle in seconds.
+
+   The sentinels are load-bearing: tools/tests/composition.test.mjs extracts
+   exactly this region and evaluates it with no browser at all. Move them and
+   the test says so rather than silently testing nothing.
+   =========================================================================== */
+const clamp = (x, lo, hi) => Math.max(lo, Math.min(hi, x));
+
+// LOCK is a word and not a number, and that is deliberate [G]: a number could
+// be a coincidence, LOCK means nothing will rewrite that channel at all.
+const LOCK = "LOCK";
+
+// The tonal channels. The walk transposes these and nothing else.
+const TONAL = [5, 6, 7];
+const ALL_CHANNELS = [0, 1, 2, 3, 4, 5, 6, 7];
+
+/* --- the modulator rates, IN BARS ---------------------------------------
+   [G]'s nine were `16, 8, 6, 4, 3, 2, 1, 0.75, 0.5` and it says plainly that
+   the missing odd ones are "a gap rather than a design". Sprint 2 adds
+   5, 7, 11, 13, 32, 64. The reason is arithmetic and it is the cheapest
+   long-form device there is: five modulators on {3, 5, 7, 11, 13} bars do not
+   repeat their combined state for 15015 bars — about eight hours at 122 BPM.
+
+   TWO LISTS, ON PURPOSE, AND THE DIFFERENCE IS A TRAP:
+
+     MOD_RATES      keeps [M]'s nine IN [M]'s ORDER, because `PIECE.mods.rate`
+                    is an INDEX into it. Reordering it would silently retune
+                    every modulator the manifest asked for.
+     MOD_RATE_BARS  is the whole set, as BAR COUNTS, and is what the
+                    composition layer speaks.
+
+   THE `mod` VERB TAKES BARS, NOT AN INDEX. `["mod", 6, "delay", 34, 5, "tri"]`
+   is five bars per cycle. This has to be said out loud because 5 and 7 are
+   both valid indices into MOD_RATES and valid bar counts in MOD_RATE_BARS, so
+   the two readings differ by a factor of two and a half and nothing would
+   complain. `modBars` below refuses a rate that is not in the list rather
+   than rounding it to something plausible.
+   ------------------------------------------------------------------------ */
+const MOD_RATES = [16, 8, 6, 4, 3, 2, 1, 0.75, 0.5];
+const MOD_RATE_BARS = [64, 32, 16, 13, 11, 8, 7, 6, 5, 4, 3, 2, 1, 0.75, 0.5];
+const MOD_SHAPES = ["tri", "ramp", "square", "sh"];
+const MOD_VERBS = ["level", "delay", "reverb", "cutoff"];
+
+function modBars(rate) {
+  if (MOD_RATE_BARS.indexOf(rate) !== -1) return rate;
+  throw new Error(
+    "mod rate " + rate + " is not a rate. Rates are IN BARS, one of " +
+    MOD_RATE_BARS.join(", ") + " — not an index into MOD_RATES.");
 }
+
+/* --- the hash. One call, four dimensions, no stream. ----------------------
+   A stream (mulberry32 and then n calls) needs to know how many calls came
+   before it, which is exactly the history this layer is not allowed to keep.
+   A hash of (seed, channel, key, slot) gives the same number from anywhere,
+   including from a seek, including out of order, including from the test.
+   ------------------------------------------------------------------------ */
+function hash4(a, b, c, d) {
+  let h = (a | 0) ^ 0x9E3779B9;
+  h = Math.imul(h ^ (b | 0), 0x85EBCA6B); h ^= h >>> 13;
+  h = Math.imul(h ^ (c | 0), 0xC2B2AE35); h ^= h >>> 16;
+  h = Math.imul(h ^ (d | 0), 0x27D4EB2F); h ^= h >>> 15;
+  h = Math.imul(h ^ (h >>> 7), 0x2545F491);
+  return (h ^ (h >>> 16)) >>> 0;
+}
+const rand01 = (a, b, c, d) => hash4(a, b, c, d) / 4294967296;
+
+// A seed from the URL query, or a default. The page is served under /dub/ and
+// NEVER under /, so this reads the query and not the path.
+function seedFromQuery(search) {
+  const m = /(?:^|[?&])seed=([^&]+)/.exec(search || "");
+  if (!m) return 0x11CE9E;                       // the default set
+  const s = decodeURIComponent(m[1]);
+  const n = Number(s);
+  if (isFinite(n) && s.trim() !== "") return n | 0;
+  let h = 0;                                      // a word is a seed too
+  for (let i = 0; i < s.length; i++) h = Math.imul(h ^ s.charCodeAt(i), 0x01000193);
+  return h | 0;
+}
+
+/* --- scale-degree transposition [G] ---------------------------------------
+   "It steps to a new DEGREE OF THE SCALE YOU ARE IN, never chromatically, and
+   a walk that returns to zero returns to exactly the key you dialled, not
+   near it." The second half is the hard one and it is why this maps
+   note -> degree -> note rather than adding semitones: at 0 degrees the
+   round trip is the identity for anything diatonic, exactly.
+   ------------------------------------------------------------------------ */
+const SCALE_STEPS = {
+  0: [0, 2, 3, 5, 7, 8, 10],      // MIN  natural minor — [M]'s scale
+  1: [0, 2, 4, 5, 7, 9, 11],      // MAJ
+  2: [0, 2, 3, 5, 7, 9, 10],      // DOR
+  3: [0, 1, 3, 5, 7, 8, 10],      // PHR
+  4: [0, 2, 3, 5, 7, 8, 11],      // HMIN
+  5: [0, 3, 5, 7, 10]             // PENT
+};
+function degreeOf(midi, root, sc) {
+  const pc = (((midi - root) % 12) + 12) % 12;
+  let idx = sc.indexOf(pc);
+  if (idx < 0) {                                  // not in the scale: nearest
+    let best = 99;
+    for (let i = 0; i < sc.length; i++) {
+      const d = Math.abs(sc[i] - pc);
+      if (d < best) { best = d; idx = i; }
+    }
+  }
+  return Math.floor((midi - root - pc) / 12) * sc.length + idx;
+}
+function fromDegree(deg, root, sc) {
+  const n = sc.length, idx = ((deg % n) + n) % n;
+  return root + Math.floor(deg / n) * 12 + sc[idx];
+}
+function transposeDegrees(midi, degrees, root, scale) {
+  if (!degrees) return midi;                      // the identity, not "near it"
+  const sc = SCALE_STEPS[scale] || SCALE_STEPS[0];
+  return fromDegree(degreeOf(midi, root, sc) + degrees, root, sc);
+}
+
+/* --- the walk ------------------------------------------------------------
+   "WALK is how often the root moves in bars, SPAN how far it may wander... it
+   REFLECTS AT THE EDGE of its span rather than parking against it."
+
+   Reflecting is a stateful idea, so it is computed by replaying the walk from
+   step 0 on every call. That is O(bar / period): ~900 iterations at bar 3584
+   with a 4-bar walk, once per bar, against a bar that is ~2 seconds long.
+   Replaying it is what keeps the layer pure, and the cost is measured beside
+   the work rather than assumed here.
+   ------------------------------------------------------------------------ */
+function walkAt(seed, walk, bar) {
+  if (!walk || !walk.bars || !walk.span) return 0;
+  const steps = Math.floor(bar / walk.bars);
+  const span = Math.abs(walk.span);
+  let pos = 0;
+  for (let i = 0; i < steps; i++) {
+    pos += rand01(seed, 0x5741, i, walk.bars) < 0.5 ? -1 : 1;
+    if (pos > span) pos = 2 * span - pos;         // reflect, do not park
+    if (pos < -span) pos = -2 * span - pos;
+  }
+  return pos;
+}
+
+/* --- the shapes [G] ------------------------------------------------------- */
+function shapeAt(shape, phase, seed, id) {
+  const p = phase - Math.floor(phase);
+  if (shape === "ramp") return 2 * p - 1;
+  if (shape === "square") return p < 0.5 ? 1 : -1;
+  if (shape === "sh") {                           // a new value each cycle, held
+    return 2 * rand01(seed, 0x5A48, Math.floor(phase), id) - 1;
+  }
+  return p < 0.25 ? 4 * p : p < 0.75 ? 2 - 4 * p : 4 * p - 4;   // tri
+}
+
+/* =========================================================================
+   THE VERBS. Every section event is one call to one of these, and they are
+   the whole vocabulary for sprint 2.
+   ========================================================================= */
+function baseComposition(piece) {
+  const st = {
+    chance: {}, move: {}, phrase: {}, present: {}, wet: {}, why: {},
+    walk: { bars: 0, span: 0 },
+    mods: piece.mods.map(m => ({
+      channel: m.channel, verb: m.verb, depth: m.depth,
+      bars: MOD_RATES[m.rate], shape: m.shape, phase0: m.phase0, boundAt: 0,
+      why: m.why
+    })),
+    root: piece.globals.root, scale: piece.globals.scale
+  };
+  for (const ch of ALL_CHANNELS) {
+    // THE BASE STATE IS TODAY'S PAGE, EXACTLY.
+    //   chance 1  — every step of the pattern fires
+    //   move   0  — the machine never steps off the phrase grid
+    //   phrase 1  — a one-bar phrase, so the grid key is always 0
+    // which together mean every bar is bar 0's realisation: the frozen loop
+    // the owner heard, reproduced bit for bit, as section 0's reference.
+    st.chance[ch] = 1;
+    st.move[ch] = 0;
+    st.phrase[ch] = 1;
+    st.present[ch] = { at: 0, bars: 0, from: 1, to: 1 };
+    const w = piece.wets[ch] || { delay: 0, reverb: 0 };
+    st.wet[ch] = { delay: w.delay / 100, reverb: w.reverb / 100 };
+  }
+  return st;
+}
+
+const COMPOSITION_VERBS = {
+  // how often a step of that channel actually fires. On a tonal channel the
+  // odds are rolled ONCE PER NOTE, so a triad at 0.7 is a different subset of
+  // itself while the pattern never changes.
+  chance(st, at, ch, p) { st.chance[ch] = clamp(p, 0, 1); },
+
+  // how often the machine may touch this channel AT ALL. In between it is a
+  // probability, not a switch.
+  move(st, at, ch, m) { st.move[ch] = (m === LOCK) ? LOCK : clamp(m, 0, 1); },
+
+  // that channel's phrase length in bars. Lengths that disagree are the point.
+  phrase(st, at, ch, bars) { st.phrase[ch] = clamp(Math.round(bars), 1, 5); },
+
+  // the chord walker: period in bars, span in SCALE DEGREES.
+  walk(st, at, bars, span) { st.walk = { bars: Math.max(0, Math.round(bars)), span: Math.round(span) }; },
+
+  // bind or unbind a modulator. DEPTH IS BIPOLAR AND CENTRE IS OFF — a depth
+  // of 0 REMOVES the modulator rather than leaving a dormant one behind.
+  mod(st, at, ch, verb, depth, rate, shape) {
+    if (MOD_VERBS.indexOf(verb) === -1) throw new Error("mod verb " + verb + " is not one of " + MOD_VERBS.join(", "));
+    st.mods = st.mods.filter(m => !(m.channel === ch && m.verb === verb));
+    if (!depth) return;                                  // centre is off
+    if (shape && MOD_SHAPES.indexOf(shape) === -1) throw new Error("mod shape " + shape + " is not one of " + MOD_SHAPES.join(", "));
+    // "Each modulator starts its cycle when it is bound, so binding eight one
+    // after another spreads them around the bar and the row BREATHES rather
+    // than PUMPS." `boundAt` is the bar it was bound on, which is a fact about
+    // the schedule and therefore pure.
+    st.mods.push({ channel: ch, verb, depth, bars: modBars(rate), shape: shape || "tri", phase0: 0, boundAt: at });
+  },
+
+  // a voice arrives or goes, OVER THE SECTION'S OWN LENGTH, not on one bar.
+  enter(st, at, ch, bars) { st.present[ch] = { at, bars: bars === undefined ? 32 : bars, from: 0, to: 1 }; },
+  leave(st, at, ch, bars) { st.present[ch] = { at, bars: bars === undefined ? 32 : bars, from: 1, to: 0 }; },
+
+  // the send. Throwing the echo open is an arrangement fact.
+  wet(st, at, ch, verb, v) {
+    if (verb !== "delay" && verb !== "reverb") throw new Error("wet verb " + verb + " is delay or reverb");
+    st.wet[ch][verb] = clamp(v, 0, 2);
+  }
+};
+
+/* --- the fold ------------------------------------------------------------
+   Every event with `at <= bar`, in order, onto the base. This is a FOLD and
+   not an ACCUMULATOR: it starts from the base every time it is asked, so
+   asking for bar 3000 costs the same whether or not bar 2999 was ever played.
+   ------------------------------------------------------------------------ */
+function scheduleStateAt(piece, movement, bar) {
+  const st = baseComposition(piece);
+  const secs = movement.sections || [];
+  for (let i = 0; i < secs.length; i++) {
+    const s = secs[i];
+    if (s.at > bar) break;                        // sections are in `at` order
+    if (!s.event) continue;
+    const fn = COMPOSITION_VERBS[s.event[0]];
+    if (!fn) throw new Error("no such composition verb: " + s.event[0]);
+    fn.apply(null, [st, s.at].concat(s.event.slice(1)));
+  }
+  return st;
+}
+
+/* --- the per-bar resolution ---------------------------------------------
+   STRUCTURE LANDS ON THE BAR; TIMBRE LANDS NOW [G rule 5]. Implemented
+   literally: `chance` and `move` are read from the schedule as of the
+   CHANNEL'S OWN WRAP — `bar - (bar % phrase)` — so a chance event at bar 32
+   reaches a phrase-3 channel at bar 33, and a pattern is never rewritten
+   under a bar that is already playing.
+
+   `key` is the number that decides WHICH REALISATION of its pattern a channel
+   plays this bar, and it is the load-bearing idea:
+
+     move === LOCK  -> key 0. The same bar, bit for bit, forever, and every
+                       automatic gesture leaves the channel alone.
+     the roll fails -> key `bar % phrase`. The channel repeats its own phrase,
+                       so a 3-bar channel against a 4-bar one comes round every
+                       12 bars and against a 5-bar one every 20. NOTHING IS
+                       GENERATING THAT — two loops of different lengths running
+                       side by side, the oldest trick in machine music.
+     the roll wins  -> key `OFFGRID + bar`. One bar off the phrase grid: a bar
+                       that belongs to no cycle. At move 0.25 that is a
+                       surprise one bar in four, which is a different
+                       instrument from a frozen channel.
+   ------------------------------------------------------------------------ */
+const OFFGRID = 1000003;
+
+function compositionAt(seed, piece, movement, bar) {
+  const now = scheduleStateAt(piece, movement, bar);
+  const out = {
+    bar, seed, mods: now.mods, root: now.root, scale: now.scale,
+    walk: walkAt(seed, now.walk, bar), walkCfg: now.walk,
+    phrase: {}, chance: {}, move: {}, key: {}, present: {}, wet: now.wet,
+    silent: {}
+  };
+  for (const ch of ALL_CHANNELS) {
+    const L = now.phrase[ch];
+    const wrapBar = bar - (bar % L);
+    const atWrap = wrapBar === bar ? now : scheduleStateAt(piece, movement, wrapBar);
+    const m = atWrap.move[ch];
+    const p = atWrap.chance[ch];
+    out.phrase[ch] = L;
+    out.move[ch] = m;
+    out.chance[ch] = p;
+    out.key[ch] = (m === LOCK) ? 0
+      : (m > 0 && rand01(seed, ch + 1, bar, 0x4D4F5645) < m) ? OFFGRID + bar
+      : (bar % L);
+
+    // presence: a voice arrives or goes over the section's own length
+    const pr = now.present[ch];
+    let v = pr.to;
+    if (bar < pr.at) v = pr.from;
+    else if (pr.bars > 0 && bar < pr.at + pr.bars) v = pr.from + (pr.to - pr.from) * ((bar - pr.at) / pr.bars);
+    out.present[ch] = v;
+
+    // A SILENT CHANNEL MUST SAY WHY IT IS SILENT [G rule 1]. Silence with
+    // nothing to explain it is the one thing the instrument refuses to
+    // produce, so every way a channel can go quiet is named here and the
+    // surface reads this rather than guessing.
+    if (piece.empty[ch]) out.silent[ch] = "no material — " + piece.empty[ch].split(".")[0];
+    else if (v <= 0) out.silent[ch] = "left the arrangement at bar " + (pr.at + 1) + ", over " + pr.bars + " bars";
+    else if (p <= 0) out.silent[ch] = "chance 0 — the pattern is intact, nothing is being let through";
+  }
+  return out;
+}
+
+// Does this step of this channel fire this bar? One hash, no stream, so the
+// answer is the same asked from anywhere — including from a seek and from the
+// test, which is the whole point.
+function stepFires(seed, ch, key, slot, p) {
+  if (p >= 1) return true;
+  if (p <= 0) return false;
+  return rand01(seed, ch + 1, key, slot) < p;
+}
+
+/* --- the modulator read -------------------------------------------------- */
+function modValue(mod, seed, i, barPos) {
+  const phase = (barPos - mod.boundAt) / mod.bars + (mod.phase0 || 0);
+  return (mod.depth / 100) * shapeAt(mod.shape, phase, seed, i);
+}
+
+/* =========================================================================
+   THE SCHEDULE — 256 bars = 8 sections of 32. Movement 1 of 14.
+   -------------------------------------------------------------------------
+   *** THIS IS A STUB. *** It exists so the machinery above runs end to end
+   and can be MEASURED before the real schedule lands. Issue #16 is writing
+   the real eight sections as data, in exactly this shape, and the session
+   drops that object in where this one is. Nothing else has to change.
+
+   `at` is bars from the start of the movement. `event` is [verb, ...args] or
+   null. `why` IS NOT OPTIONAL — an event with no reason is an event nobody
+   can judge.
+
+   The whys below are honest about what they are: they say what the event is
+   for MECHANICALLY, because the musical reason is #16's to write and it would
+   be dishonest for this file to pretend otherwise.
+   ========================================================================= */
+const MOVEMENT = {
+  phrase: 8,                  // bars — the listener's "loop"
+  section: 32,                // bars — one perceptible event each
+  bars: 256,
+  stub: true,                 // #16 replaces this object; the surface says so
+  sections: [
+    { at: 0, event: null,
+      why: "the piece as the manifest left it — the reference. The base state " +
+           "is chance 1, move 0, phrase 1 everywhere, which is bar 0's " +
+           "realisation repeated: today's page, bit for bit." },
+
+    { at: 32, event: ["phrase", 6, 3],
+      why: "STUB: the stab gets a 3-bar phrase against everything else's 1. " +
+           "Proves the phrase key: the stab's bars now come round every 3." },
+    { at: 32, event: ["chance", 6, 0.72],
+      why: "STUB: and the odds are rolled once per NOTE, so the G minor triad " +
+           "becomes a different subset of itself across those 3 bars while the " +
+           "figure never moves. Two events at one `at` is the stub proving the " +
+           "fold applies them in order; #16's schedule is one event per section." },
+
+    { at: 64, event: ["phrase", 3, 4],
+      why: "STUB: the hats on 4 against the stab's 3 — they come round every 12." },
+    { at: 64, event: ["chance", 3, 0.8],
+      why: "STUB: thinned enough for the 4-bar phrase to be audible as a phrase." },
+
+    { at: 96, event: ["mod", 7, "reverb", 30, 5, "tri"],
+      why: "STUB: the pad's room on FIVE bars — a rate the parent could not " +
+           "reach. Against the stab's existing 3 and 8 that is the coprime " +
+           "argument taken seriously: 3, 5 and 8 co-peak every 120 bars." },
+
+    { at: 128, event: ["walk", 4, 2],
+      why: "STUB: the root moves every 4 bars by one degree of G natural minor, " +
+           "reflecting at two degrees either side. Diatonic, never chromatic, " +
+           "and a walk that returns to zero returns to exactly G." },
+
+    { at: 160, event: ["move", 1, 0.5],
+      why: "STUB: the rimshot may be touched about half the time — it steps off " +
+           "its phrase grid one bar in two. A different instrument from a frozen " +
+           "channel: it still surprises you, just less often." },
+
+    { at: 192, event: ["wet", 6, "delay", 0.55],
+      why: "STUB: the echo thrown open on the stab. An arrangement fact, and it " +
+           "moves the BASE the existing 3-bar modulator sweeps around rather " +
+           "than replacing it." },
+
+    { at: 224, event: ["leave", 7, 32],
+      why: "STUB: the pad goes, over the section's own 32 bars and not on one " +
+           "bar. The surface says WHY channel 7 is quiet for the rest of the " +
+           "movement — silence with nothing to explain it is the one thing this " +
+           "instrument refuses to produce." }
+  ],
+  gestures: []                // phrase-level one-shots: #16's, 8-bar grid
+};
+/* =========================================================================
+   THE PATTERNS — built once from [M], in the pure region, because the loop
+   detector has to be able to read them without an audio context.
+   ========================================================================= */
+const DRUM_PAT = {};
+for (const ch of Object.keys(PIECE.drums)) {
+  const d = PIECE.drums[ch];
+  DRUM_PAT[ch] = rotated(euclid(16, d.hits), d.rotate);
+}
+
+/* =========================================================================
+   THE FINGERPRINT — what actually fires in one bar, as a string.
+   -------------------------------------------------------------------------
+   THIS IS THE LOOP DETECTOR'S EVIDENCE, and it is the whole reason the layer
+   is pure. If the frozen loop came back, every bar of the movement would
+   return the SAME string, and the test that counts distinct fingerprints
+   across 256 bars would go red. A suite that only checks the page loads would
+   pass on today's frozen loop; this one cannot.
+
+   It is deliberately the FIRINGS and not the audio: audio has envelopes and
+   humanisation in it, which differ bar to bar even when the material does
+   not, so a mix-level check would report "different" on a frozen loop and
+   prove nothing.
+   ========================================================================= */
+function fingerprint(C, seed) {
+  const parts = [];
+  for (const ch of [0, 1, 2, 3]) {
+    if (C.present[ch] <= 0) { parts.push(ch + ":-"); continue; }
+    const pat = DRUM_PAT[ch];
+    if (!pat) { parts.push(ch + ":-"); continue; }
+    let line = "";
+    for (let s = 0; s < 16; s++)
+      line += (pat[s] && stepFires(seed, ch, C.key[ch], s, C.chance[ch])) ? "x" : ".";
+    parts.push(ch + ":" + line);
+  }
+  for (const ch of TONAL) {
+    if (C.present[ch] <= 0) { parts.push(ch + ":-"); continue; }
+    const take = PIECE.chords[ch];
+    if (!take) { parts.push(ch + ":-"); continue; }
+    const ev = [];
+    for (let e = 0; e < take.length; e++) {
+      const n = [];
+      for (let k = 0; k < take[e].notes.length; k++) {
+        if (!stepFires(seed, ch, C.key[ch], take[e].step * 8 + e * 4 + k, C.chance[ch])) continue;
+        n.push(transposeDegrees(take[e].notes[k], C.walk, C.root, C.scale));
+      }
+      if (n.length) ev.push(take[e].step + "@" + n.join("."));
+    }
+    parts.push(ch + ":" + (ev.join(",") || "-"));
+  }
+  // the modulators are part of the composition state and two bars with the
+  // same notes and different sends are not the same bar
+  parts.push("m:" + C.mods.map(m => m.channel + m.verb[0] + m.depth + "/" + m.bars + m.shape).join("|"));
+  parts.push("w:" + ALL_CHANNELS.map(ch => C.wet[ch].delay.toFixed(2) + "/" + C.wet[ch].reverb.toFixed(2)).join("|"));
+  parts.push("p:" + ALL_CHANNELS.map(ch => C.present[ch].toFixed(2)).join("|"));
+  return parts.join(" ");
+}
+
+/* ==== COMPOSITION LAYER END ==== */
 
 /* ---------------------------------------------------------------------------
    5. THE ENGINE
@@ -379,8 +871,36 @@ function createEngine(ctx, opts) {
     rumbleCap: RUMBLE_CAP,
     bypassFaders: !!opts.bypassFaders,   // calibration render: [M]'s faders off
     raw: !!opts.raw,                     // …and the input gain off too: the voice exactly as built
-    solo: (opts.solo === undefined ? null : opts.solo)
+    solo: (opts.solo === undefined ? null : opts.solo),
+    // THE SEED. Composition state at bar N is a pure function of (seed, N), so
+    // the seed is the whole set. It comes from ?seed= in the query — the page
+    // is served under /dub/ and never under /, so this reads the QUERY and not
+    // the path, and a path-shaped seed would resolve against the main site.
+    seed: (opts.seed === undefined ? 0x11CE9E : opts.seed | 0),
+    movement: opts.movement || MOVEMENT
   };
+
+  /* --- EVERYTHING RANDOM IN THIS ENGINE IS NOW SEEDED, AND HERE IS WHY. -----
+     Three things in this file drew from the global RNG or from the wall clock:
+     the eight-buffer noise bank, the two impulse responses, and the per-note
+     component tolerances in the stab and the pad (which seeded from
+     `(t * 1e4) | 0`, i.e. from WHEN START WAS PRESSED).
+
+     Musically that was defensible — a hit is never twice identical. But it
+     made two things impossible that are not optional:
+
+       - "Reload and it is EXACTLY the same piece" — the gate step that exists
+         so the owner is never asked to judge two different things.
+       - A sample-identical seek proof, which is a GATE REQUIREMENT because
+         nobody can listen to two hours in order at every gate.
+
+     So all three now draw from the seed and from the ABSOLUTE STEP INDEX. No
+     range, no distribution, no envelope time, no filter corner, no oscillator
+     count and no level has moved: what changed is WHICH number comes out of
+     each draw, never how wide the draw is. Measured either way, level-matched,
+     and the figures are beside the work.
+     ------------------------------------------------------------------------ */
+  const engRnd = mulberry32(cfg.seed ^ 0x5EEDBA5E);
 
   /* --- the noise bank. [E] :7868 — eight independent 1.2 s buffers, drawn per
      hit, "because identical noise retriggered hundreds of times a minute
@@ -391,11 +911,15 @@ function createEngine(ctx, opts) {
     const len = Math.floor(ctx.sampleRate * 1.2);
     for (let k = 0; k < 8; k++) {
       const b = ctx.createBuffer(1, len, ctx.sampleRate), d = b.getChannelData(0);
-      for (let i = 0; i < len; i++) d[i] = Math.random() * 2 - 1;
+      for (let i = 0; i < len; i++) d[i] = engRnd() * 2 - 1;
       NOISE.push(b);
     }
   }
-  const noise = rnd => NOISE[Math.floor((rnd ? rnd() : Math.random()) * NOISE.length) % NOISE.length];
+  // `rnd` is a seeded stream or a seed number; either way the buffer chosen is
+  // a fact about (seed, step) and not about when the page was opened.
+  const noise = rnd => NOISE[Math.floor(
+    (typeof rnd === "function" ? rnd() : typeof rnd === "number" ? rand01(rnd, 0x4E, 0, 0) : engRnd())
+    * NOISE.length) % NOISE.length];
 
   /* --- the hall's impulse response. [E] :7587 makeImpulse(seconds, decay):
      decorrelated noise per channel, a one-pole lowpass whose coefficient falls
@@ -414,7 +938,7 @@ function createEngine(ctx, opts) {
       let lp = 0;
       for (let i = 0; i < len; i++) {
         const t = i / len, coef = 0.7 - 0.55 * t;
-        lp += coef * ((Math.random() * 2 - 1) - lp);
+        lp += coef * ((engRnd() * 2 - 1) - lp);
         const fadeIn = i < rate * 0.01 ? i / (rate * 0.01) : 1;
         d[i] = lp * Math.pow(1 - t, decay) * fadeIn;
       }
@@ -587,7 +1111,7 @@ function createEngine(ctx, opts) {
     let lp = 0;
     for (let i = 0; i < len; i++) {
       const t = i / len;
-      lp += 0.06 * ((Math.random() * 2 - 1) - lp);
+      lp += 0.06 * ((engRnd() * 2 - 1) - lp);
       d[i] = lp * Math.pow(1 - t, 2);
     }
     return buf;
@@ -754,7 +1278,8 @@ function createEngine(ctx, opts) {
   // 260 ms; a SECOND, slower sub sine at f1×1.6 falling to max(34, f1×.85) over
   // 200 ms and decaying over 420 ms at mix .55 — "all weight below ~70 Hz";
   // a noise click through a 1200 Hz highpass, 20 ms.
-  function voiceKick(t, v, out) {
+  function voiceKick(t, v, out, sd) {
+    const rr = mulberry32(sd | 0);
     const f0 = 150, f1 = 43, dec = 0.26, click = 0.25, subMix = 0.55;
     const o = ctx.createOscillator(), g = ctx.createGain();
     o.frequency.setValueAtTime(f0, t);
@@ -772,7 +1297,7 @@ function createEngine(ctx, opts) {
     so.connect(sg); sg.connect(out); so.start(t); so.stop(t + 0.47);
 
     const n = ctx.createBufferSource(), ng = ctx.createGain(), hp = ctx.createBiquadFilter();
-    n.buffer = noise(); hp.type = "highpass"; hp.frequency.value = 1200;
+    n.buffer = noise(rr); hp.type = "highpass"; hp.frequency.value = 1200;
     ng.gain.setValueAtTime(v * click, t);
     ng.gain.exponentialRampToValueAtTime(0.001, t + 0.02);
     n.connect(hp); hp.connect(ng); ng.connect(out); n.start(t); n.stop(t + 0.03);
@@ -782,9 +1307,10 @@ function createEngine(ctx, opts) {
   // level ×.3, 45 ms decay. (The open hat is the same voice with the corner
   // 1700 Hz lower and a 320 ms tail, and returns its gain so a closed hat can
   // choke it — [M] asks for no open hat in this piece, so it is not built.)
-  function voiceHat(t, v, out, pan) {
+  function voiceHat(t, v, out, pan, sd) {
+    const rr = mulberry32(sd | 0);
     const n = ctx.createBufferSource(), g = ctx.createGain(), hp = ctx.createBiquadFilter();
-    n.buffer = noise(); hp.type = "highpass"; hp.frequency.value = 8200; hp.Q.value = 1.2;
+    n.buffer = noise(rr); hp.type = "highpass"; hp.frequency.value = 8200; hp.Q.value = 1.2;
     const d = 0.045;
     g.gain.setValueAtTime(v * 0.3, t);
     g.gain.exponentialRampToValueAtTime(0.001, t + d);
@@ -797,10 +1323,11 @@ function createEngine(ctx, opts) {
   // bandpass at Q 1.4; the first two are short (20 ms) and quieter (×.6), the
   // third is the body and rings 140 ms. [M] channel 2: "a single clap on beat
   // 4, drenched" — p01 left it out; it is here.
-  function voiceClap(t, v, out) {
+  function voiceClap(t, v, out, sd) {
+    const rr = mulberry32(sd | 0);
     for (let i = 0; i < 3; i++) {
       const n = ctx.createBufferSource(), g = ctx.createGain(), bp = ctx.createBiquadFilter();
-      n.buffer = noise(); bp.type = "bandpass"; bp.frequency.value = 1700; bp.Q.value = 1.4;
+      n.buffer = noise(rr); bp.type = "bandpass"; bp.frequency.value = 1700; bp.Q.value = 1.4;
       const tt = t + i * 0.011;
       g.gain.setValueAtTime(v * 0.28 * (i === 2 ? 1 : 0.6), tt);
       g.gain.exponentialRampToValueAtTime(0.001, tt + (i === 2 ? 0.14 : 0.02));
@@ -812,7 +1339,8 @@ function createEngine(ctx, opts) {
   // RIMSHOT — [E] playPerc2 mode "rim" :9047. "A woody rimshot — triangle ping
   // plus a tiny noise click": a triangle at 1700 Hz through a 900 Hz highpass,
   // 30 ms decay at ×.4, with raw noise at ×.15 over 15 ms under it.
-  function voiceRim(t, v, out, pan) {
+  function voiceRim(t, v, out, pan, sd) {
+    const rr = mulberry32(sd | 0);
     const o = ctx.createOscillator(), g = ctx.createGain(), hp = ctx.createBiquadFilter();
     o.type = "triangle"; o.frequency.value = 1700;
     hp.type = "highpass"; hp.frequency.value = 900;
@@ -823,7 +1351,7 @@ function createEngine(ctx, opts) {
     o.connect(hp); hp.connect(g); g.connect(p); p.connect(out);
     o.start(t); o.stop(t + rd + 0.02);
     const n = ctx.createBufferSource(), ng = ctx.createGain();
-    n.buffer = noise();
+    n.buffer = noise(rr);
     ng.gain.setValueAtTime(v * 0.15, t);
     ng.gain.exponentialRampToValueAtTime(0.001, t + 0.015);
     n.connect(ng); ng.connect(out); n.start(t); n.stop(t + 0.02);
@@ -833,7 +1361,8 @@ function createEngine(ctx, opts) {
   // whisper of triangle on top — just weight, almost no midrange character."
   // 12 ms in, held to 85% of its written length, out by 115%. Peak ×.62,
   // triangle at ×.22. [M] channel 5 is exactly this part: two notes a bar.
-  function voiceSub(t, midi, dur, v, out) {
+  function voiceSub(t, midi, dur, v, out, sd) {
+    const rr = mulberry32(sd | 0);
     const g = ctx.createGain(), g2 = ctx.createGain();
     const peak = v * 0.62;
     g.gain.setValueAtTime(0, t);
@@ -856,8 +1385,8 @@ function createEngine(ctx, opts) {
   // note gets its OWN filter and envelope with analog-tolerance variation."
   // Per-note rather than per-chord is deliberate there and measured: sharing one
   // shaper across a chord adds 5–9 dB of energy belonging to no note in it.
-  function voiceStab(t, notes, dur, v, out) {
-    const rr = mulberry32((t * 1e4) | 0);
+  function voiceStab(t, notes, dur, v, out, sd) {
+    const rr = mulberry32(sd | 0);   // WAS (t*1e4)|0 — the wall clock. See the seed block.
     const body = ctx.createBiquadFilter();
     body.type = "highpass"; body.frequency.value = 130; body.Q.value = 0.7;  // [E] :9722
     const g = ctx.createGain();
@@ -872,8 +1401,9 @@ function createEngine(ctx, opts) {
       const p = ctx.createStereoPanner();
       p.pan.value = [-0.55, -0.2, 0.2, 0.55, 0][i % 5] * (0.7 + rr() * 0.5);
       const lp = ctx.createBiquadFilter(), lp2 = ctx.createBiquadFilter();
-      const top = Math.min(6500, (1800 + rr() * 1700) * cfg.stabCut * vp);
-      const floor9 = Math.max(220, (300 + rr() * 180) * cfg.stabCut);
+      const cm = cutoffMod[6];
+      const top = Math.min(6500, (1800 + rr() * 1700) * cfg.stabCut * vp * cm);
+      const floor9 = Math.max(220, (300 + rr() * 180) * cfg.stabCut * cm);
       [lp, lp2].forEach((f, k) => {
         f.type = "lowpass";
         f.Q.value = k ? 1.1 : (3.2 + rr() * 3.4);    // the singing knee
@@ -930,9 +1460,9 @@ function createEngine(ctx, opts) {
   // "what the ear hears is that neighbouring voices drift APART; it cannot
   // follow twelve independent rates", and pooling them costs six nodes instead
   // of twenty-four.
-  function voicePad(t, notes, dur, v, out) {
-    const rr = mulberry32(((t * 1e4) | 0) ^ 0x50AD);
-    const cutoff = 4200;                          // [E] padLp corner :8289
+  function voicePad(t, notes, dur, v, out, sd) {
+    const rr = mulberry32((sd | 0) ^ 0x50AD);   // WAS the wall clock. See the seed block.
+    const cutoff = 4200 * cutoffMod[7];           // [E] padLp corner :8289, times the cutoff modulator
     const atk = clamp(dur * 0.055, 0.22, 0.72);   // [E] :9705 pad attack
     const vv = v * 0.075;                         // [E] :9705 pad vv
     const body = ctx.createBiquadFilter();
@@ -1060,38 +1590,81 @@ function createEngine(ctx, opts) {
   }
 
   /* =========================================================================
-     THE PATTERNS — built once from [M]
+     THE COMPOSITION, PER BAR
+     -------------------------------------------------------------------------
+     STRUCTURE LANDS ON THE BAR; TIMBRE LANDS NOW [G rule 5]. So the
+     composition is resolved ONCE PER BAR and never inside one, and the reason
+     is in [G]: "a pattern cannot be redrawn five times a second without
+     tearing the groove apart."
+
+     `compBar` is a MEMO of a pure function, not a history. It is keyed on the
+     bar and on a generation counter that the seed and the movement bump, so a
+     seek to bar 3000 recomputes bar 3000 from nothing and gets the same answer
+     the long way round would have got. The determinism proof is exactly that
+     claim, measured.
      ========================================================================= */
-  const DRUM_PAT = {};
-  for (const ch of Object.keys(PIECE.drums)) {
-    const d = PIECE.drums[ch];
-    DRUM_PAT[ch] = rotated(euclid(16, d.hits), d.rotate);
+  let comp = null, compBar = -1, compGen = -1;
+  let gen = 0;
+  function compositionFor(bar) {
+    if (compBar !== bar || compGen !== gen) {
+      comp = compositionAt(cfg.seed, PIECE, cfg.movement, bar);
+      compBar = bar; compGen = gen;
+    }
+    return comp;
   }
+  function recompose() { gen++; }
 
   /* =========================================================================
-     THE MODULATORS — [M] mods, rates from [G]
-     Bound at phase0, read per step, written with setTargetAtTime so a send
-     moves rather than steps. Depth is bipolar over the parameter's own range
-     and the centre is off [G]; with a base of 0 the echo is silent for half
-     its cycle, which is what "swells and recedes" means here.
+     THE MODULATORS — [M]'s three, plus whatever the schedule binds.
+     Read per step and written with setTargetAtTime so a send MOVES rather
+     than steps. Depth is bipolar over the parameter's own range and the
+     centre is off [G]; with a base of 0 the echo is silent for half its
+     cycle, which is what "swells and recedes" means here.
+
+     The BASE each modulator sweeps around is the composition's, not [M]'s,
+     because `wet` is an arrangement verb: [M] mods_why — "the builder reads
+     each one back off the mixer strip... a piece that moves a send moves the
+     modulator sweeping around it."
      ========================================================================= */
   const modState = {};   // for the surface to read what the engine received
-  function applyMods(barPos, t) {
-    for (const mod of PIECE.mods) {
-      const rate = MOD_RATES[mod.rate];
-      const phase = barPos / rate + mod.phase0;
-      const amount = (mod.depth / 100) * tri(phase) * cfg.modDepth;
+  // THE CUTOFF MODULATOR'S LANDING PLACE. A control that does nothing must
+  // look dead [G rule 2], so `mod(ch,"cutoff",...)` is not allowed to be a
+  // number that changes no sound: this multiplier is read by the tonal voices
+  // at note time. Bipolar depth: +100 doubles the corner, -100 halves it.
+  const cutoffMod = { 5: 1, 6: 1, 7: 1 };
+  function applyMods(C, barPos, t) {
+    for (let i = 0; i < C.mods.length; i++) {
+      const mod = C.mods[i];
+      const amount = modValue(mod, cfg.seed, i, barPos) * cfg.modDepth;
       const c = A.chan[mod.channel];
+      if (!c) continue;
       let value, param;
-      if (mod.verb === "delay")       { value = clamp(c.wet.delay / 100 + amount, 0, 2) * cfg.dlyTrim; param = c.dlySend.gain; }
-      else if (mod.verb === "reverb") { value = clamp(c.wet.reverb / 100 + amount, 0, 2) * cfg.revTrim; param = c.revSend.gain; }
-      // [M] mods_why: "THE BASES ARE NOT WRITTEN HERE — the builder reads each
-      // one back off the mixer strip... a piece that moves a send moves the
-      // modulator sweeping around it." So the depth is in FADER UNITS and the
-      // sweep follows the fader wherever the owner's hand puts it.
-      else { value = clamp(c.fader + amount, 0, 4) * c.inGain; param = c.gain.gain; }
+      if (mod.verb === "delay")       { value = clamp(C.wet[mod.channel].delay + amount, 0, 2) * cfg.dlyTrim; param = c.dlySend.gain; }
+      else if (mod.verb === "reverb") { value = clamp(C.wet[mod.channel].reverb + amount, 0, 2) * cfg.revTrim; param = c.revSend.gain; }
+      else if (mod.verb === "cutoff") {
+        cutoffMod[mod.channel] = Math.pow(2, amount);        // bipolar, in octaves
+        modState[mod.channel + ":cutoff"] = cutoffMod[mod.channel];
+        continue;
+      }
+      else { value = clamp(c.fader + amount, 0, 4) * c.inGain * C.present[mod.channel]; param = c.gain.gain; }
       param.setTargetAtTime(value, t, 0.05);
       modState[mod.channel + ":" + mod.verb] = value;
+    }
+    // a send that NO modulator is bound to still has to follow `wet`, or an
+    // arrangement fact would land only on the channels that happen to be
+    // modulated. This is the unbind path too: depth 0 REMOVES a modulator, and
+    // the send has to come back to its base rather than freeze where the last
+    // write left it.
+    for (const ch of ALL_CHANNELS) {
+      const c = A.chan[ch]; if (!c) continue;
+      if (!C.mods.some(m => m.channel === ch && m.verb === "delay"))
+        c.dlySend.gain.setTargetAtTime(C.wet[ch].delay * cfg.dlyTrim, t, 0.05);
+      if (!C.mods.some(m => m.channel === ch && m.verb === "reverb"))
+        c.revSend.gain.setTargetAtTime(C.wet[ch].reverb * cfg.revTrim, t, 0.05);
+      if (!C.mods.some(m => m.channel === ch && m.verb === "level"))
+        c.gain.gain.setTargetAtTime(c.fader * c.inGain * C.present[ch], t, 0.05);
+      if (cutoffMod[ch] !== undefined && !C.mods.some(m => m.channel === ch && m.verb === "cutoff"))
+        cutoffMod[ch] = 1;                                   // unbound: centre is off
     }
   }
 
@@ -1101,15 +1674,22 @@ function createEngine(ctx, opts) {
   const silences = {};
   function audible(ch) { return cfg.solo === null || cfg.solo === ch; }
 
+  // The per-voice seed. A fact about (seed, absolute step, channel, slot) and
+  // nothing else — which is what lets bar 200 be rendered from a standing
+  // start and come out sample-identical to bar 200 reached the long way.
+  const voiceSeed = (ch, absStep, k) => hash4(cfg.seed, ch + 1, absStep, 0x101 + (k | 0));
+
   function scheduleStep(absStep, when, stepDur) {
     const s = ((absStep % 16) + 16) % 16;
     const bar = Math.floor(absStep / 16);
     const barPos = bar + s / 16;
-    // [G] "a modulator writes several times a second" — DRIFT is what waits for
-    // the bar, and none of [M]'s three are drift. Written every step (8.3 times
-    // a second at 125 BPM) with a 50 ms time constant, so a send MOVES rather
-    // than steps.
-    applyMods(barPos, when);
+    const C = compositionFor(bar);
+    for (const ch of ALL_CHANNELS) silences[ch] = C.silent[ch] || null;
+
+    // [G] "a modulator writes several times a second" — DRIFT is what waits
+    // for the bar. Written every step (8.3 times a second at 125 BPM) with a
+    // 50 ms time constant, so a send MOVES rather than steps.
+    applyMods(C, barPos, when);
 
     const rnd = mulberry32((absStep * 2654435761) >>> 0);   // per-step, reproducible
 
@@ -1118,8 +1698,14 @@ function createEngine(ctx, opts) {
       // the kick's step still runs when the RUMBLE is soloed: the rumble is
       // the kick's own tail, and there is nothing to hear without its trigger
       if (!audible(ch) && !(ch === 0 && cfg.solo === "R")) continue;
+      if (C.present[ch] <= 0) continue;          // it left; the table says when
       const pat = DRUM_PAT[ch];
       if (!pat[s]) continue;
+      // CHANCE — how often a step of that channel actually fires. The pattern
+      // is still the pattern: nothing is regenerated, the hit is let through
+      // or it is not. The KEY is what makes that answer repeat on the
+      // channel's own phrase instead of scattering.
+      if (!stepFires(cfg.seed, ch, C.key[ch], s, C.chance[ch])) continue;
       const d = PIECE.drums[ch];
       // [D] swing is a shape and humanisation is a coin toss; they are
       // different things and both are per channel.
@@ -1129,29 +1715,48 @@ function createEngine(ctx, opts) {
       const v = clamp((d.velo + hv) / 127, 0, 1);
       const t = when + sw + hm;
       const out = A.chan[ch].in;
+      const sd = voiceSeed(ch, absStep, 0);
       if (ch === 0) {
-        if (audible(0)) voiceKick(t, v, out);
+        if (audible(0)) voiceKick(t, v, out, sd);
         duck(t);                                   // the bus automation runs either way
         if (cfg.solo === null || cfg.solo === "R") rumbleHit(t);
       }
-      else if (ch === 1) voiceRim(t, v, out, -0.18);
-      else if (ch === 2) voiceClap(t, v, out);
-      else voiceHat(t, v, out, 0.12);
+      else if (ch === 1) voiceRim(t, v, out, -0.18, sd);
+      else if (ch === 2) voiceClap(t, v, out, sd);
+      else voiceHat(t, v, out, 0.12, sd);
     }
 
     // the takes — channels 5, 6, 7
     for (const ch of [5, 6, 7]) {
       if (!audible(ch)) continue;
+      if (C.present[ch] <= 0) continue;
       const take = PIECE.chords[ch];
       if (!take) continue;
-      for (const ev of take) {
+      for (let e = 0; e < take.length; e++) {
+        const ev = take[e];
         if (ev.step !== s) continue;
+        // ON A TONAL CHANNEL THE ODDS ARE ROLLED ONCE PER NOTE [G]: "CHANCE
+        // below 100 breaks a chord into pieces, because every tone is its own
+        // note. A triad at 70 becomes a different subset of itself bar by
+        // bar." Used deliberately it is one of the better things available;
+        // used by accident it sounds like the chords are broken. It is
+        // deliberate, and this comment is where that is said.
+        const notes = [];
+        for (let k = 0; k < ev.notes.length; k++) {
+          if (!stepFires(cfg.seed, ch, C.key[ch], s * 8 + e * 4 + k, C.chance[ch])) continue;
+          // THE CHORD WALKER — scale degrees, never semitones, so the walk
+          // stays diatonic and a return to zero returns to exactly the key
+          // [M] dialled and not near it.
+          notes.push(transposeDegrees(ev.notes[k], C.walk, C.root, C.scale));
+        }
+        if (!notes.length) continue;
         const v = ev.velo / 127;
         const dur = ev.duration * stepDur;
         const out = A.chan[ch].in;
-        if (ch === 5) voiceSub(when, ev.notes[0], dur, v, out);
-        else if (ch === 6) voiceStab(when, ev.notes, dur, v, out);
-        else voicePad(when, ev.notes, dur, v, out);
+        const sd = voiceSeed(ch, absStep, e);
+        if (ch === 5) voiceSub(when, notes[0], dur, v, out, sd);
+        else if (ch === 6) voiceStab(when, notes, dur, v, out, sd);
+        else voicePad(when, notes, dur, v, out, sd);
       }
     }
   }
@@ -1167,10 +1772,18 @@ function createEngine(ctx, opts) {
     const c = A.chan[ch]; if (!c) return;
     c.fader = v;
     c.base = v * c.inGain;
-    // a channel with a level modulator is written by applyMods on the next
-    // step, around its new base; everything else moves now.
-    if (!PIECE.mods.some(m => m.channel === ch && m.verb === "level"))
-      c.gain.gain.setTargetAtTime(c.base, ctx.currentTime, 0.02);
+    // A channel with a level modulator bound is written by applyMods on the
+    // next step, around its new base; everything else moves NOW, because a
+    // fader is a timbre-rate control and timbre lands now [G rule 5].
+    //
+    // PRESENCE IS IN THIS NUMBER. A channel that has left the arrangement must
+    // not jump back to full for the one step it would take applyMods to
+    // correct it: the fader is the owner's, presence is the composition's, and
+    // the gain is the product. Neither one silently overrides the other.
+    const pres = comp ? comp.present[ch] : 1;
+    const mods = comp ? comp.mods : [];
+    if (!mods.some(m => m.channel === ch && m.verb === "level"))
+      c.gain.gain.setTargetAtTime(c.base * pres, ctx.currentTime, 0.02);
   }
 
   /* --- what the surface is allowed to change, and the one place it lands --- */
@@ -1185,20 +1798,31 @@ function createEngine(ctx, opts) {
     }
     if (key === "dlyFbk") A.pp.fb.gain.setTargetAtTime(value, t, 0.05);
     if (key === "revSeconds") A.rev.buffer = makeImpulse(value, 2.2);
+    if (key === "seed" || key === "movement") { cfg[key] = key === "seed" ? (value | 0) : value; recompose(); }
     if (key === "dlyTrim" || key === "revTrim") {
+      // the base is the COMPOSITION's, not [M]'s: `wet` is an arrangement verb
+      // and a trim multiplies whatever the arrangement currently asks for.
+      const C = comp;
+      const mods = C ? C.mods : PIECE.mods;
       for (let ch = 0; ch <= 7; ch++) {
         const c = A.chan[ch];
-        if (!PIECE.mods.some(m => m.channel === ch && m.verb === "delay"))
-          c.dlySend.gain.setTargetAtTime(c.wet.delay / 100 * cfg.dlyTrim, t, 0.05);
-        if (!PIECE.mods.some(m => m.channel === ch && m.verb === "reverb"))
-          c.revSend.gain.setTargetAtTime(c.wet.reverb / 100 * cfg.revTrim, t, 0.05);
+        const base = C ? C.wet[ch] : { delay: c.wet.delay / 100, reverb: c.wet.reverb / 100 };
+        if (!mods.some(m => m.channel === ch && m.verb === "delay"))
+          c.dlySend.gain.setTargetAtTime(base.delay * cfg.dlyTrim, t, 0.05);
+        if (!mods.some(m => m.channel === ch && m.verb === "reverb"))
+          c.revSend.gain.setTargetAtTime(base.reverb * cfg.revTrim, t, 0.05);
       }
     }
   }
   // the un-modulated sends start where [M] put them
   set("dlyTrim", 1); set("revTrim", 1);
 
-  return { A, cfg, set, setLevel, scheduleStep, modState, silences, tail: A.tail, DRUM_PAT };
+  return { A, cfg, set, setLevel, scheduleStep, modState, silences, tail: A.tail, DRUM_PAT,
+           compositionFor, recompose,
+           // what the ENGINE resolved for this bar — not what the surface
+           // thinks it sent. The two are different claims and only this one is
+           // evidence.
+           composition: () => comp };
 }
 
 /* ---------------------------------------------------------------------------
@@ -1232,6 +1856,27 @@ const PERF = { late: [], task: [], slack: [], worstLate: 0, worstTask: 0, minSla
 
 let ctx = null, engine = null, timer = null;
 let muted = localStorage.getItem("p02.muted") === "1";
+// The seed is the whole set: composition state at bar N is a pure function of
+// (seed, N). It comes from ?seed= — the QUERY, never the path, because the
+// page is served under /dub/ and a path-shaped anything resolves against the
+// owner's main site and breaks only in production.
+const SEED = seedFromQuery(location.search);
+
+/* --- THE SEEK. Given a bar number, the composition is that bar's state with
+   no history: `compositionAt` is asked for the bar and answers without having
+   been asked for any bar before it. The transport therefore only has to move
+   its own step counter. The delay feedback and the reverb tail are stateful
+   and exempt — they settle in seconds, which is why the determinism proof
+   allows a warm-up and then demands sample identity. --- */
+function seek(bar) {
+  bar = Math.max(0, Math.floor(bar));
+  T.step = bar * 16;
+  uiQueue.length = 0;
+  if (ctx && T.running) T.nextT = ctx.currentTime + 0.1;
+  if (engine) engine.recompose();
+  say(`seek to bar ${bar + 1} — section ${Math.floor(bar / MOVEMENT.section) + 1} of ${Math.ceil(MOVEMENT.bars / MOVEMENT.section)}. Nothing was replayed to get here.`);
+  return bar;
+}
 
 function tick() {
   if (!T.running || !engine) return;
@@ -1370,6 +2015,10 @@ function buildTable() {
       + `<td class="n" title="input gain — fixed, measured once, ahead of the fader">`
       + `${c.ch === "R" ? "\u2014" : (INPUT_GAIN[c.ch] || 1).toFixed(3)}</td>`
       + (c.ch === "R"
+          ? `<td class="n">\u2014</td><td class="n">\u2014</td><td class="n">\u2014</td>`
+          : `<td class="n" id="phr${c.ch}">1</td><td class="n" id="chn${c.ch}">1.00</td>`
+            + `<td class="n" id="mov${c.ch}">0.00</td>`)
+      + (c.ch === "R"
           ? `<td class="n">\u2014</td><td class="n">\u2014</td>`
           : `<td class="n" id="dly${c.ch}">${(w.delay / 100).toFixed(2)}</td>`
             + `<td class="n" id="rev${c.ch}">${(w.reverb / 100).toFixed(2)}</td>`)
@@ -1398,6 +2047,30 @@ function wireFaders() {
   });
 }
 
+function eventText(ev) {
+  if (!ev) return "—";
+  return ev[0] + "(" + ev.slice(1).map(a => typeof a === "string" ? a : String(a)).join(", ") + ")";
+}
+function buildSections() {
+  const tb = ui("sections").querySelector("tbody");
+  tb.innerHTML = "";
+  MOVEMENT.sections.forEach((sec, i) => {
+    const tr = document.createElement("tr");
+    tr.id = "sec" + i;
+    tr.innerHTML = `<td class="n">${sec.at + 1}</td><td>${eventText(sec.event)}</td><td class="why">${sec.why}</td>`;
+    tb.appendChild(tr);
+  });
+  if (MOVEMENT.stub) {
+    const tr = document.createElement("tr");
+    tr.className = "silent";
+    tr.innerHTML = `<td>—</td><td>STUB</td><td class="why">This schedule is a stub: it exists so the `
+      + `machinery can be measured, and its whys say what each event proves mechanically rather `
+      + `than what it is for musically. The real eight sections are written separately and drop `
+      + `into this exact shape.</td>`;
+    tb.appendChild(tr);
+  }
+}
+
 function buildSteps() {
   const box = ui("steps");
   box.innerHTML = "";
@@ -1422,6 +2095,7 @@ function paint() {
     ui("bars").textContent = `bar ${bar + 1} · step ${s + 1} of 16`;
     const lamps = ui("steps").children;
     for (let i = 0; i < 16; i++) lamps[i].classList.toggle("on", i === s);
+    paintMovement(bar);
   }
   // what the ENGINE received for the three modulated parameters, not what the
   // surface thinks it sent
@@ -1437,6 +2111,54 @@ function paint() {
     ui("lvl3").textContent = parseFloat(ui("fad3").value).toFixed(2) + "\u25b8"
                            + (ms["3:level"] / (INPUT_GAIN[3] || 1)).toFixed(2);
   ui("perf").textContent = perfReport();
+}
+
+/* What the ENGINE resolved for this bar, not what the surface thinks it sent.
+   A number the surface shows and a number the engine receives are different
+   claims, so this reads the engine's own composition object and nothing
+   else. --- */
+let lastPainted = -1;
+function paintMovement(bar) {
+  if (!engine) return;
+  const C = engine.composition();
+  if (!C) return;
+  const sec = Math.floor(bar / MOVEMENT.section);
+  const phr = Math.floor(bar / MOVEMENT.phrase);
+  ui("movenow").textContent =
+    `section ${sec + 1} of ${Math.ceil(MOVEMENT.bars / MOVEMENT.section)}`
+    + ` · phrase ${phr + 1} · bar ${bar % MOVEMENT.section + 1} of ${MOVEMENT.section}`
+    + ` · walk ${C.walk >= 0 ? "+" : ""}${C.walk} ${Math.abs(C.walk) === 1 ? "degree" : "degrees"}`
+    + ` · ${C.mods.length} modulator${C.mods.length === 1 ? "" : "s"} bound`;
+  if (bar === lastPainted) return;
+  lastPainted = bar;
+  // which scheduled event is the most recent one
+  let live = -1;
+  MOVEMENT.sections.forEach((x, i) => { if (x.at <= bar) live = i; });
+  MOVEMENT.sections.forEach((x, i) => {
+    const tr = ui("sec" + i); if (!tr) return;
+    tr.style.color = i === live ? "var(--hot)" : "";
+  });
+  for (const c of CHANNELS) {
+    if (c.ch === "R") continue;
+    const ch = c.ch;
+    const p = ui("phr" + ch), n = ui("chn" + ch), m = ui("mov" + ch);
+    if (!p) continue;
+    p.textContent = C.phrase[ch];
+    n.textContent = C.chance[ch].toFixed(2);
+    m.textContent = C.move[ch] === "LOCK" ? "LOCK" : C.move[ch].toFixed(2);
+    // A SILENT CHANNEL MUST SAY WHY IT IS SILENT. Every way a channel can go
+    // quiet is named by the composition layer, and this is where the name is
+    // shown — silence with nothing to explain it is the one thing this
+    // instrument refuses to produce.
+    const tr = ui("ch" + ch);
+    const why = C.silent[ch];
+    if (tr) {
+      tr.classList.toggle("silent", !!why);
+      const cell = tr.lastElementChild;
+      if (why) { if (cell.dataset.from === undefined) cell.dataset.from = cell.innerHTML; cell.textContent = why; }
+      else if (cell.dataset.from !== undefined) { cell.innerHTML = cell.dataset.from; delete cell.dataset.from; }
+    }
+  }
 }
 
 function outputs() {
@@ -1476,6 +2198,14 @@ function wire() {
   bind("revtrim", "revTrim");
   bind("moddepth", "modDepth");
   bind("stabcut", "stabCut");
+  const sk = ui("seek"), sko = ui("seek_v");
+  sk.max = String(MOVEMENT.bars - 1);
+  const updSeek = () => {
+    const b = parseInt(sk.value, 10);
+    sko.textContent = `${b + 1} / ${MOVEMENT.bars}`;
+  };
+  sk.addEventListener("input", updSeek); updSeek();
+  ui("seekgo").addEventListener("click", () => { seek(parseInt(sk.value, 10)); lastPainted = -1; });
   ui("revsize").addEventListener("change", () => { if (engine) engine.set("revSeconds", val("revsize")); });
   ui("dlydiv").addEventListener("change", () => { if (engine) engine.set("dlyBeats", parseFloat(ui("dlydiv").value)); });
 }
@@ -1495,7 +2225,7 @@ async function start() {
   if (T.running) { stop(); return; }
   if (!ctx) {
     ctx = new (window.AudioContext || window.webkitAudioContext)();
-    engine = createEngine(ctx, {});
+    engine = createEngine(ctx, { seed: SEED, movement: MOVEMENT });
     engine.tail.connect(ctx.destination);
     engine.set("master", val("vol"));
     engine.set("pump", val("pump"));
@@ -1507,7 +2237,7 @@ async function start() {
   }
   if (ctx.state !== "running") await ctx.resume();
   T.bpm = val("bpm");
-  T.step = 0;
+  T.step = parseInt(ui("seek").value, 10) * 16;   // start where the seek is set
   T.nextT = ctx.currentTime + 0.1;
   T.running = true;
   timer = setInterval(tick, TICK_MS);
@@ -1533,6 +2263,13 @@ async function renderOffline(o) {
   o = o || {};
   const bars = o.bars || 4, bpm = o.bpm || PIECE.tempo, rate = 44100;
   const stepDur = 60 / bpm / 4;
+  // `startBar` is the SEEK. The steps scheduled are absolute — bar 200 is
+  // rendered as bar 200 — but the TIME they are scheduled at is relative to
+  // the render, so a 12-bar context can hold bars 192..204. Everything random
+  // in the engine keys off the absolute step, so the two agree sample for
+  // sample. That claim is the determinism proof and it is measured, not
+  // asserted here.
+  const startBar = o.startBar || 0;
   const seconds = bars * 16 * stepDur + (o.tail === undefined ? 2 : o.tail);
   const off = new OfflineAudioContext(2, Math.ceil(seconds * rate), rate);
   const eng = createEngine(off, {
@@ -1540,7 +2277,9 @@ async function renderOffline(o) {
     bypassFaders: !!o.bypassFaders,
     raw: !!o.raw,
     calibrate: !!o.calibrate,
-    masterTrim: o.masterTrim
+    masterTrim: o.masterTrim,
+    seed: o.seed,
+    movement: o.movement
   });
   eng.cfg.bpm = bpm;
   if (o.set) for (const k of Object.keys(o.set)) eng.set(k, o.set[k]);
@@ -1559,31 +2298,75 @@ async function renderOffline(o) {
     }
     node.connect(off.destination);
   } else eng.tail.connect(off.destination);
-  for (let s = 0; s < bars * 16; s++) eng.scheduleStep(s, s * stepDur + 0.05, stepDur);
+  const s0 = startBar * 16;
+  for (let s = s0; s < s0 + bars * 16; s++) eng.scheduleStep(s, (s - s0) * stepDur + 0.05, stepDur);
   const buf = await off.startRendering();
+  const whole = window0(buf, 0, buf.length);
+  const out = { peak: whole.peak, peakDb: dbfs(whole.peak), rmsDb: dbfs(whole.rms), seconds, startBar, bars };
+
+  // PER BAR, so "the material actually differs across sections" is a table of
+  // numbers rather than an opinion. Onsets cannot be counted from a mix, so
+  // the RMS and the peak of each bar are what is reported, and the composition
+  // layer is where the firings themselves are counted.
+  if (o.perBar) {
+    out.bars_ = [];
+    const barSamples = 16 * stepDur * rate;
+    for (let b = 0; b < bars; b++) {
+      const w = window0(buf, Math.floor(0.05 * rate + b * barSamples), Math.ceil(barSamples));
+      out.bars_.push({ bar: startBar + b, peakDb: dbfs(w.peak), rmsDb: dbfs(w.rms) });
+    }
+  }
+  // `capture: [fromBar, toBar]` hands back the raw samples of a window so two
+  // renders can be compared sample for sample.
+  if (o.capture) {
+    const barSamples = 16 * stepDur * rate;
+    const a = Math.floor(0.05 * rate + (o.capture[0] - startBar) * barSamples);
+    const b = Math.floor(0.05 * rate + (o.capture[1] - startBar) * barSamples);
+    out.samples = [Array.from(buf.getChannelData(0).slice(a, b)),
+                   Array.from(buf.getChannelData(1).slice(a, b))];
+  }
+  return out;
+}
+function window0(buf, from, len) {
   let peak = 0, sum = 0, n = 0;
+  const to = Math.min(buf.length, from + len);
   for (let c = 0; c < buf.numberOfChannels; c++) {
     const d = buf.getChannelData(c);
-    for (let i = 0; i < d.length; i++) { const x = Math.abs(d[i]); if (x > peak) peak = x; sum += d[i] * d[i]; n++; }
+    for (let i = Math.max(0, from); i < to; i++) { const x = Math.abs(d[i]); if (x > peak) peak = x; sum += d[i] * d[i]; n++; }
   }
-  return { peak, peakDb: dbfs(peak), rmsDb: dbfs(Math.sqrt(sum / n)), seconds };
+  return { peak, rms: Math.sqrt(sum / Math.max(1, n)) };
 }
 
 window.p02 = {
   state: () => ({
     contextCreated: !!ctx, running: T.running, muted,
-    step: T.step, bpm: T.bpm, perf: perfReport()
+    step: T.step, bar: Math.floor(T.step / 16), bpm: T.bpm, seed: SEED, perf: perfReport()
   }),
   renderOffline,
-  PIECE, INPUT_GAIN, MASTER_TRIM,
+  PIECE, INPUT_GAIN, MASTER_TRIM, MOVEMENT, MOD_RATE_BARS, MOD_RATES,
   setLevel: (ch, v) => engine && engine.setLevel(ch, v),
-  patterns: () => { const e = createEngine(new OfflineAudioContext(2, 1024, 44100), {}); return e.DRUM_PAT; }
+  patterns: () => { const e = createEngine(new OfflineAudioContext(2, 1024, 44100), {}); return e.DRUM_PAT; },
+  // THE COMPOSITION LAYER, ON THE SURFACE OF THE PAGE, so a measurement can
+  // ask it the same question the engine asks it — without a clock, without a
+  // context, and from any bar in any order.
+  compositionAt: (bar, seed, movement) =>
+    compositionAt(seed === undefined ? SEED : seed, PIECE, movement || MOVEMENT, bar),
+  stepFires, walkAt, transposeDegrees, modValue, shapeAt, scheduleStateAt,
+  // WHAT FIRES, PER BAR — the loop-detector's evidence. This is the function
+  // that would return the same string 256 times if the frozen loop came back.
+  barFingerprint: (bar, seed, movement) => fingerprint(
+    compositionAt(seed === undefined ? SEED : seed, PIECE, movement || MOVEMENT, bar),
+    seed === undefined ? SEED : seed),
+  seek: bar => seek(bar),
+  engineComposition: () => engine && engine.composition()
 };
 
 /* --- boot --- */
 buildTable();
 wireFaders();
+buildSections();
 buildSteps();
+ui("seedline").textContent = "seed " + SEED + (location.search.indexOf("seed=") === -1 ? " (default — add ?seed=… to the URL)" : "");
 outputs();
 wire();
 ui("go").addEventListener("click", start);
