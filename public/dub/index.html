@@ -198,6 +198,12 @@
     <div class="row"><label>room send trim</label><input id="revtrim" type="range" min="0" max="2" step="0.01" value="1"><output id="revtrim_v"></output></div>
     <div class="row"><label>send modulation</label><input id="moddepth" type="range" min="0" max="1" step="0.01" value="1"><output id="moddepth_v"></output></div>
     <div class="row"><label>stab cutoff</label><input id="stabcut" type="range" min="0.35" max="2" step="0.01" value="1"><output id="stabcut_v"></output></div>
+    <!-- THE FLOOR. One control, and it is a trim on a level that was measured
+         rather than a level of its own — the number it multiplies is BED_LEVEL
+         and the reasoning is beside it in the source. At 0 the readout says
+         `off`, because a channel that produces nothing has to say so. -->
+    <div class="row"><label>noise floor</label><input id="bed" type="range" min="0" max="2" step="0.01" value="1"
+      title="Tape air, dust ticks breathing once per revolution (0.55 Hz = 33 rpm) and a few pops, band-limited 140 Hz to 9 kHz and injected after the reverb and the delay so the deck saturator and the finisher act on it the way they act on the room. It never ducks with the kick and it never moves on its own: a floor you can hear arrive is not a floor."><output id="bed_v"></output></div>
   </fieldset>
 
   <fieldset>
@@ -442,6 +448,38 @@ const MASTER_TRIM = 0.95;
 // scale, raised twice by request from the original 2%". Measured and changed
 // here; see the block beside the rumble bus for what the measurement said.
 const RUMBLE_CAP = 0.09;
+
+// THE NOISE FLOOR'S LEVEL. What the surface calls "noise floor" is a TRIM on
+// this, from 0 to ×2, starting at ×1 — so this number is the bed as it ships
+// and the slider is the owner's opinion about it. What the bed IS, and why it
+// is wired where it is, is in its own block in section 5.
+//
+// MEASURED, 2026-09-18, offline in Chromium, 8 bars for the bed alone and 12
+// for the mix, five renders per condition (see the note about the bimodal
+// render below). The bed alone is measured through the WHOLE finisher, exactly
+// as it is heard, by soloing it: `renderOffline({solo: "N"})`.
+//
+//   trim   bed alone peak   bed alone RMS   under the mix's RMS
+//   0.05        -28.81          -57.54            39.2 dB
+//   0.10        -22.83          -51.52            33.2 dB
+//   0.20        -16.92          -45.51            27.2 dB
+//   0.30        -13.50          -42.00            23.7 dB
+//
+// 0.07 is the setting, and it is chosen on the RMS with the peak checked
+// rather than the other way round. A crackle bed is HEARD BY ITS TICKS: the
+// crest factor here is 28.5 dB, so at this level the air sits about 31 dB
+// under the mix — subliminal — while the sharp dust ticks land about 16 dB
+// under the mix's own peak, which is where an ear finds them. Setting it by
+// peak instead would have put the continuous part at -64 dBFS, which is not a
+// floor, it is an absence.
+//
+// IT IS ON BY DEFAULT and it is one slider away from off. The case for on: the
+// genre's third principle is that a patch with no noise floor sounds like a
+// demo of an oscillator, and a bed nobody switches on is a bed nobody hears.
+// The case for quiet: the sound as it stands has been judged good, and a layer
+// that changes the character of it is the failure mode here rather than the
+// feature. What that costs is measured and it is beside the block in section 5.
+const BED_LEVEL = 0.07;
 
 /* ---------------------------------------------------------------------------
    3. THE GRID — euclidean placement [G]
@@ -1349,6 +1387,9 @@ function createEngine(ctx, opts) {
     stabCut: 1,
     rumble: 0.70,                        // [E] :1015 — their fader ships at 70 of 0-150
     rumbleCap: RUMBLE_CAP,
+    // the noise floor, as a TRIM on BED_LEVEL. 1 is the bed as measured; 0 is
+    // off and is silent, not quiet.
+    bedTrim: (opts.bedTrim === undefined ? 1 : opts.bedTrim),
     bypassFaders: !!opts.bypassFaders,   // calibration render: [M]'s faders off
     raw: !!opts.raw,                     // …and the input gain off too: the voice exactly as built
     solo: (opts.solo === undefined ? null : opts.solo),
@@ -1694,6 +1735,171 @@ function createEngine(ctx, opts) {
   A.comp.threshold.value = -7.44; A.comp.ratio.value = 1.90; A.comp.knee.value = 8;
   A.comp.attack.value = 0.022; A.comp.release.value = 0.38;
   A.deck.connect(A.satIn); A.satIn.connect(A.sat); A.sat.connect(A.comp);
+
+  /* =========================================================================
+     THE NOISE FLOOR — the bed. [D] principle 3, [E] :7893 for the recipe.
+     -------------------------------------------------------------------------
+     [D] "Hiss, crackle and hum are not a byproduct — noise is a spectre… A dub
+     techno patch with no noise floor sounds like a demo of an oscillator."
+     Everything above this line is a voice that starts and stops. This is the
+     only thing in the graph that never stops, and that is what a floor is.
+
+     WHAT IT IS — three passes over one buffer, and they are three different
+     sounds that a listener hears as one room:
+       AIR   a one-pole lowpass over white noise. Dark, closer to the floor of
+             a tape than to hiss: white noise under a mix reads as a fault.
+       DUST  Poisson-timed ticks whose amplitudes are cubed, so nearly all of
+             them are tiny and a sharp one is rare, and whose DENSITY BREATHES
+             ONCE PER REVOLUTION at 0.55 Hz — 33 1/3 rpm, which is the swish
+             everyone recognises without being able to name.
+       POPS  a handful per loop, sparse, with a low thump under them.
+
+     WHERE IT SITS, and each of the four is a decision:
+
+     1. IT INJECTS AT `A.satIn`, NOT AT `A.deck`. Downstream of the reverb and
+        the delay returns, so the deck saturator and the glue compressor and
+        the finisher's transformer act on the bed exactly as they act on the
+        room — which is [D]'s "saturation after the reverb", and is why the
+        floor breathes with the compressor the way a record's does. UPSTREAM of
+        `A.calTap`, which is the calibration point INPUT_GAIN was measured at:
+        a continuous floor under a soloed voice would corrupt every calibration
+        render taken after this. [E] :8221 injects its bed at the deck lowpass,
+        which is the same place in their graph and has the same two properties.
+
+     2. IT DOES NOT RIDE THE PUMP, and does not feed the sends. A noise floor
+        that ducks under every kick is a pumping hiss — the one way to make a
+        bed the most noticeable thing in a mix. And a continuous source into a
+        42%-feedback delay is not an echo, it is a build-up.
+
+     3. DISTORT FIRST, BAND-LIMIT LAST — the rumble bus's own rule ([E] :8231),
+        for the same reason: the filters have to strip what the saturator
+        makes. The saturator is here for a second reason too. The bed's own
+        peaks are its pops, at full scale in the buffer, while its air sits
+        near 0.05; tanh at k=1.6 pulls a full-scale pop 4.8 dB down relative to
+        the air and leaves the air untouched, so the surface evens out and the
+        pops stop reading as clean digital impulses. Measured: see the bed's
+        contribution to the mix peak beside BED_LEVEL.
+
+     4. IT IS BAND-LIMITED, 140 Hz to 9 kHz, and that is NOT the reference's
+        choice. 30-120 Hz already carries the kick, the sub and the rumble, and
+        the headroom lives there; the thump under a pop buys nothing under a
+        sub that holds. Above, 9 kHz keeps it tape rather than digital fizz —
+        and the finisher lifts everything above 12 kHz by 1.2 dB, which a
+        full-range bed would have collected.
+
+     WHY IT IS STATIC. The level does not move and no modulator is bound to it.
+     A floor that swells is a part, and the moment a listener can hear the bed
+     arrive, the bed has failed. Its movement is in the material instead and
+     costs nothing per bar: the 0.55 Hz revolution swish, plus TWO READERS OF
+     ONE BUFFER at rates 1 and 2^-1/4. That ratio is irrational, so the pair
+     never repeats; and it puts the second record's revolution at 0.46 Hz, so
+     the two densities beat against each other with a period of about 11 s.
+     An 8 s loop under an endless piece would otherwise become an 8 s groove.
+
+     COST. One buffer, two source nodes, five nodes total, all built once at
+     construction. Nothing here allocates per bar — a noise generator that does
+     is a leak on somebody's laptop.
+     ========================================================================= */
+  const BED_SECONDS = 8, BED_WRAP = 0.05;             // the loop, and its seam
+  function makeBedBuffer() {
+    const rate = ctx.sampleRate;
+    const len = Math.floor(BED_SECONDS * rate), wrap = Math.floor(BED_WRAP * rate);
+    const buf = ctx.createBuffer(2, len, rate);
+    for (let ch = 0; ch < 2; ch++) {
+      /* THE SEAM IS THE WHOLE REASON FOR THE SCRATCH ARRAY. A layer that never
+         stops loops for ever, and a buffer whose last sample does not continue
+         into its first one puts a step — a click — into the floor every 8
+         seconds. So `wrap` samples MORE than the loop are generated, and the
+         overrun is crossfaded over the head: sample 0 then really is the
+         natural continuation of sample len-1, because it IS sample len.
+         Measured rather than asserted: `p02.bedSeam()`. */
+      const n = len + wrap, s = new Float32Array(n);
+      // the two channels are fully decorrelated, including the phase of the
+      // revolution: a mono floor pulls the whole image to the centre.
+      const rev0 = ch * 2.1 + engRnd();
+
+      // AIR — a one-pole lowpass over white noise, run for 2000 samples before
+      // anything is written so the filter starts settled and the loop does not
+      // open on a ramp up from silence.
+      let lp = 0;
+      for (let i = 0; i < 2000; i++) lp += 0.25 * ((engRnd() * 2 - 1) - lp);
+      for (let i = 0; i < n; i++) { lp += 0.25 * ((engRnd() * 2 - 1) - lp); s[i] = lp * 0.05; }
+
+      // DUST — Poisson-timed candidates at ~42 a second, kept or dropped by a
+      // 0.55 Hz density swish (33 1/3 rpm), amplitudes CUBED so that nearly
+      // every tick is tiny and a sharp one is an event.
+      let at = 0;
+      while (true) {
+        at += -Math.log(1 - engRnd()) / 42;
+        const i0 = (at * rate) | 0;
+        if (i0 >= n - 32) break;
+        const rev = 0.5 + 0.5 * Math.sin(2 * Math.PI * 0.55 * at + rev0);
+        if (engRnd() > 0.25 + 0.65 * rev) continue;
+        const amp = Math.pow(engRnd(), 3) * 0.55 + 0.02;
+        const sgn = engRnd() < 0.5 ? -1 : 1, dec = 0.25 + engRnd() * 0.45;
+        for (let k = 0; k < 24; k++) s[i0 + k] += sgn * amp * dec ** k * (k === 0 ? 1.6 : 1);
+      }
+
+      // POPS — ONE per loop per channel, at a quarter to a half of full scale.
+      // [E] :7912 writes 3.6 a second at half to full scale, which is right for
+      // a record that plays for four minutes and is then swapped. Two readers
+      // over an endless piece turn that into a pop about once a second, which
+      // is not a surface, it is damage; and MEASURED, the pops were the whole
+      // of the bed's 29 dB crest factor, which is what forced the continuous
+      // part of it down to nothing. One at a time, quieter.
+      {
+        const i0 = (engRnd() * (n - 4000)) | 0;
+        const amp = 0.25 + engRnd() * 0.25, sgn = engRnd() < 0.5 ? -1 : 1;
+        for (let k = 0; k < 10; k++) s[i0 + k] += sgn * amp * 0.5 ** k;
+        // the low thump under it. Most of this is taken off again by the
+        // 140 Hz highpass; what survives is the weight that tells the ear the
+        // click came off a record and not out of a converter.
+        const hz = 70 + engRnd() * 50, tau = rate * 0.03, thump = (rate * 0.05) | 0;
+        for (let k = 0; k < thump; k++)
+          s[i0 + 2 + k] += Math.sin(2 * Math.PI * hz * k / rate) * amp * 0.28 * Math.exp(-k / tau);
+      }
+
+      const d = buf.getChannelData(ch);
+      for (let i = 0; i < len; i++) d[i] = s[i];
+      for (let i = 0; i < wrap; i++) { const w = i / wrap; d[i] = s[i] * w + s[len + i] * (1 - w); }
+    }
+    return buf;
+  }
+
+  A.bedGain = ctx.createGain();
+  {
+    A.bedBuf = makeBedBuffer();
+    const bedSatIn = satTrim();
+    A.bedSat = ctx.createWaveShaper(); A.bedSat.curve = satCurve(1.6); A.bedSat.oversample = "2x";
+    A.bedHp = ctx.createBiquadFilter(); A.bedHp.type = "highpass"; A.bedHp.frequency.value = 140;  A.bedHp.Q.value = 0.7;
+    A.bedLp = ctx.createBiquadFilter(); A.bedLp.type = "lowpass";  A.bedLp.frequency.value = 9000; A.bedLp.Q.value = 0.7;
+    // THE SECOND READER IS QUIETER, at 0.8: it is the record underneath, not a
+    // second record. Its rate is 2^(-1/4) — see the block above for why an
+    // irrational ratio and not 0.84.
+    const second = ctx.createGain(); second.gain.value = 0.8;
+    for (const [rate, offset, into] of [[1, 0, bedSatIn], [Math.pow(2, -0.25), 3.17, second]]) {
+      const src = ctx.createBufferSource();
+      src.buffer = A.bedBuf; src.loop = true; src.playbackRate.value = rate;
+      src.connect(into);
+      // NOTHING SOUNDS BEFORE A GESTURE. This runs inside createEngine, which
+      // the live page only calls from the start button's handler; offline it
+      // runs at time 0 of a render that has no output device.
+      src.start(ctx.currentTime, offset);
+    }
+    second.connect(bedSatIn);
+    bedSatIn.connect(A.bedSat); A.bedSat.connect(A.bedHp); A.bedHp.connect(A.bedLp);
+    A.bedLp.connect(A.bedGain);
+    A.bedGain.connect(A.satIn);
+  }
+  // SOLO. The bed is a bus and not a channel, so it answers to its own token
+  // "N" the way the rumble answers to "R" — which is the only way to measure
+  // a continuous layer in isolation, and the only way a soloed voice is still
+  // that voice alone.
+  const bedAudible = () => (cfg.solo === null || cfg.solo === "N") ? 1 : 0;
+  function applyBed(t) {
+    A.bedGain.gain.setTargetAtTime(BED_LEVEL * cfg.bedTrim * bedAudible(), t, 0.05);
+  }
+  A.bedGain.gain.value = BED_LEVEL * cfg.bedTrim * bedAudible();
 
   A.master = ctx.createGain(); A.master.gain.value = cfg.master;
   A.comp.connect(A.master);
@@ -2311,6 +2517,10 @@ function createEngine(ctx, opts) {
       A.pp.R.delayTime.setTargetAtTime(dt, t, 0.05);
     }
     if (key === "dlyFbk") A.pp.fb.gain.setTargetAtTime(value, t, 0.05);
+    // the floor moves with a 50 ms time constant like every other bus level
+    // here: a noise bed that steps is a click, and a click is the one thing a
+    // floor cannot make.
+    if (key === "bedTrim") applyBed(t);
     if (key === "revSeconds") A.rev.buffer = makeImpulse(value, 2.2);
     if (key === "seed" || key === "movement") { cfg[key] = key === "seed" ? (value | 0) : value; recompose(); }
     // the ring, switched. It changes what the NEXT bar resolves to and nothing
@@ -2952,7 +3162,10 @@ function outputs() {
     ["bpm", v => v + " BPM"], ["vol", v => v.toFixed(2)], ["pump", v => v.toFixed(2)],
     ["fbk", v => v.toFixed(2)], ["dlytrim", v => "×" + v.toFixed(2)],
     ["revsize", v => v.toFixed(1) + " s"], ["revtrim", v => "×" + v.toFixed(2)],
-    ["moddepth", v => "×" + v.toFixed(2)], ["stabcut", v => "×" + v.toFixed(2)]
+    ["moddepth", v => "×" + v.toFixed(2)], ["stabcut", v => "×" + v.toFixed(2)],
+    // SILENCE EXPLAINS ITSELF, including a floor's. `×0.00` is a number that
+    // could be a rounding; `off` is not.
+    ["bed", v => v === 0 ? "off" : "×" + v.toFixed(2)]
   ];
   for (const [id, fmt] of pairs) {
     const el = ui(id), out = ui(id + "_v");
@@ -3004,6 +3217,7 @@ function wire() {
   bind("revtrim", "revTrim");
   bind("moddepth", "modDepth");
   bind("stabcut", "stabCut");
+  bind("bed", "bedTrim");
   const sk = ui("seek"), sko = ui("seek_v");
   sk.max = String(MOVEMENT.bars - 1);
   const updSeek = () => {
@@ -3044,6 +3258,7 @@ async function start() {
     engine.set("pump", val("pump"));
     engine.set("dlyFbk", val("fbk"));
     engine.set("stabCut", val("stabcut"));
+    engine.set("bedTrim", val("bed"));
     engine.cfg.bpm = val("bpm");
     engine.set("dlyBeats", parseFloat(ui("dlydiv").value));
     for (const c of CHANNELS) engine.setLevel(c.ch, parseFloat(ui("fad" + c.ch).value));
@@ -3096,7 +3311,10 @@ async function renderOffline(o) {
     // an offline render can be asked for either instrument: the ring running,
     // or the arrangement holding still with the hand's values on it
     auto: !!o.auto,
-    holds: o.holds
+    holds: o.holds,
+    // the floor is a construction-time trim as well as a live one, so a render
+    // can ask for the piece with it and without it at identical settings
+    bedTrim: o.bedTrim
   });
   eng.cfg.bpm = bpm;
   if (o.set) for (const k of Object.keys(o.set)) eng.set(k, o.set[k]);
@@ -3158,10 +3376,13 @@ window.p02 = {
   state: () => ({
     contextCreated: !!ctx, running: T.running, muted, auto: autoOn,
     holds: HOLDS,
-    step: T.step, bar: Math.floor(T.step / 16), bpm: T.bpm, seed: SEED, perf: perfReport()
+    step: T.step, bar: Math.floor(T.step / 16), bpm: T.bpm, seed: SEED, perf: perfReport(),
+    // WHAT THE ENGINE HAS, not what the slider says. The two are different
+    // claims and this is the one that is evidence.
+    bedTrim: engine ? engine.cfg.bedTrim : null
   }),
   renderOffline,
-  PIECE, INPUT_GAIN, MASTER_TRIM, MOVEMENT, MOD_RATE_BARS, MOD_RATES, HOLD_PARAMS,
+  PIECE, INPUT_GAIN, MASTER_TRIM, BED_LEVEL, MOVEMENT, MOD_RATE_BARS, MOD_RATES, HOLD_PARAMS,
 
   /* --- THE SWITCH AND THE HAND, FOR A SURFACE AND FOR A MEASUREMENT --------
      `auto` is the ring: off by default, and off again on every load. `hold`
@@ -3187,6 +3408,22 @@ window.p02 = {
   modState: () => (engine ? engine.modState : null),
   setLevel: (ch, v) => engine && engine.setLevel(ch, v),
   patterns: () => { const e = createEngine(new OfflineAudioContext(2, 1024, 44100), {}); return e.DRUM_PAT; },
+  /* THE BED'S LOOP SEAM, AS A NUMBER. The floor never stops, so its buffer
+     loops for ever; a buffer whose last sample does not continue into its
+     first one clicks once a loop. This builds the bed and compares the step
+     ACROSS THE WRAP with the largest step inside it. If the wrap is not one of
+     the ordinary steps, the seam is audible and this is what says so. */
+  bedSeam: () => {
+    const e = createEngine(new OfflineAudioContext(2, 1024, 44100), {});
+    const b = e.A.bedBuf, out = [];
+    for (let ch = 0; ch < b.numberOfChannels; ch++) {
+      const d = b.getChannelData(ch);
+      let mx = 0;
+      for (let i = 1; i < d.length; i++) { const x = Math.abs(d[i] - d[i - 1]); if (x > mx) mx = x; }
+      out.push({ channel: ch, wrapStep: Math.abs(d[0] - d[d.length - 1]), maxInternalStep: mx });
+    }
+    return { seconds: b.duration, sampleRate: b.sampleRate, channels: out };
+  },
   // THE COMPOSITION LAYER, ON THE SURFACE OF THE PAGE, so a measurement can
   // ask it the same question the engine asks it — without a clock, without a
   // context, and from any bar in any order.
