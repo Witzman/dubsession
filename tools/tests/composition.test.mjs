@@ -230,6 +230,79 @@ ok(at(10, bound).mods.find(m => m.channel === 7 && m.verb === 'reverb').boundAt 
    && at(10, bound).mods.find(m => m.channel === 6 && m.verb === 'delay').bars === 3,
    'the manifest\'s own modulators survive, at their own rates', '[M] ch6 delay = 3 bars');
 
+// PER-CHANNEL BIND AND UNBIND, which is the point of the verb: a section event
+// binds a FOURTH modulator to a channel that had none, and unbinds one, and
+// the others are untouched. The old engine walked a fixed manifest array whose
+// membership never changed and scaled all of it with one global knob; that
+// cannot express any of this.
+const perCh = { phrase: 8, section: 32, bars: 256, sections: [
+  { at: 32, event: ['mod', 5, 'level', 40, 7, 'sh'], why: 'a fourth, on a channel with none' },
+  { at: 64, event: ['mod', 6, 'delay', 0, 3, 'tri'], why: 'and one of the manifest\'s three, removed' }] };
+const before = at(0, perCh).mods, after = at(40, perCh).mods, later = at(100, perCh).mods;
+ok(before.length === 3 && after.length === 4,
+   'a section event binds a modulator to a channel that had none', `${before.length} -> ${after.length}`);
+ok(after.filter(m => m.channel === 5).length === 1 && after.find(m => m.channel === 5).verb === 'level',
+   'and it lands on the channel it names, at its own rate and shape',
+   `ch5 level, ${after.find(m => m.channel === 5).bars} bars, ${after.find(m => m.channel === 5).shape}`);
+const untouched = ['6delay', '6reverb', '3level'];
+ok(untouched.every(k => after.some(m => m.channel + m.verb === k)),
+   'and the other three are untouched by it');
+ok(later.length === 3 && !later.some(m => m.channel === 6 && m.verb === 'delay')
+   && later.some(m => m.channel === 6 && m.verb === 'reverb'),
+   'unbinding one leaves the SAME CHANNEL\'S other modulator alone',
+   'ch6 delay gone, ch6 reverb still bound');
+
+// EACH MODULATOR STARTS ITS CYCLE WHEN IT IS BOUND [G]: "binding eight one
+// after another spreads them around the bar and the row BREATHES rather than
+// PUMPS. Worth copying deliberately." With a per-channel bind this is nearly
+// free; a global list cannot produce it at all.
+const spread = { phrase: 8, section: 32, bars: 256, sections: [0, 1, 2, 3].map(i => ({
+  at: 32 + i * 3, event: ['mod', [1, 2, 3, 5][i], 'reverb', 50, 8, 'tri'], why: 'bound one after another' })) };
+const atBind = [0, 1, 2, 3].map(i => {
+  const ch = [1, 2, 3, 5][i], b = 32 + i * 3;
+  return L.modValue(at(b, spread).mods.find(m => m.channel === ch && m.verb === 'reverb'), SEED, i, b);
+});
+ok(atBind.every(v => Math.abs(v) < 1e-9), 'every modulator reads zero on the bar it was bound',
+   atBind.map(v => v.toFixed(6)).join(' '));
+// The claim is about PHASE, not about value: a triangle is symmetric, so two
+// modulators a quarter-cycle either side of a peak read the same number while
+// being at genuinely different points of their cycle — one rising, one
+// falling. Asserting on the value would have been asserting the wrong thing,
+// and it is worth saying so here because it is the same class of mistake as
+// reading a surface number for an engine number.
+const phases = [0, 1, 2, 3].map(i => {
+  const m = at(64, spread).mods.find(x => x.channel === [1, 2, 3, 5][i] && x.verb === 'reverb');
+  const ph = (64 - m.boundAt) / m.bars;
+  return (ph - Math.floor(ph)).toFixed(4);
+});
+ok(new Set(phases).size === 4,
+   'and at a later bar the four are at four different points of their cycle — the row breathes, it does not pump',
+   'phases ' + phases.join(' '));
+const atBar64 = [0, 1, 2, 3].map(i =>
+  L.modValue(at(64, spread).mods.find(x => x.channel === [1, 2, 3, 5][i] && x.verb === 'reverb'), SEED, i, 64));
+ok(new Set(atBar64.map(v => v.toFixed(4))).size > 1, 'and they are not all writing the same number',
+   atBar64.map(v => v.toFixed(3)).join(' '));
+
+// AND THE TRAP UNDER IT, which this test found the hard way. Spreading is a
+// consequence of the bind bars being incongruent modulo the rate — it is NOT a
+// property of binding things at different times. Bind four 8-bar modulators
+// eight bars apart and every one of them is at the same point of its cycle
+// forever: the row pumps, exactly what "starts its cycle when it is bound" is
+// supposed to prevent. A section is 32 bars, so 8, 16 and 32 are the rates
+// that fall into this hole on a section boundary, and 5, 7, 11 and 13 are the
+// rates that cannot. That is the coprime argument again, arriving from the
+// other direction, and it is a constraint on the SCHEDULE rather than on this
+// code.
+const pumped = { phrase: 8, section: 32, bars: 256, sections: [0, 1, 2, 3].map(i => ({
+  at: 32 + i * 8, event: ['mod', [1, 2, 3, 5][i], 'reverb', 50, 8, 'tri'], why: 'bound one RATE apart' })) };
+const pumpVals = [0, 1, 2, 3].map(i => {
+  const ch = [1, 2, 3, 5][i];
+  return L.modValue(at(64, pumped).mods.find(m => m.channel === ch && m.verb === 'reverb'), SEED, i, 64);
+});
+ok(new Set(pumpVals.map(v => v.toFixed(4))).size === 1,
+   'THE TRAP: four 8-bar modulators bound 8 bars apart are all at the same point of their cycle',
+   `all read ${pumpVals[0].toFixed(3)} — a rate that divides the bind spacing does not spread`);
+
 // each shape is a different shape, and s+h holds
 const shp = s => [0, .1, .3, .6, .9].map(p => L.shapeAt(s, p, SEED, 0).toFixed(3)).join(' ');
 ok(new Set(['tri', 'ramp', 'square', 'sh'].map(shp)).size === 4, 'the four shapes are four different shapes');
