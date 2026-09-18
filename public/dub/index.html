@@ -2378,9 +2378,14 @@ let muted = localStorage.getItem("p02.muted") === "1";
 // remembered because forgetting it makes a noise nobody asked for; `auto` is
 // the opposite — the safe state is off, and a page that came back with the
 // schedule running because of something the owner clicked last week is the
-// arrangement moving where the hand did not put it. Persisting the switch, and
-// the surface for the held values, belong to the piece of work that builds
-// that surface.
+// arrangement moving where the hand did not put it.
+//
+// ASKED AGAIN ON 2026-09-18, WITH THE SURFACE FOR IT BUILT, AND THE ANSWER IS
+// THE SAME, for a second reason: "reload and it is exactly the same piece" is
+// the claim the gate procedure rests on, and a switch restored from last
+// week's click makes the piece depend on history that is in neither the seed
+// nor the URL. THE HELD VALUES ARE NOT PERSISTED EITHER, and for the same
+// reason. `muted` is the only thing this page remembers.
 let autoOn = false;
 // The seed is the whole set: composition state at bar N is a pure function of
 // (seed, N, auto, holds). It comes from ?seed= — the QUERY, never the path,
@@ -3160,10 +3165,11 @@ window.p02 = {
 
   /* --- THE SWITCH AND THE HAND, FOR A SURFACE AND FOR A MEASUREMENT --------
      `auto` is the ring: off by default, and off again on every load. `hold`
-     and `release` are the hand. Both work before there is an audio context —
-     the switch is remembered here and handed to the engine when the first
-     gesture creates it; a hold before the context exists is refused rather
-     than silently dropped, and says so. --- */
+     and `release` are the hand. BOTH WORK BEFORE THERE IS AN AUDIO CONTEXT:
+     the switch is remembered here and `HOLDS` is module-level (section 4c),
+     and both are handed to the engine when the first gesture creates it. A
+     hold set on a cold page is waiting when the first bar resolves — it used
+     to be refused, which made every control on a silent page a lie. --- */
   auto: on => (on === undefined ? autoOn : setAuto(on)),
   // hold(param, ch, value) — param is one of HOLD_PARAMS. It lands on the NEXT
   // bar, because this bar is already scheduled up to 140 ms ahead.
