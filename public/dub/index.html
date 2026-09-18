@@ -3340,7 +3340,15 @@ async function renderOffline(o) {
   for (let s = s0; s < s0 + bars * 16; s++) eng.scheduleStep(s, (s - s0) * stepDur + 0.05, stepDur);
   const buf = await off.startRendering();
   const whole = window0(buf, 0, buf.length);
-  const out = { peak: whole.peak, peakDb: dbfs(whole.peak), rmsDb: dbfs(whole.rms), seconds, startBar, bars };
+  // `silences` travels with the render because a measurement has to be able to
+  // tell a channel that is quiet ON PURPOSE from one that has gone quiet with
+  // nothing explaining it. Those are the same number and different facts, and
+  // since 2026-09-18 a machine rather than an ear is what decides: bin/browser/
+  // gate-audio.mjs fails a silent channel whose silence carries no reason, and
+  // channel 4 is empty by design, so without this the gate could only ever be
+  // wrong in one direction or the other.
+  const out = { peak: whole.peak, peakDb: dbfs(whole.peak), rmsDb: dbfs(whole.rms),
+                seconds, startBar, bars, silences: eng.silences };
 
   // PER BAR, so "the material actually differs across sections" is a table of
   // numbers rather than an opinion. Onsets cannot be counted from a mix, so

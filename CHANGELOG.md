@@ -2,6 +2,11 @@
 
 ## Unreleased
 
+- `renderOffline` reports which channels are silent and why, beside the peak.
+  Nothing audible changed: it is the hook a measurement needs to tell a
+  channel that is quiet on purpose from one that went quiet with nothing
+  explaining it.
+
 ## 2026-09-18 — the noise floor
 
 A bed that never stops, and a switch for it.
