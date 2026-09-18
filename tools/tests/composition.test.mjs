@@ -55,7 +55,9 @@ ok(region.length > 5000, 'the region is not empty', `${region.length} bytes`);
 // Purity is the property the whole design hangs off, so it is checked rather
 // than trusted. A line that reaches for the DOM, the audio context or the
 // clock inside this region is a composition layer that has stopped being a
-// pure function of (seed, bar), and seek stops being provable the moment it is.
+// pure function of (seed, bar, auto, holds), and seek stops being provable the
+// moment it is. `auto` and `holds` are INPUTS the caller passes, which is why
+// adding them cost the purity nothing.
 const impure = [
   [/\bdocument\b/, 'document'],
   [/\bwindow\b/, 'window'],
@@ -155,7 +157,7 @@ const tail = new Set(prints.slice(N - 32)).size;
 ok(tail > 1, 'the last section is still moving', `${tail} distinct bars in the last 32`);
 
 /* -- 4. purity, which is what makes seek possible ------------------------ */
-group('composition state is a pure function of (seed, bar)');
+group('composition state is a pure function of (seed, bar, auto, holds)');
 const shuffled = [...Array(N).keys()].sort(() => 0.5 - Math.random());
 let mismatch = -1;
 for (const b of shuffled) if (fp(b) !== prints[b]) { mismatch = b; break; }

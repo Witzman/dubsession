@@ -75,9 +75,9 @@
       <button id="seekgo" style="padding:3px 10px;margin-left:8px">go</button></div>
     <p id="seekwhy" style="color:var(--dim);margin:4px 0 10px">
       Seek is not a convenience. Composition state at bar N is a pure function of
-      (seed, N) — no counters, no memory of what happened last bar — so bar 200
-      reached by seeking is bar 200 reached by playing, sample for sample once
-      the echo and the room have settled. That is what makes a two-hour set
+      (seed, N, auto, and whatever you are holding) — no counters, no memory of
+      what happened last bar — so bar 200 reached by seeking is bar 200 reached
+      by playing, sample for sample once the echo and the room have settled. That is what makes a two-hour set
       judgeable: nobody can listen to two hours in order at every gate.
     </p>
     <div id="movenow" style="color:var(--dim)">not running</div>
@@ -394,7 +394,11 @@ function mulberry32(a) {
 
    THE RULE THIS LAYER EXISTS TO KEEP:
 
-       Composition state at bar N is a pure function of (seed, N).
+       Composition state at bar N is a pure function of (seed, N, auto, holds).
+
+   `auto` is the ring, off by default; `holds` is what the owner's hand is
+   holding. Both are INPUTS the caller passes and neither is state this layer
+   accumulates, which is why adding them cost the purity nothing.
 
    No accumulating counters. No "what happened last bar". Ask for bar 3000 and
    you get bar 3000's state without having played bars 0..2999, which is what
@@ -1198,7 +1202,8 @@ function createEngine(ctx, opts) {
     bypassFaders: !!opts.bypassFaders,   // calibration render: [M]'s faders off
     raw: !!opts.raw,                     // …and the input gain off too: the voice exactly as built
     solo: (opts.solo === undefined ? null : opts.solo),
-    // THE SEED. Composition state at bar N is a pure function of (seed, N), so
+    // THE SEED. Composition state at bar N is a pure function of (seed, N, auto,
+    // holds), so
     // the seed is the whole set. It comes from ?seed= in the query — the page
     // is served under /dub/ and never under /, so this reads the QUERY and not
     // the path, and a path-shaped seed would resolve against the main site.
@@ -2231,9 +2236,9 @@ let muted = localStorage.getItem("p02.muted") === "1";
 // that surface.
 let autoOn = false;
 // The seed is the whole set: composition state at bar N is a pure function of
-// (seed, N). It comes from ?seed= — the QUERY, never the path, because the
-// page is served under /dub/ and a path-shaped anything resolves against the
-// owner's main site and breaks only in production.
+// (seed, N, auto, holds). It comes from ?seed= — the QUERY, never the path,
+// because the page is served under /dub/ and a path-shaped anything resolves
+// against the owner's main site and breaks only in production.
 const SEED = seedFromQuery(location.search);
 
 /* --- THE SEEK. Given a bar number, the composition is that bar's state with
