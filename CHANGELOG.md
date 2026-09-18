@@ -2,6 +2,37 @@
 
 ## Unreleased
 
+**2026-09-18 — the material moves. The loop was 46 seconds long and is now
+eight and a half minutes.**
+
+- The piece has a **composition layer** above the bar: a phrase of 8 bars and a
+  section of 32, one perceptible change per section, eight sections to a
+  movement. Until now the notes repeated every 1.92 s and only two sends and one
+  level moved; the whole state of the page — pattern and modulation together —
+  returned to itself every 24 bars.
+- **The state at bar N is a pure function of (seed, N).** No counters and no
+  memory of the previous bar, so any bar can be reached directly. That is what
+  makes seek possible and it bounds memory by construction rather than by
+  policing.
+- A **seed**, from the `?seed=` query, and a word works as well as a number.
+  The same seed is the same eight and a half minutes, every time.
+- A **seek**, so the exit at 7:10 can be heard without waiting seven minutes.
+- The channels gained `chance`, `move` and `phrase`: how often a step fires, how
+  often the machine may touch the channel at all, and the length of its own
+  phrase. Lengths that disagree are the point — three against five comes round
+  every fifteen bars.
+- Modulators can be **bound and unbound per channel** at runtime, and the rate
+  list gained 5, 7, 11, 13, 32 and 64 bars. The odd ones are what stop the
+  modulators agreeing with each other: three, four and eight bars realign every
+  24; adding seven and thirty-two pushes that past the length of the movement.
+- The **chord walker** moves the root by scale degrees over bars, reflecting at
+  the edge of its span rather than parking against it. A negative span may only
+  go below the tonic — unsigned, half of all seeds put the movement into a
+  diminished triad for two minutes.
+- A silent channel still says why it is silent. A channel whose chance can only
+  ever be rolled once now records the reason rather than going quiet with
+  nothing explaining it.
+
 **2026-09-17 — the instrument makes a sound, and it is not an invented one.**
 
 - Serves at `/dub/` itself. There is one deployed thing; versions are kept
