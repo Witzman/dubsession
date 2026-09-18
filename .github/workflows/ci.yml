@@ -34,6 +34,42 @@ jobs:
           node tools/tests/composition.test.mjs
           node tools/tests/composition.test.mjs --prove-red
 
+  audio:
+    # THE GATE THAT REPLACED THE EAR. The ear gate is suspended by owner
+    # decision, so this is the whole of what stands between an audible defect
+    # and the public site — and it only counts because GitHub requires it at
+    # the merge button. It measures the built image, not the source tree: the
+    # gate measures a page.
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+      - name: A browser that can render audio
+        run: |
+          set -e
+          # `playwright` brings `playwright-core` at the same version and the
+          # CLI that downloads a matching chromium. A mismatched pair looks
+          # like a missing browser revision.
+          npm i --no-save playwright
+          npx playwright install --with-deps chromium
+      - name: The gate is green, and RED ON PURPOSE
+        run: |
+          set -e
+          docker build -t dubsession-gate .
+          docker run -d --name gate -p 8082:80 dubsession-gate
+          for i in $(seq 1 20); do
+            curl -sf http://127.0.0.1:8082/dub/ > /dev/null && break || sleep 1
+          done
+          node tools/browser/gate-audio.mjs http://127.0.0.1:8082/dub/ --n 2
+          # A gate that is only ever run in the direction where it passes is a
+          # decoration. `--prove-red` throws the silence reasons away, so the
+          # "silent with no reason" check MUST fire on the channel that is
+          # empty by design; a run that passes with this flag exits 1.
+          node tools/browser/gate-audio.mjs http://127.0.0.1:8082/dub/ --n 1 --prove-red
+          docker rm -f gate
+
   hygiene:
     runs-on: ubuntu-latest
     steps:
