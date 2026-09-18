@@ -90,7 +90,7 @@
     column-gap: 5px; row-gap: 2px;
     border-top: 1px solid var(--line); padding: 6px 0 5px;
     /* THE DEFAULT IS THE MIDDLE WIDTH — the iPad, and any desktop under 1260.
-       MEASURED: the one-line form further down needs 1160 px inside the
+       MEASURED: the one-line form further down needs 1188 px inside the
        fieldset and 1024 px of iPad gives 962, so the row folds onto three
        lines there. Both control lines are placed in the SAME twelve-column
        track set, and that is what keeps them aligned down all nine channels —
@@ -222,7 +222,17 @@
        spends colour on time and nothing else. */
     .g-mix { border-right: 1px solid var(--line); padding-right: 10px; }
   }
-  @media (max-width: 560px) {
+  /* THE STACKED FORM. MEASURED, and the number is not the phone width anyone
+     would have guessed: the twelve-column form above holds together down to
+     about 930 px and then its send cells start overlapping their neighbours —
+     because a send reads `0.44\u25b80.51` once a modulator is writing it, which is
+     nine characters in a track that has become 112 px wide. Below 561 px it
+     was also scrolling the page sideways. So the stacked form takes everything
+     under 921 px, which is iPad portrait and every phone. A grid track that is
+     narrower than its cell does not wrap; it overflows into the next column,
+     and nothing but asking the browser for scrollWidth against clientWidth
+     finds it. */
+  @media (max-width: 920px) {
     .chan {
       --cols: repeat(4, minmax(0, 1fr));
       --areas:
@@ -235,16 +245,25 @@
         "why why why why"
         "rel rel rel rel";
     }
-    /* BELOW 560 THERE ARE NO COLUMNS LEFT TO NAME, so the header would be
-       pointing at tracks that are not there. It is hidden and every cell
-       carries its own label again — a name in a header this width never shows
-       is a name nobody has. */
+    /* HERE THERE ARE NO COLUMNS LEFT TO NAME, so the header would be pointing
+       at tracks that are not there. It is hidden and every cell carries its own
+       label again — a name in a header this width never shows is a name
+       nobody has. */
     .ghead { display: none; }
     .vc .vl { display: block; }
+    /* AND IT STOPS GROWING. Stacked, at 900 px, four tracks of 220 px gave
+       every slider the width of a desk and made the fieldset nearly twice as
+       tall as the folded form it had just replaced \u2014 a blown-up phone. The
+       column is capped and the spare width is left as spare width. */
+    #chans { max-width: 660px; }
+  }
+  @media (max-width: 560px) {
     /* the NOW controls were laid out as a fixed 150 px label beside a fixed
        78 px readout and pushed the page 236 px wider than a phone. They were
        already doing that before the channels moved above them; the label goes
-       onto its own line rather than the page scrolling sideways. */
+       onto its own line rather than the page scrolling sideways. This one is
+       still a 560 px rule: the rows above are unaffected by the channel grid's
+       own breakpoint and there is no reason to move them. */
     .row { flex-wrap: wrap; }
     .row label { width: auto; flex: 1 0 100%; }
     .row output { width: 62px; }

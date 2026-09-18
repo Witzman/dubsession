@@ -13,9 +13,11 @@
   header now, in the same tracks as the rows, and the reason line got a name it
   never had.
 - **One grid, three widths.** From 1260 px a channel is one line of eleven
-  columns; below that the same tracks fold onto three lines so the columns
-  still line up down all nine channels; below 560 px the header goes away and
-  each cell says what it is again, because there are no columns left to name.
+  columns; down to 921 px the same tracks fold onto three lines so the columns
+  still line up down all nine channels; under that the grid stacks, the header
+  goes away and each cell says what it is again, because there are no columns
+  left to name. Both numbers are measurements: the wide form needs 1188 px and
+  a real 1280 desktop only has 1265 once its scrollbar is taken.
   The header and every row are laid out from the same two custom properties, so
   a column cannot drift between them.
 - The four looks a control can have — held, waiting, running, dead — did not
