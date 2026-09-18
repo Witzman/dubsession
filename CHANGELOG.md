@@ -1,5 +1,45 @@
 # Changelog
 
+## 2026-09-18 — every modulator has its own depth
+
+- **The piece's five modulators are five controls**, in their own block under
+  the room: the stab's echo and its room, the hats' level and their room, the
+  pad's room. Each one is a multiplier on the depth its composer declared, and
+  **x1.00 is that depth exactly** — the same shape the voice trims and the two
+  send trims already use. Until now one fader moved all of them together, which
+  is the pumping the reference warns about: eight things breathing on one clock
+  is one thing breathing.
+- **The rows are derived from the arrangement, never listed by hand.** A
+  modulator can come from the manifest or from a movement event, and both are
+  read; a list written out here would rot the first time a modulator is added.
+- **What a row prints is the excursion, not the multiplier** — how far that
+  modulator swings the send or the fader it is bound to, in the units of the
+  thing it writes, already multiplied by the master above it. Two depths
+  multiplying invisibly is exactly what a page should not do, so the product is
+  the number on the page.
+- **At x0 a modulator is held still and the row says `still`.** It sounds the
+  same as not having it — measured, to 0.02 dB — but it is not the same fact:
+  the composer's own depth of 0 removes a modulator, and a hand cannot.
+- **A row the arrangement is not binding goes dead and says why.** With the
+  ring off the movement's two modulators are not bound at all; those rows are
+  drawn inert, read `——` and carry the reason on their own line rather than in
+  a tooltip. The set of rows never changes: ink moves, layout does not.
+- **`send modulation` is now `all modulation`, because the old name was
+  false.** It scales the hats' LEVEL modulator as well as the two sends —
+  measured: x0 to x1 moves that channel's bar-to-bar spread from 1.91 to
+  5.72 dB. It stays, as the master over the five.
+- **Two of the five are small, and that is said rather than hidden.** The
+  stab's echo and the hats' level are the two that move a lot. The hats' room
+  is the quiet one: doubling that channel's entire room send changes what comes
+  out of it by 0.0002 dB, measured, so its trim is not going to be the control
+  anybody reaches for. It is there because the arrangement binds that
+  modulator, and the row says what it is doing.
+- **A trim moved before the first note now reaches the engine.** `all
+  modulation`, `echo send trim` and `room send trim` were missing from the list
+  the page replays into a freshly built engine, so moving one on a cold page
+  changed the surface and nothing else — measured, and fixed with the new trims
+  in the same list.
+
 ## 2026-09-18 — the channels become a grid
 
 - **Nine channels are nine rows and every control is a column.** The

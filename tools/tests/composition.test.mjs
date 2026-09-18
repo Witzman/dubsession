@@ -80,6 +80,7 @@ const exported = [
   'compositionAt', 'scheduleStateAt', 'baseComposition', 'fingerprint', 'stepFires',
   'walkAt', 'transposeDegrees', 'degreeOf', 'fromDegree', 'shapeAt', 'modValue',
   'seedFromQuery', 'rand01', 'hash4', 'euclid', 'rotated', 'modBars', 'clamp',
+  'MOD_SLOTS', 'MOD_SLOT_KEYS', 'modSlotsOf',
 ];
 const L = new Function(`${region}\n; return { ${exported.join(', ')} };`)();
 ok(typeof L.compositionAt === 'function', 'the region evaluates and exports the layer');
@@ -317,6 +318,61 @@ ok(later.length === 3 && !later.some(m => m.channel === 6 && m.verb === 'delay')
    && later.some(m => m.channel === 6 && m.verb === 'reverb'),
    'unbinding one leaves the SAME CHANNEL\'S other modulator alone',
    'ch6 delay gone, ch6 reverb still bound');
+
+/* -- THE SLOT TABLE: every modulator the arrangement CAN bind ---------------
+   The hand's trims are keyed on it, so a slot that is missing is a control
+   that does not exist and a slot that is wrong is a control with the wrong
+   name on it. It is derived, never written out, and the two places it derives
+   from count their rates DIFFERENTLY. */
+group('the modulator slots');
+ok(L.MOD_SLOT_KEYS.join(' ') === 'mod.6.delay mod.6.reverb mod.3.level mod.7.reverb mod.3.reverb',
+   'five slots: the manifest\'s three and the movement\'s two', L.MOD_SLOT_KEYS.join(' '));
+// THE RATE TRAP. `PIECE.mods[].rate` is an INDEX into MOD_RATES; a `mod`
+// EVENT's fifth element is a BAR COUNT. The manifest's ch6 delay has rate 4,
+// which is 3 bars, not 4; the movement's ch7 reverb has 32, which is 32 bars.
+// Both numbers are legal as both readings, so nothing complains if this is got
+// the wrong way round — it just prints the wrong cycle beside a slider.
+ok(L.MOD_SLOTS['mod.6.delay'].bars === 3 && L.MOD_SLOTS['mod.3.level'].bars === 4,
+   'a manifest rate is read as an INDEX into MOD_RATES',
+   `rate 4 -> ${L.MOD_SLOTS['mod.6.delay'].bars} bars, rate 3 -> ${L.MOD_SLOTS['mod.3.level'].bars} bars`);
+ok(L.MOD_SLOTS['mod.7.reverb'].bars === 32 && L.MOD_SLOTS['mod.3.reverb'].bars === 7,
+   'and an event rate is read as BARS', `32 and 7`);
+ok(L.MOD_SLOTS['mod.6.delay'].from === 'piece' && L.MOD_SLOTS['mod.7.reverb'].from === 'movement',
+   'each slot knows which of the two declared it — the surface needs it to say why a row is dead');
+ok(L.MOD_SLOTS['mod.6.delay'].why.startsWith('the stab\'s echo')
+   && L.MOD_SLOTS['mod.3.reverb'].why.length > 0,
+   'and carries the composer\'s own sentence, from the manifest or from the section');
+// A DEPTH OF 0 IS AN UNBIND AND CAN NEVER MAKE A SLOT: a row for it would be a
+// control over a modulator that does not exist.
+const slotsOff = L.modSlotsOf(L.PIECE, { phrase: 8, section: 32, bars: 256, sections: [
+  { at: 0, event: ['mod', 1, 'reverb', 0, 8, 'tri'], why: 'an unbind, not a binding' }] });
+ok(!slotsOff['mod.1.reverb'] && Object.keys(slotsOff).length === 3,
+   'an unbind event makes no slot', Object.keys(slotsOff).join(' '));
+// THE FIRST DECLARATION NAMES THE SLOT. A movement that rebinds one of the
+// manifest's modulators deeper must not rewrite the row's name or its reason.
+const slotsRebind = L.modSlotsOf(L.PIECE, { phrase: 8, section: 32, bars: 256, sections: [
+  { at: 64, event: ['mod', 6, 'delay', 80, 8, 'ramp'], why: 'the same slot, deeper' }] });
+ok(slotsRebind['mod.6.delay'].depth === 34 && slotsRebind['mod.6.delay'].bars === 3,
+   'a later event on a slot the manifest already declared does not rewrite it',
+   'the LIVE mod object is what the surface prints the depth from');
+
+/* -- THE ORDER THE FOLD RELIES ON IS ENFORCED ------------------------------
+   `scheduleStateAt` breaks at the first section past the bar it was asked for.
+   A section appended out of `at` order is therefore never applied, and the
+   composition comes back looking exactly like the untouched piece — which is
+   indistinguishable from a test that passed. This is the guard, and it is the
+   only reason that failure is loud. */
+group('a movement out of order is refused, not silently ignored');
+const outOfOrder = { phrase: 8, section: 32, bars: 256, sections: [
+  { at: 32, event: ['chance', 1, 0.5], why: 'first' },
+  { at: 0, event: ['mod', 6, 'delay', 0, 3, 'tri'], why: 'behind it, and would never run' }] };
+let orderThrew = false;
+try { at(64, outOfOrder); } catch (e) { orderThrew = /out of `at` order/.test(e.message); }
+ok(orderThrew, 'sections out of `at` order throw where they are folded');
+let sortedOk = true;
+try { at(64, { ...outOfOrder, sections: [...outOfOrder.sections].sort((a, b) => a.at - b.at) }); }
+catch { sortedOk = false; }
+ok(sortedOk, 'and the same sections, sorted, are accepted');
 
 // EACH MODULATOR STARTS ITS CYCLE WHEN IT IS BOUND [G]: "binding eight one
 // after another spreads them around the bar and the row BREATHES rather than

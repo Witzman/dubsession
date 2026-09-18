@@ -178,6 +178,20 @@
   .vc.is-dead .vl, .vc.is-dead .vv { color: var(--inert); }
   .vc.is-dead .vs { accent-color: var(--inert); opacity: .3; pointer-events: none; }
   .cwhy { color: var(--warn); min-height: 1.4em; font-size: 12px; }
+  /* A MODULATOR ROW AND ITS REASON LINE. The line is RESERVED — min-height,
+     like `.cwhy` — so a row going dead changes ink and never layout. The dead
+     look is `.vc.is-dead`'s, not a fifth one: dotted edge, `--inert` ink, a
+     slider that cannot be moved. The edge is a border that is always there and
+     only changes colour, for the same reason. */
+  /* the edge sits in the gutter, so a row's label starts where every other
+     label on the page starts: a block that is indented by 9 px against the one
+     above it reads as a different kind of thing, and it is not one. */
+  .mslot { border-left: 1px solid transparent; padding-left: 8px; margin: 2px 0 6px -9px; }
+  .mslot.is-dead { border-left-color: var(--inert); border-left-style: dotted; }
+  .mslot.is-dead label, .mslot.is-dead output, .mslot.is-dead .mwhy { color: var(--inert); }
+  .mslot.is-dead input[type=range] { accent-color: var(--inert); opacity: .3; pointer-events: none; }
+  .mwhy { color: var(--dim); min-height: 1.4em; font-size: 12px; margin-left: 162px; }
+  .mwhy:empty::before { content: "\00a0"; }
   /* a channel that is silent, or sounding but unable to vary, is marked where
      its name is as well as on its reason line: one colour, one meaning */
   .chan.silent .g-id, .chan.silent .g-pat, .chan.frozen .g-id { color: var(--warn); }
@@ -266,6 +280,12 @@
        own breakpoint and there is no reason to move them. */
     .row { flex-wrap: wrap; }
     .row label { width: auto; flex: 1 0 100%; }
+    /* the reason line is indented to sit under its slider; with the label on
+       its own line there is no slider to sit under */
+    .mwhy { margin-left: 0; }
+    /* and the gutter goes: under 560 px there is no room to hang anything
+       outside the box, and #43 is already one sideways scroll too many. */
+    .mslot { margin-left: 0; padding-left: 0; }
     .row output { width: 62px; }
     .row input[type=range], .row select { min-width: 0; }
   }
@@ -357,7 +377,14 @@
     <div class="row"><label>echo send trim</label><input id="dlytrim" type="range" min="0" max="2" step="0.01" value="1"><output id="dlytrim_v"></output></div>
     <div class="row"><label>room size</label><input id="revsize" type="range" min="1.5" max="6" step="0.1" value="4.5"><output id="revsize_v"></output></div>
     <div class="row"><label>room send trim</label><input id="revtrim" type="range" min="0" max="2" step="0.01" value="1"><output id="revtrim_v"></output></div>
-    <div class="row"><label>send modulation</label><input id="moddepth" type="range" min="0" max="1" step="0.01" value="1"><output id="moddepth_v"></output></div>
+    <!-- THE MASTER OVER EVERY MODULATOR, AND ITS LABEL WAS FALSE. `send
+         modulation` names two of the four verbs: this control also scales
+         channel 3's LEVEL modulator, measured — x0 to x1 moves that channel's
+         bar-to-bar spread from 1.91 to 5.72 dB. It is a master over the trims
+         in `the modulators` below, the way `echo send trim` is a master over
+         nine wets. The id and the cfg key are untouched. -->
+    <div class="row"><label>all modulation</label><input id="moddepth" type="range" min="0" max="1" step="0.01" value="1"
+      title="Every modulator in the piece at once, as a multiplier on how far it swings — never on the value it swings around. At 0 nothing moves and every send sits exactly where the arrangement put it, which is the same sound as unbinding the lot. Each modulator's own trim is in `the modulators` below, and the figure printed there is this number times that one."><output id="moddepth_v"></output></div>
     <div class="row"><label>stab cutoff</label><input id="stabcut" type="range" min="0.35" max="2" step="0.01" value="1"><output id="stabcut_v"></output></div>
     <!-- THE FLOOR. One control, and it is a trim on a level that was measured
          rather than a level of its own — the number it multiplies is BED_LEVEL
@@ -365,6 +392,44 @@
          `off`, because a channel that produces nothing has to say so. -->
     <div class="row"><label>noise floor</label><input id="bed" type="range" min="0" max="2" step="0.01" value="1"
       title="Tape air, dust ticks breathing once per revolution (0.55 Hz = 33 rpm) and a few pops, band-limited 140 Hz to 9 kHz and injected after the reverb and the delay so the deck saturator and the finisher act on it the way they act on the room. It never ducks with the kick and it never moves on its own: a floor you can hear arrive is not a floor."><output id="bed_v"></output></div>
+  </fieldset>
+
+  <!-- ===================================================================
+       THE MODULATORS. One row per modulator the arrangement can bind, each
+       one a multiplier on the DEPTH its composer declared — x1.00 is the
+       manifest exactly, the same shape as a voice trim and as the two send
+       trims above it. It sits directly under `the space` because the master
+       over all of them, `all modulation`, is the last control in that box:
+       this is the detail of the thing above.
+
+       IT LANDS NOW, and there is no arrow on it. A depth trim is not
+       structure: it changes neither which modulators are bound nor which
+       pattern is played, only how far an already-running one swings [G rule
+       5]. Nothing in its path touches `compositionAt` or the holds.
+
+       IT IS NOT A GRID COLUMN, and that was measured: the channel grid is
+       1210 px of tracks inside a 1240 px cap, with 28 px of slack at 1280 and
+       a twelfth column needing a gap, a slider and a readout. `channel-grid.md`
+       requires a column to exist at all three widths or not at all.
+
+       THE ROWS ARE DERIVED FROM `MOD_SLOTS`, which is derived from `PIECE.mods`
+       and the movement's own `mod` events, so this list cannot fall out of step
+       with the arrangement it is steering.
+       =================================================================== -->
+  <fieldset>
+    <legend>the modulators · LANDS NOW</legend>
+    <div id="modrows"></div>
+    <div class="note">
+      <button id="modreset" style="padding:3px 10px">modulators back to the manifest</button>
+      <p class="src">Every figure here is the excursion the engine will apply —
+      how far that one modulator swings the send, the fader or the corner it is
+      bound to, in the units of the thing it is writing, and already multiplied
+      by <em>all modulation</em> above. The value it swings AROUND is the
+      arrangement's and is never scaled. At <em>x0</em> a modulator is held
+      still, which sounds exactly like not having it — measured — while the
+      composer's own <em>depth 0</em> removes it; a row that says <em>——</em> is
+      one the arrangement is not binding at this bar, and it says why.</p>
+    </div>
   </fieldset>
 
   <!-- ===================================================================
@@ -992,7 +1057,32 @@ const COMPOSITION_VERBS = {
    not an ACCUMULATOR: it starts from the base every time it is asked, so
    asking for bar 3000 costs the same whether or not bar 2999 was ever played.
    ------------------------------------------------------------------------ */
+/* --- AND THE ORDER THE FOLD RELIES ON IS CHECKED, ONCE PER MOVEMENT -------
+   The fold below `break`s at the first section past the bar it was asked for,
+   which is what makes asking for bar 3000 cost the same as asking for bar 3.
+   It is also a silent trap: a section appended to the end of the array with an
+   EARLIER `at` is never applied at all, and the answer that comes back is the
+   piece untouched — which reads as a passing test of whatever the event was
+   supposed to prove. It happened on 2026-09-18 and it cost two checks in #18's
+   proof list, both of which passed against nothing. A movement is checked once
+   and remembered, so this costs one pass over twenty sections per object and
+   nothing per bar. --- */
+const ORDERED = new WeakSet();
+function assertSectionOrder(movement) {
+  if (!movement || typeof movement !== "object" || ORDERED.has(movement)) return;
+  const secs = movement.sections || [];
+  for (let i = 1; i < secs.length; i++) {
+    if (secs[i].at < secs[i - 1].at)
+      throw new Error("movement.sections are out of `at` order: index " + i
+        + " is at bar " + secs[i].at + " behind bar " + secs[i - 1].at
+        + ". The fold stops at the first section past the bar it is asked for, "
+        + "so this one and everything after it would never run.");
+  }
+  ORDERED.add(movement);
+}
+
 function scheduleStateAt(piece, movement, bar, auto) {
+  assertSectionOrder(movement);
   // THE RING IS A SWITCH, AND IT IS OFF BY DEFAULT. Owner decision 2026-09-18:
   // "no 'autoplay' ring of changes, endless, controllable by me", refined the
   // same hour to "reachable is main goal, but it could also evolve on itself".
@@ -1449,6 +1539,46 @@ const MOVEMENT = {
      biggest event in the piece — arrives into an undecorated stretch. */
 };
 
+/* =========================================================================
+   4b-bis. THE MODULATOR SLOTS — every modulator this arrangement CAN bind.
+
+   DERIVED, NEVER WRITTEN OUT. A hand-written list is a second copy of the
+   arrangement, and it rots the first time a `mod` event is added. This reads
+   the two places a modulator can come from — [M]'s own `PIECE.mods` and any
+   `mod` event in the movement — and is computed once, at module scope: the
+   set of SLOTS is fixed for the life of the page even though the set of BOUND
+   modulators is not. That is the whole reason it exists. A list rebuilt from
+   `C.mods` per bar would add and remove rows underneath a hand.
+
+   THE RATE TRAP, AND IT IS THE ONE DOCUMENTED AT MOD_RATES. `PIECE.mods[].rate`
+   is an INDEX into MOD_RATES; a `mod` EVENT's fifth element is a BAR COUNT.
+   5 and 7 are valid as both, so nothing complains if this is read the wrong
+   way round — it simply prints the wrong cycle length beside a slider.
+
+   `why` is the composer's own sentence: [M]'s for the manifest's three, the
+   section's for the movement's. `COMPOSITION_VERBS.mod` does not carry `why`
+   onto the mod object and this does not change that; the surface reads it
+   from here.
+   ========================================================================= */
+function modSlotsOf(piece, movement) {
+  const out = {};
+  const add = (from, channel, verb, depth, bars, shape, why) => {
+    const key = "mod." + channel + "." + verb;
+    if (out[key]) return;                 // first declaration names the slot
+    out[key] = { key, from, channel, verb, depth, bars, shape: shape || "tri", why: why || "" };
+  };
+  for (const m of piece.mods) add("piece", m.channel, m.verb, m.depth, MOD_RATES[m.rate], m.shape, m.why);
+  for (const s of (movement.sections || [])) {
+    const e = s.event;
+    // depth 0 is an UNBIND, not a binding: it can never make a slot.
+    if (!e || e[0] !== "mod" || !e[3]) continue;
+    add("movement", e[1], e[2], e[3], modBars(e[4]), e[5], s.why);
+  }
+  return out;
+}
+const MOD_SLOTS = modSlotsOf(PIECE, MOVEMENT);
+const MOD_SLOT_KEYS = Object.keys(MOD_SLOTS);
+
 
 /* =========================================================================
    THE PATTERNS — built once from [M], in the pure region, because the loop
@@ -1770,6 +1900,14 @@ function createEngine(ctx, opts) {
      copy of a default: the default IS the literal still standing inside the
      voice, and 1 times it is it. --- */
   for (const k of VOICE_KEYS) cfg[k] = VOICE_PARAMS[k].def;
+
+  /* --- THE MODULATOR TRIMS. One per slot, keyed `mod.<channel>.<verb>`, and
+     they all start at 1, which is the depth the composer declared, exactly.
+     The same shape as a voice trim and as `dlyTrim`: a multiplier on a number
+     that was decided elsewhere. They live in `cfg` and not in a closure
+     because `renderOffline({set:{…}})` and `p02` reach the engine through
+     `set`, and a measurement that cannot drive a control cannot prove it. --- */
+  for (const k of MOD_SLOT_KEYS) cfg[k] = 1;
   // the hand's multiplier, and the voice's own number times it. `vnum` is the
   // only place `VOICE_PARAMS[k].base` is read by the audio, so the figure the
   // surface prints and the figure a filter receives come from one number.
@@ -2746,7 +2884,15 @@ function createEngine(ctx, opts) {
   function applyMods(C, barPos, t) {
     for (let i = 0; i < C.mods.length; i++) {
       const mod = C.mods[i];
-      const amount = modValue(mod, cfg.seed, i, barPos) * cfg.modDepth;
+      // THE HAND'S TRIM ON THIS ONE MODULATOR, under the master over all of
+      // them. UNDEFINED FALLS BACK TO 1 AND NEVER TO 0: a modulator bound by a
+      // movement the slot table never saw — a custom movement in a render, a
+      // section added later — must play at the depth its composer declared.
+      // A modulator that goes silent because a lookup missed is silence with
+      // nothing to explain it, which is the one thing this instrument refuses.
+      const trim = cfg["mod." + mod.channel + "." + mod.verb];
+      const amount = modValue(mod, cfg.seed, i, barPos) * cfg.modDepth
+                   * (trim === undefined ? 1 : trim);
       const c = A.chan[mod.channel];
       if (!c) continue;
       let value, param;
@@ -2923,6 +3069,10 @@ function createEngine(ctx, opts) {
     // door directly, and a corner driven to 0 Hz is a channel gone quiet with
     // nothing to explain it, which is the one thing this instrument refuses.
     if (VOICE_PARAMS[key]) value = clamp(value, VOICE_PARAMS[key].min, VOICE_PARAMS[key].max);
+    // A MODULATOR TRIM IS CLAMPED HERE FOR THE SAME REASON, and to the same
+    // 0..2 its slider offers. `renderOffline` and `p02` come through this door
+    // directly; 0 is `still` and 2 is measured not to clip this piece.
+    if (MOD_SLOTS[key]) value = clamp(value, 0, 2);
     cfg[key] = value;
     // ...and then nothing. A voice trim needs no branch below: every voice is
     // built from `cfg` at NOTE TIME, so the next hit is the new sound and the
@@ -3698,6 +3848,10 @@ function paintHand() {
     for (const v of VERBS) if (hand.ask(v.p, ch) !== undefined) n++;
     ui("hr_" + ch).disabled = n === 0;
   }
+  // the modulator rows are repainted HERE and not in `paint()`: they are
+  // controls, not meters. What takes one dead is the ring, the seek or a new
+  // bar, and every one of those already comes through this function.
+  paintMods(C);
   return C;
 }
 
@@ -3760,6 +3914,103 @@ function paintMovement(bar) {
    every other distinction of timing and reach. Not a colour, not a badge:
    `--time` means moving, and nothing else on this page is ever coloured. The
    kit is first because "able to tune drums etc" is what was asked for. */
+/* =========================================================================
+   THE MODULATOR TRIMS, ON THE SURFACE.
+
+   One row per slot, drawn once at boot, never added to and never taken away.
+   `MOD_SLOTS` (section 4b-bis) is the table and it is derived from the
+   arrangement, so there is no second list here to fall out of date — only the
+   two things a surface owns that an engine does not: a player's word for the
+   thing, and an element id.
+   ========================================================================= */
+// the verb in a player's terms. The grid header already prints `echo send` and
+// `room send`; this matches it rather than inventing a second vocabulary.
+const MOD_VERB_WORD = { delay: "echo", reverb: "room", level: "level", cutoff: "tone" };
+const MOD_SHAPE_WORD = { tri: "triangle", ramp: "ramp", square: "square", sh: "sample & hold" };
+const MOD_ROWS = MOD_SLOT_KEYS.map(k => {
+  const slot = MOD_SLOTS[k];
+  const c = CHANNELS.find(x => x.ch === slot.channel);
+  return {
+    key: k, slot,
+    id: "mt_" + slot.channel + "_" + slot.verb,
+    label: (c ? c.voice : "channel " + slot.channel) + " \u00b7 " + (MOD_VERB_WORD[slot.verb] || slot.verb)
+  };
+});
+const modBarsWord = b => b === 1 ? "1 bar" : b + " bars";
+/* THE COMPOSER'S OWN SENTENCE, AND ONLY THE FIRST OF THEM \u2014 the whole of it is
+   in the title, the way the empty channel's `why` is printed in the grid. Two
+   things are taken off the front first, and both are the SCHEDULE's bookkeeping
+   rather than the modulator's reason: a section that opens the piece begins
+   `OPENING STATE`, which says where the event sits in the movement and nothing
+   about what it does to the sound. Splitting on `. ` and not on `.` is
+   deliberate: the sentences behind these carry `46.1 s` and `4.5 s`. */
+function modWhySentence(text) {
+  const t = String(text || "").trim().replace(/^OPENING STATE[,.]?\s*(and\s+)?/, "");
+  return t.split(/\.\s/)[0].replace(/\.$/, "");
+}
+
+function buildMods() {
+  let html = "";
+  for (const r of MOD_ROWS) {
+    html += '<div class="mslot" id="ms_' + r.id + '">'
+          + '<div class="row"><label>' + r.label + '</label>'
+          + '<input id="' + r.id + '" type="range" min="0" max="2" step="0.01" value="1">'
+          + '<output id="' + r.id + '_v"></output></div>'
+          + '<div class="mwhy" id="mw_' + r.id + '"></div></div>';
+  }
+  ui("modrows").innerHTML = html;
+}
+
+/* WHAT THE ROW PRINTS IS THE EXCURSION, NOT THE MULTIPLIER, and that is the
+   answer to two depths multiplying invisibly: the product is the thing on the
+   page. `(depth / 100) * modDepth * trim`, in the units of the value the
+   modulator writes — directly comparable with the send the grid prints in the
+   same column of numbers, or with the fader above it. `cutoff` carries `oct`
+   because its amount is an exponent of 2 and a bare number there would be a
+   third unit pretending to be the first two.
+
+   The DEPTH is read off the LIVE mod object rather than off the slot, so a
+   movement that rebinds the same slot deeper prints the depth it is really
+   running. The slot is the fallback and the reason line's source.
+
+   `still` at 0 rather than `±0.00`, because a zero printed as a number reads
+   as a rounding — the noise floor's `off` set that precedent. `still` and not
+   `off`: the modulator is still bound, and the composer's own `depth 0`, which
+   removes it, is a different fact that happens to sound the same. */
+function paintMods(C) {
+  const depth = val("moddepth");
+  for (const r of MOD_ROWS) {
+    const slot = r.slot;
+    const live = C ? C.mods.find(m => m.channel === slot.channel && m.verb === slot.verb) : null;
+    const box = ui("ms_" + r.id), inp = ui(r.id), out = ui(r.id + "_v"), why = ui("mw_" + r.id);
+    if (!box) continue;
+    box.classList.toggle("is-dead", !live);
+    inp.disabled = !live;
+    if (!live) {
+      // A REFUSAL YOU CANNOT SEE IS THE SAME FAULT AS GOING QUIET WITHOUT
+      // SAYING WHY [G rule 3]. There is no hover on an iPad, so the reason is
+      // on the line and not only in the title.
+      out.textContent = "\u2014\u2014";
+      why.textContent = "not bound \u00b7 " + (slot.from === "movement" && C && !C.auto
+        ? "the ring is off, and this modulator is the movement's"
+        : "the arrangement is not binding it at this bar");
+      why.title = slot.why || "";
+      continue;
+    }
+    const trim = parseFloat(inp.value);
+    const exc = Math.abs(live.depth / 100) * depth * trim;
+    out.textContent = trim === 0 ? "still"
+      : "\u00b1" + exc.toFixed(2) + (slot.verb === "cutoff" ? " oct" : "");
+    // the composer's own sentence, first sentence only with the whole of it in
+    // the title — the precedent is the empty channel's `why` in the grid — and
+    // then the cycle and the shape READ OFF THE LIVE MODULATOR.
+    const sentence = modWhySentence(live.why || slot.why);
+    why.textContent = (sentence ? sentence + " \u00b7 " : "")
+      + modBarsWord(live.bars) + ", " + (MOD_SHAPE_WORD[live.shape] || live.shape);
+    why.title = live.why || slot.why || "";
+  }
+}
+
 const VOICE_GROUPS = [
   ["set",  "the kit \u2014 set it and leave it"],
   ["live", "the filters \u2014 move them while it plays"]
@@ -3857,6 +4108,27 @@ function wire() {
   // THE VOICE TRIMS, THROUGH THE SAME ONE DOOR. The row's id and the engine's
   // key come from the same entry, so there is nothing here to keep in step.
   for (const k of VOICE_KEYS) bind(VOICE_PARAMS[k].id, k);
+  // THE MODULATOR TRIMS, THE SAME WAY. The row's id and the engine's key come
+  // from one table, so there is nothing to keep in step. The readout is
+  // repainted by hand rather than by `outputs()` because it is not a function
+  // of this slider alone: it is this slider times `all modulation` times the
+  // depth the arrangement is currently running.
+  const repaintMods = () => paintMods(shownComposition());
+  for (const r of MOD_ROWS) {
+    bind(r.id, r.key);
+    ui(r.id).addEventListener("input", repaintMods);
+  }
+  ui("moddepth").addEventListener("input", repaintMods);
+  // BACK TO THE MANIFEST, down the path a hand takes — the same reason
+  // `voicereset` dispatches the event instead of calling the engine itself.
+  ui("modreset").addEventListener("click", () => {
+    for (const r of MOD_ROWS) {
+      const el = ui(r.id);
+      el.value = "1";
+      el.dispatchEvent(new Event("input"));
+    }
+    say("every modulator is back at the depth the manifest declared.");
+  });
   // BACK TO THE RECIPE. It moves the slider and then dispatches the event the
   // hand would have caused, so the reset takes exactly the path a hand takes —
   // a second path to the engine is a second place for the two to disagree.
@@ -3922,9 +4194,20 @@ async function start() {
     engine.set("dlyFbk", val("fbk"));
     engine.set("stabCut", val("stabcut"));
     engine.set("bedTrim", val("bed"));
+    // THE THREE TRIMS WERE MISSING FROM THIS LIST (#44). Everything else the
+    // hand can reach before the first gesture was replayed into the new engine
+    // and these were not, so a trim moved on the cold page was shown on the
+    // surface, held in no state the engine would ever read, and silently
+    // ignored from the first bar — measured: `send modulation` at 0 before
+    // start, and modState["6:delay"] still swept 0.0000 to 0.3343.
+    engine.set("modDepth", val("moddepth"));
+    engine.set("dlyTrim", val("dlytrim"));
+    engine.set("revTrim", val("revtrim"));
     // the voice trims, from wherever the hand left them before the gesture —
     // the same reason every other control is replayed here
     for (const k of VOICE_KEYS) engine.set(k, val(VOICE_PARAMS[k].id));
+    // and the modulator trims, for the same reason and through the same door
+    for (const r of MOD_ROWS) engine.set(r.key, val(r.id));
     engine.cfg.bpm = val("bpm");
     engine.set("dlyBeats", parseFloat(ui("dlydiv").value));
     for (const c of CHANNELS) engine.setLevel(c.ch, parseFloat(ui("fad" + c.ch).value));
@@ -4072,13 +4355,27 @@ window.p02 = {
     // first gesture there is no engine and `voice` is null — which is the
     // honest answer, not a zero.
     voiceUI: VOICE_KEYS.reduce((o, k) => (o[k] = parseFloat(ui(VOICE_PARAMS[k].id).value), o), {}),
-    voice: engine ? VOICE_KEYS.reduce((o, k) => (o[k] = engine.cfg[k], o), {}) : null
+    voice: engine ? VOICE_KEYS.reduce((o, k) => (o[k] = engine.cfg[k], o), {}) : null,
+    // THE MODULATOR TRIMS, TWICE, FOR THE SAME REASON. `modTrimUI` is what the
+    // sliders read and `modTrim` is what the engine was told; a control moved
+    // on a cold page used to reach only the first of them.
+    modTrimUI: MOD_ROWS.reduce((o, r) => (o[r.key] = parseFloat(ui(r.id).value), o), {}),
+    modTrim: engine ? MOD_ROWS.reduce((o, r) => (o[r.key] = engine.cfg[r.key], o), {}) : null,
+    modDepth: engine ? engine.cfg.modDepth : null,
+    // the two send trims, for the same reason: #44 is the three of them
+    // together, and a test has to be able to ask rather than infer it from a
+    // modulator's sweep.
+    dlyTrim: engine ? engine.cfg.dlyTrim : null,
+    revTrim: engine ? engine.cfg.revTrim : null
   }),
   renderOffline,
   PIECE, INPUT_GAIN, MASTER_TRIM, BED_LEVEL, MOVEMENT, MOD_RATE_BARS, MOD_RATES, HOLD_PARAMS,
   // the voice table itself, so a measurement can sweep every control to its own
   // declared ends without a second list of them to fall out of date
   VOICE_PARAMS, VOICE_KEYS,
+  // the slot table itself, so a measurement can sweep every modulator to its
+  // own declared ends without a second list of them to fall out of date
+  MOD_SLOTS, MOD_SLOT_KEYS,
 
   /* --- THE SWITCH AND THE HAND, FOR A SURFACE AND FOR A MEASUREMENT --------
      `auto` is the ring: off by default, and off again on every load. `hold`
@@ -4146,6 +4443,7 @@ wireMix();
 buildSections();
 buildSteps();
 buildVoices();
+buildMods();
 ui("seedline").textContent = "seed " + SEED + (location.search.indexOf("seed=") === -1 ? " (the default piece)" : "");
 ui("seedin").value = (/(?:^|[?&])seed=([^&]+)/.exec(location.search || "") || [, String(SEED)])[1];
 ui("seedin_v").textContent = String(SEED);
