@@ -2777,6 +2777,10 @@ window.p02 = {
     return engine.release(param, ch);
   },
   holds: () => (engine ? engine.cfg.holds : null),
+  // WHAT THE ENGINE WROTE, not what the surface thinks it sent. The paint
+  // loop reads this for the three modulated parameters; a measurement has to
+  // be able to read it too, or a held send is only ever a claim.
+  modState: () => (engine ? engine.modState : null),
   setLevel: (ch, v) => engine && engine.setLevel(ch, v),
   patterns: () => { const e = createEngine(new OfflineAudioContext(2, 1024, 44100), {}); return e.DRUM_PAT; },
   // THE COMPOSITION LAYER, ON THE SURFACE OF THE PAGE, so a measurement can

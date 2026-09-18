@@ -26,6 +26,7 @@
 // nothing.
 
 import { readFileSync } from 'node:fs';
+import { createHash } from 'node:crypto';
 import { fileURLToPath } from 'node:url';
 import { dirname, join } from 'node:path';
 
@@ -421,6 +422,184 @@ group('the seed');
 ok(L.seedFromQuery('?seed=4242') === 4242, 'a numeric seed');
 ok(L.seedFromQuery('?a=1&seed=dubby') === L.seedFromQuery('?seed=dubby'), 'a word is a seed too, and it is stable');
 ok(L.seedFromQuery('') === L.seedFromQuery('?nothing=1'), 'and with no seed there is one default set');
+
+/* -- 5b. THE SWITCH: with `auto` off the arrangement holds still ----------
+   Owner decision, 2026-09-18: "no 'autoplay' ring of changes, endless,
+   controllable by me", refined the same hour to "reachable is main goal, but
+   it could also evolve on itself". The instrument may evolve; it may not
+   evolve somewhere the hand cannot reach. So the ring is a switch, off by
+   default, and THIS GROUP IS THE OWNER'S DECISION MADE CHECKABLE.
+
+   Every call in this group deliberately omits `opts`, because the default is
+   the claim: a caller that says nothing gets the instrument that does not
+   move on its own.
+   ------------------------------------------------------------------------ */
+group('the ring is a switch, and it is OFF by default');
+
+const OFF_BARS = [0, 33, 129, 224, 3583];
+const base = L.baseComposition(L.PIECE, M.phrase);
+for (const b of OFF_BARS) {
+  const c = L.compositionAt(SEED, L.PIECE, M, b);
+  const sameAsBase = L.ALL_CHANNELS.every(ch =>
+    c.chance[ch] === base.chance[ch] &&
+    c.move[ch] === base.move[ch] &&
+    c.phrase[ch] === base.phrase[ch] &&
+    c.present[ch] === 1 &&
+    c.wet[ch].delay === base.wet[ch].delay &&
+    c.wet[ch].reverb === base.wet[ch].reverb);
+  ok(sameAsBase && c.walk === 0 && c.walkCfg.bars === 0 && c.gesture === null
+     && c.mods.length === L.PIECE.mods.length && c.auto === false,
+     `bar ${b + 1} with auto off is the BASE STATE, and nothing else`,
+     `chance ${c.chance[6]} · move ${c.move[0]} · phrase ${c.phrase[3]} · walk ${c.walk}`
+     + ` · ${c.mods.length} modulators · wet6 ${c.wet[6].delay}`);
+}
+
+// The four things the schedule WOULD have done by those bars, named one at a
+// time — because "it equals the base" passes just as well if the base itself
+// quietly moved. These are the events, checked at bars past where each fires.
+const offAt = b => L.compositionAt(SEED, L.PIECE, M, b);
+ok(offAt(40).chance[6] === 1, 'the chance event at bar 33 did not land', 'ch6 chance still 1');
+ok(offAt(70).wet[6].delay === L.PIECE.wets[6].delay / 100,
+   'the echo did not open at bar 65', `ch6 delay still ${offAt(70).wet[6].delay}`);
+ok(offAt(160).walk === 0, 'the walk bound at bar 129 is not running', 'walk 0 degrees');
+ok(offAt(24).gesture === null && offAt(24).wet[2].delay === L.PIECE.wets[2].delay / 100,
+   'and the one-shot throw at bar 25 did not fire either — a gesture is part of the SCHEDULE',
+   `ch2 delay ${offAt(24).wet[2].delay}, not 0.9`);
+
+// The modulators are the TEXTURE, not the autoplay. Owner, the same hour:
+// the continuous per-channel modulators keep breathing by default. So the
+// manifest's three must survive the switch being off, at their own rates,
+// while the two the SCHEDULE binds at bar 0 must not.
+const offMods = offAt(129).mods;
+ok(offMods.length === 3 && offMods.every((m, i) => m.channel === L.PIECE.mods[i].channel
+     && m.verb === L.PIECE.mods[i].verb && m.bars === L.MOD_RATES[L.PIECE.mods[i].rate]),
+   'the manifest\'s three modulators keep breathing with the ring off',
+   offMods.map(m => m.channel + ':' + m.verb + '/' + m.bars + 'b').join(' '));
+ok(!offMods.some(m => m.channel === 7 && m.verb === 'reverb'),
+   'and the two the SCHEDULE binds at bar 0 are not there — those are the ring');
+
+// THE OWNER'S DECISION, AS ONE NUMBER. "If the page changes its own
+// arrangement with auto off, this issue has failed." The fingerprint is what
+// fires; one distinct value across the whole movement is the arrangement
+// holding still. The modulators are not in this count's way: they are
+// continuous, read from the absolute bar by the engine, and the two bound by
+// the schedule are gone, so the `m:` field cannot move either.
+const offPrints = [];
+for (let b = 0; b < N; b++) offPrints.push(L.fingerprint(offAt(b), SEED));
+ok(new Set(offPrints).size === 1, 'THE ARRANGEMENT HOLDS STILL: one distinct bar in ' + N + ' with auto off',
+   `${new Set(offPrints).size} distinct fingerprint(s)`);
+ok(L.fingerprint(offAt(3583), SEED) === offPrints[0],
+   'and bar 3584 — the far end of a two-hour set — is still the same bar');
+
+// AUTO ON IS EXACTLY WHAT SHIPPED, and "exactly" is a digest and not an
+// adjective. This is the 256 fingerprints of the movement as they stood on
+// main at 0ea718c, 2026-09-18, measured before the switch was written.
+// A DELIBERATE SCHEDULE CHANGE MUST MOVE THIS NUMBER — that is the point of
+// pinning it. What it refuses is the switch changing the schedule's behaviour
+// by accident.
+const SHIPPED_DIGEST = 'a98594eccdd9a736';
+const shippedNow = createHash('sha256').update(prints.join('\n')).digest('hex').slice(0, 16);
+ok(PROVE_RED || shippedNow === SHIPPED_DIGEST,
+   'with auto ON the movement is bar-for-bar the schedule that shipped at 0ea718c',
+   `${prints.length} bars, digest ${shippedNow} against ${SHIPPED_DIGEST}`);
+ok(PROVE_RED || new Set(prints).size === 79,
+   'and its distinct-bar count is the measured one', `${new Set(prints).size} distinct bars in ${N}`);
+
+/* -- 5c. THE HAND OUTRANKS THE SCHEDULE ----------------------------------
+   The load-bearing half. "Every value the owner has set stays set." A hold is
+   an INPUT to the pure function — the caller owns the object, the layer only
+   reads it — so a hold is as replayable from a seek as everything else here.
+   ------------------------------------------------------------------------ */
+group('the hand outranks the schedule');
+
+// Against THE REAL MOVEMENT, not against `MOVE`: under --prove-red `MOVE` is
+// the frozen loop pinned back on, and this group is asking about the hand
+// rather than about the loop detector. A group that went red for somebody
+// else's reason would be noise in the one run that is supposed to be red.
+const ran = bar => L.compositionAt(SEED, L.PIECE, M, bar, { auto: true });
+const held = h => bar => L.compositionAt(SEED, L.PIECE, M, bar, { auto: true, holds: h });
+
+// The event: chance(6, 0.75) at bar 32, which lands at bar 35 because the
+// stab is on a 5-bar phrase and structure lands on the channel's own wrap.
+// That bar is the acceptance test: the hold has to survive the event AT THE
+// BAR THE EVENT FIRES, not merely somewhere after it.
+ok(ran(35).chance[6] === 0.75, 'first, unheld: the scheduled event does land at bar 36', 'ch6 chance 0.75');
+const handChance = held({ chance: { 6: 0.4 } });
+ok(handChance(35).chance[6] === 0.4,
+   'AT THE BAR THE EVENT FIRES, the held value wins', `bar 36: ch6 chance ${handChance(35).chance[6]}, not 0.75`);
+ok([34, 36, 100, 255, 3583].every(b => handChance(b).chance[6] === 0.4),
+   'and it stays held on both sides of it, and at the far end of the set',
+   'bars 35, 37, 101, 256, 3584');
+ok(handChance(35).held.chance[6] === true && handChance(35).held.chance[3] === false,
+   'the state says WHICH of the two owns the value — held by you, or running');
+
+// the sends, which the schedule moves at bar 64 and a gesture flicks at 216
+const handWet = held({ delay: { 6: 0.12 } });
+ok(ran(70).wet[6].delay === 0.55 && handWet(70).wet[6].delay === 0.12,
+   'a held SEND survives the arrangement opening the echo under it',
+   `unheld 0.55 · held ${handWet(70).wet[6].delay}`);
+ok(handWet(216).wet[6].delay === 0.12 && ran(216).wet[6].delay === 0.95,
+   'and it survives a one-shot THROW, which is the schedule\'s fastest move',
+   `bar 217: unheld ${ran(216).wet[6].delay} · held ${handWet(216).wet[6].delay}`);
+ok(handWet(216).gesture.heldBack === true,
+   'and the throw says it was held back rather than reading as if it happened',
+   'a control that does nothing must look dead');
+
+// A HELD VALUE FREEZES THAT ONE VALUE, NOT THE SCHEDULE. The mirror of the
+// switch: with auto on, nothing may quietly stop evolving.
+ok(handChance(160).walk === -1 && handChance(160).mods.length === 5,
+   'the rest of the movement keeps running under a held value',
+   `bar 161: walk ${handChance(160).walk} degrees, ${handChance(160).mods.length} modulators`);
+const heldPrints = [];
+for (let b = 0; b < N; b++) heldPrints.push(L.fingerprint(handChance(b), SEED));
+const ranPrints = [];
+for (let b = 0; b < N; b++) ranPrints.push(L.fingerprint(ran(b), SEED));
+const movedBy = heldPrints.filter((x, b) => x !== ranPrints[b]).length;
+ok(new Set(heldPrints).size >= 64 && movedBy > 0,
+   'and the movement is still not one loop with a hand on one channel',
+   `${new Set(heldPrints).size} distinct bars in ${N}, of which ${movedBy} differ from the unheld run`);
+
+// RELEASE. There is nothing to un-wind: the fold is asked again from the base
+// every bar, so dropping the key from the object IS the release, and it lands
+// on the next bar the caller asks for.
+ok(handChance(40).chance[6] === 0.4 && ran(41).chance[6] === 0.75,
+   'RELEASING puts the channel back under the schedule at the next bar',
+   'bar 41 held at 0.40 · bar 42, released, back to the schedule\'s 0.75');
+ok(held({})(35).chance[6] === 0.75 && held({ chance: {} })(35).chance[6] === 0.75,
+   'an empty holds object holds nothing — release is the absence of a key, not a flag');
+
+// HOLDS ARE AN INPUT, NOT STATE THE LAYER ACCUMULATES. Ask 300 bars with a
+// hand on it and then ask without one: the layer must not have kept anything.
+for (let b = 0; b < 300; b++) handChance(b);
+ok(ran(35).chance[6] === 0.75 && L.compositionAt(SEED, L.PIECE, M, 35).chance[6] === 1,
+   'the layer keeps nothing: the same bar asked again, without holds, is the schedule\'s again');
+
+// THE HAND IS THE WHOLE INSTRUMENT WITH THE RING OFF. Held is not frozen:
+// this is the case the owner actually plays.
+const offHand = L.compositionAt(SEED, L.PIECE, M, 8, { holds: { chance: { 3: 0.7 } } });
+ok(offHand.chance[3] === 0.7 && offHand.chance[6] === 1 && offHand.walk === 0,
+   'with auto OFF a held value is the only thing that moves', 'ch3 chance 0.7, everything else base');
+const offHandPrints = [];
+for (let b = 0; b < 32; b++)
+  offHandPrints.push(L.fingerprint(L.compositionAt(SEED, L.PIECE, M, b, { holds: { chance: { 3: 0.7 } } }), SEED));
+ok(new Set(offHandPrints).size === 8,
+   'and it VARIES — the hats thin and come round on the movement\'s phrase, with no schedule at all',
+   `${new Set(offHandPrints).size} distinct bars in 32`);
+
+// a held phrase changes the channel's own cycle, with nothing else running
+const offPhrase = b => L.compositionAt(SEED, L.PIECE, M, b, { holds: { phrase: { 6: 3 } } });
+ok([0, 1, 2, 3, 4, 5].map(b => offPhrase(b).key[6]).join(',') === '0,1,2,0,1,2',
+   'a held PHRASE is the channel\'s own cycle, auto off', '0,1,2,0,1,2');
+
+// THE HAND GOES THROUGH THE SAME CLAMPS THE VERBS DO. A surface is a claim;
+// this is the layer refusing to take its word for it.
+const wild = L.compositionAt(SEED, L.PIECE, M, 8,
+  { holds: { phrase: { 6: 12 }, chance: { 6: 5 }, delay: { 6: 9 }, move: { 6: -1 } } });
+ok(wild.phrase[6] === 8 && wild.chance[6] === 1 && wild.wet[6].delay === 2 && wild.move[6] === 0,
+   'a held value out of range is clamped exactly as the verb clamps it',
+   `phrase ${wild.phrase[6]} · chance ${wild.chance[6]} · delay ${wild.wet[6].delay} · move ${wild.move[6]}`);
+ok(L.compositionAt(SEED, L.PIECE, M, 8, { holds: { move: { 0: L.LOCK } } }).move[0] === L.LOCK,
+   'and LOCK is a word the hand may hold, not a number it may not');
 
 /* -- 6. the grid did not move -------------------------------------------- */
 group('the manifest is untouched');
