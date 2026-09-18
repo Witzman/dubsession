@@ -95,7 +95,13 @@ const MOVE = PROVE_RED
   : M;
 if (PROVE_RED) console.log('\n*** --prove-red: chance pinned to 1, move pinned to LOCK. This suite MUST fail. ***');
 
-const fp = bar => L.fingerprint(L.compositionAt(SEED, L.PIECE, MOVE, bar), SEED);
+// AUTO IS OFF UNLESS A TEST SAYS OTHERWISE, in the layer and therefore here.
+// Everything from here to the end of the verbs is asking about THE SCHEDULE,
+// so it passes `{ auto: true }` explicitly. A test that forgot to would be
+// asking the held-still instrument whether the schedule ran, and the answer
+// would be no — which is a hole this comment exists to keep shut.
+const AUTO = { auto: true };
+const fp = bar => L.fingerprint(L.compositionAt(SEED, L.PIECE, MOVE, bar, AUTO), SEED);
 
 /* -- 3. THE LOOP DETECTOR ------------------------------------------------- */
 group('the loop detector — the material actually differs');
@@ -159,12 +165,13 @@ ok(mismatch === -1, 'asked out of order, every bar answers the same',
 for (let i = 0; i < 50; i++) fp(3000 + i);
 ok(fp(200) === prints[200], 'bar 200 is unchanged by having been asked for bar 3049');
 
-const other = L.fingerprint(L.compositionAt(SEED ^ 0x7777, L.PIECE, MOVE, 200), SEED ^ 0x7777);
+const other = L.fingerprint(L.compositionAt(SEED ^ 0x7777, L.PIECE, MOVE, 200, AUTO), SEED ^ 0x7777);
 ok(other !== prints[200] || PROVE_RED, 'a different seed is a different composition');
 
 /* -- 5. the verbs -------------------------------------------------------- */
 group('the verbs');
-const at = (bar, mv) => L.compositionAt(SEED, L.PIECE, mv || MOVE, bar);
+const at = (bar, mv, opts) => L.compositionAt(SEED, L.PIECE, mv || MOVE, bar,
+  opts ? { auto: true, ...opts } : AUTO);
 
 // base state == today's page: chance 1, move 0, phrase 1 -> key 0 every bar
 const bare = { phrase: 8, section: 32, bars: 256, sections: [{ at: 0, event: null, why: 'reference' }] };
@@ -192,9 +199,9 @@ ok(new Set(co).size === 8,
    `${new Set(co).size} distinct bars in 32, repeating every ${co.indexOf(co[0], 1)}`);
 const pinned1 = { phrase: 1, section: 32, bars: 256, sections: [
   { at: 0, event: ['chance', 3, 0.7], why: 'the bug, dialled on purpose' }] };
-ok(typeof at(4, pinned1).holds[3] === 'string',
+ok(typeof at(4, pinned1).frozen[3] === 'string',
    'and a movement that dials phrase 1 under a chance is TOLD it cannot vary',
-   at(4, pinned1).holds[3]);
+   at(4, pinned1).frozen[3]);
 
 // STRUCTURE LANDS ON THE BAR: a chance event at bar 32 must NOT reach a
 // phrase-3 channel until bar 33, which is that channel's own next wrap.
