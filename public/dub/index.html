@@ -649,6 +649,26 @@ const COMPOSITION_VERBS = {
    asking for bar 3000 costs the same whether or not bar 2999 was ever played.
    ------------------------------------------------------------------------ */
 function scheduleStateAt(piece, movement, bar) {
+  // THE MOVEMENT IS ENDLESS. Owner decision 2026-09-18: "i want no exit - i
+  // want to let it run endless and steerable." The schedule is a ring, not a
+  // line: DISCRETE state resolves against `bar % movement.bars`, so bar 256 is
+  // bar 0's arrangement again and the floor always comes back.
+  //
+  // Only the discrete state wraps. Modulator phase and the chord walker are
+  // read from the ABSOLUTE bar by their callers and deliberately do not come
+  // home with it - #16's note on section 8 says it exactly: "Discrete state
+  // must be home by bar 256; modulator phase need not be, and is not." That is
+  // what stops an endless movement being an eight-minute loop: the arrangement
+  // repeats while the modulation underneath it does not, and with rates of 3,
+  // 4, 7, 8 and 32 bars the combined state does not return for 672 bars.
+  //
+  // Before this, nothing wrapped at all. Past bar 256 the fold simply kept the
+  // last state it had reached, which was section 8's - so the kick left at
+  // 7:10 and never returned, for ever. MEASURED on the deployed build:
+  // bars 0-255 gave 105 distinct bars, bars 256-511 gave 30, and `present[0]`
+  // read 0 at bars 256, 300 and 500.
+  const span = movement.bars || Infinity;
+  bar = span === Infinity ? bar : ((bar % span) + span) % span;
   const st = baseComposition(piece, movement.phrase);
   const secs = movement.sections || [];
   for (let i = 0; i < secs.length; i++) {
@@ -932,19 +952,22 @@ const MOVEMENT = {
            "afford eight authored events; two hours cannot afford 112." },
 
     /* --- SECTION 8, bar 224, 7:10 — the kick goes; the boundary --------- */
-    { at: 224, event: ["leave", 0, 12],
-      why: "Over twelve bars and not one: a dissolve, so you notice the floor " +
-           "has gone rather than that it went. Gone by bar 236, 7:33. What is " +
-           "left is still dub techno — a chord on every offbeat with a bass " +
-           "under it — in the widest room of the movement with the echo open. " +
-           "THIS SECTION IS ALREADY THE MOVEMENT BOUNDARY and building " +
-           "movement 2 will not change a line of it: 'everything but one " +
-           "element drops for 8-16 bars and the last chord rings into the new " +
-           "key through the echo'. Until movement 2 exists the wrap to bar 0 " +
-           "is a cut back into the full piece, which after a minute with no " +
-           "floor is the riddim coming back — the most normal event in dub. " +
-           "Discrete state must be home by bar 256; modulator phase need not " +
-           "be, and is not." }
+    { at: 224, event: ["chance", 6, 1],
+      why: "THE RETURN. The stab's triad comes back whole, having been in " +
+           "pieces since bar 32 - the chord reassembling under the root that " +
+           "came home at 192, so the last section resolves what the second one " +
+           "opened and the wrap into bar 0 arrives on a piece that is already " +
+           "complete. NOTE, 2026-09-18: this replaces #16's exit, which removed " +
+           "the kick over twelve bars. Owner decision the same day: 'i want no " +
+           "exit - i want to let it run endless and steerable.' The exit was " +
+           "written as a movement boundary for a movement 2 that does not exist " +
+           "yet, and with the schedule now a ring it would have taken the floor " +
+           "away once every eight minutes for ever. THIS SUBSTITUTION IS THE " +
+           "SESSION'S, NOT #16'S - it is built from verbs already here and it " +
+           "is deliberately the smallest thing that is not a departure. What " +
+           "section 8 should actually be, now that the movement is endless, is " +
+           "a musical question and it belongs to dub-producer. See workshop " +
+           "issue #22." }
   ],
 
   /* --- the phrase level: six one-shot dub gestures on the 8-bar grid,
