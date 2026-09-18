@@ -45,6 +45,12 @@
   .row label { width: 150px; color: var(--dim); flex: none; }
   .row input[type=range] { flex: 1; accent-color: var(--hot); }
   .row select { flex: 1; font: inherit; background: var(--panel); color: var(--ink); border: 1px solid var(--line); padding: 4px; }
+  /* A TEXT FIELD WEARS THE PAGE, not the browser's white box. Left at the
+     default it is the brightest thing on a dark instrument and the eye goes to
+     it before the faders. */
+  .row input[type=text] { font: inherit; background: var(--panel); color: var(--hot);
+                          border: 1px solid var(--line); padding: 4px 6px; }
+  .row input[type=text]:focus { outline: none; border-color: var(--hot); }
   .row output { width: 78px; text-align: right; color: var(--hot); flex: none; }
   #bars { margin: 18px 0 8px; color: var(--dim); }
   #steps { display: flex; gap: 3px; margin-bottom: 8px; }
@@ -72,6 +78,17 @@
   .cid .fad { flex: 1; min-width: 120px; max-width: 200px; accent-color: var(--hot); }
   .cid .n { color: var(--hot); min-width: 52px; text-align: right; }
   .cid .in { color: var(--dim); }
+  /* M AND S. Two latches, and they wear the latch look this page already has
+     rather than inventing a third vocabulary. Sized for a finger at the base
+     size, like every other small control here. */
+  .cid .mx { flex: none; padding: 2px 7px; font-size: 11px; line-height: 1.2;
+             min-height: 21px; background: transparent; min-width: 26px; }
+  .cid .mx[aria-pressed="true"] { background: var(--ink); color: var(--bg); border-color: var(--ink); }
+  .cid .mx.so[aria-pressed="true"] { background: var(--hot); border-color: var(--hot); }
+  /* NOT SOUNDING BECAUSE OF THE HAND — the row keeps its layout and loses its
+     ink, which is the same thing `silent` already does for the composition's
+     own reasons. Nothing moves when a channel is muted. */
+  .chan.hushed .cid b, .chan.hushed .cid .pat, .chan.hushed .cid .n { color: var(--inert); }
   .cverbs { display: grid; grid-template-columns: repeat(auto-fit, minmax(128px, 1fr)); gap: 4px; margin: 5px 0 0; }
   /* A cell always carries a 1px edge and never changes size when its state
      changes: state changes INK, never layout. A surface that reflows when
@@ -134,6 +151,7 @@
   @media (pointer: coarse), (hover: none) {
     .vc .vs { height: 24px; }
     .vc .vx, .vc .vk { padding: 5px 8px; }
+    .cid .mx { padding: 5px 9px; }
     .rel { padding: 5px 8px !important; }
   }
   #status { color: var(--warn); min-height: 1.5em; margin: 8px 0 0; }
@@ -182,6 +200,28 @@
       you are hearing; <em>base</em>▸<em>received</em> where a modulator is writing it.</p>
       </details>
     </div>
+  </fieldset>
+
+  <!-- ===================================================================
+       THE PIECE. A different seed is a different piece — the whole state of
+       the arrangement is a pure function of (seed, bar, auto, holds) — so this
+       is the cheapest pattern switching on the page and the only one that
+       needs no second generator. It landed on a page RELOAD until now, which
+       took the audio context with it; here it lands on the next bar.
+       =================================================================== -->
+  <fieldset>
+    <legend>the piece · LANDS ON THE BAR</legend>
+    <div class="row"><label>seed</label>
+      <input id="seedin" type="text" inputmode="text" spellcheck="false"
+        style="flex:1;min-width:120px;max-width:200px"
+        title="A number or a word. A word is hashed the same way ?seed= hashes it, so `dub` here and ?seed=dub are the same piece — and a word is easier to say out loud than a 31-bit integer.">
+      <button id="seedgo" style="padding:3px 10px">take it</button>
+      <button id="seedroll" style="padding:3px 10px">roll</button>
+      <output id="seedin_v"></output></div>
+    <div class="note">Everything the arrangement decides is drawn from this
+      number, so a new seed is a new piece rather than a variation of this one —
+      same manifest, same genre, different draw. The URL follows it, so the
+      piece you are on can be sent to somebody.</div>
   </fieldset>
 
   <fieldset>
@@ -620,15 +660,20 @@ const rand01 = (a, b, c, d) => hash4(a, b, c, d) / 4294967296;
 
 // A seed from the URL query, or a default. The page is served under /dub/ and
 // NEVER under /, so this reads the query and not the path.
-function seedFromQuery(search) {
-  const m = /(?:^|[?&])seed=([^&]+)/.exec(search || "");
-  if (!m) return 0x11CE9E;                       // the default set
-  const s = decodeURIComponent(m[1]);
+// A NUMBER OR A WORD, and the two doors into the piece read it the SAME way:
+// the query on load and the field on the surface. Two parsers would be two
+// pieces wearing one name.
+function seedFromText(s) {
   const n = Number(s);
   if (isFinite(n) && s.trim() !== "") return n | 0;
   let h = 0;                                      // a word is a seed too
   for (let i = 0; i < s.length; i++) h = Math.imul(h ^ s.charCodeAt(i), 0x01000193);
   return h | 0;
+}
+function seedFromQuery(search) {
+  const m = /(?:^|[?&])seed=([^&]+)/.exec(search || "");
+  if (!m) return 0x11CE9E;                       // the default set
+  return seedFromText(decodeURIComponent(m[1]));
 }
 
 /* --- scale-degree transposition [G] ---------------------------------------
@@ -1393,6 +1438,11 @@ function createEngine(ctx, opts) {
     bypassFaders: !!opts.bypassFaders,   // calibration render: [M]'s faders off
     raw: !!opts.raw,                     // …and the input gain off too: the voice exactly as built
     solo: (opts.solo === undefined ? null : opts.solo),
+    // MUTED CHANNELS, by channel key — 0..7, "R" for the rumble, "N" for the
+    // noise floor. The object belongs to the CALLER for the same reason the
+    // held values do: the surface exists before the engine, and a channel
+    // muted before the first gesture must be muted when the first bar runs.
+    mutes: opts.mutes || {},
     // THE SEED. Composition state at bar N is a pure function of (seed, N, auto,
     // holds), so
     // the seed is the whole set. It comes from ?seed= in the query — the page
@@ -1898,7 +1948,7 @@ function createEngine(ctx, opts) {
   // "N" the way the rumble answers to "R" — which is the only way to measure
   // a continuous layer in isolation, and the only way a soloed voice is still
   // that voice alone.
-  const bedAudible = () => (cfg.solo === null || cfg.solo === "N") ? 1 : 0;
+  const bedAudible = () => (cfg.mutes.N || !(cfg.solo === null || cfg.solo === "N")) ? 0 : 1;
   function applyBed(t) {
     A.bedGain.gain.setTargetAtTime(BED_LEVEL * cfg.bedTrim * bedAudible(), t, 0.05);
   }
@@ -2395,7 +2445,22 @@ function createEngine(ctx, opts) {
      ONE STEP
      ========================================================================= */
   const silences = {};
-  function audible(ch) { return cfg.solo === null || cfg.solo === ch; }
+  /* MUTE IS NOT A FADER AT ZERO, and the difference is the whole point: a
+     fader at zero loses the position the hand set, so un-muting has nothing to
+     go back to. A mute is a state, the fader keeps its number, and the step is
+     simply not scheduled — the same door solo already uses.
+
+     MUTED AND SOLOED ARE BOTH GATES ON THE STEP, so a channel that is muted
+     stays silent even when it is the soloed one. That is the honest order: the
+     hand's mute is more recent than the hand's solo and nothing here is
+     entitled to overrule it silently. */
+  function audible(ch) {
+    if (cfg.mutes[ch]) return false;
+    return cfg.solo === null || cfg.solo === ch;
+  }
+  // The rumble is not a channel with a pattern: it is a dark tail on the
+  // kick's trigger, so it needs its own answer to both questions.
+  const rumbleAudible = () => !cfg.mutes.R && (cfg.solo === null || cfg.solo === "R");
 
   // The per-voice seed. A fact about (seed, absolute step, channel, slot) and
   // nothing else — which is what lets bar 200 be rendered from a standing
@@ -2418,9 +2483,12 @@ function createEngine(ctx, opts) {
 
     // the drums
     for (const ch of [0, 1, 2, 3]) {
-      // the kick's step still runs when the RUMBLE is soloed: the rumble is
-      // the kick's own tail, and there is nothing to hear without its trigger
-      if (!audible(ch) && !(ch === 0 && cfg.solo === "R")) continue;
+      // the kick's step still runs when the RUMBLE is soloed, and when the
+      // kick alone is MUTED: the rumble is the kick's own tail, and there is
+      // nothing to hear without its trigger. Muting the kick has to take the
+      // kick away and leave the rumble where it was — a mute that silently
+      // takes a second channel with it is a mute nobody can trust.
+      if (!audible(ch) && !(ch === 0 && rumbleAudible())) continue;
       if (C.present[ch] <= 0) continue;          // it left; the table says when
       const pat = DRUM_PAT[ch];
       if (!pat[s]) continue;
@@ -2442,7 +2510,7 @@ function createEngine(ctx, opts) {
       if (ch === 0) {
         if (audible(0)) voiceKick(t, v, out, sd);
         duck(t);                                   // the bus automation runs either way
-        if (cfg.solo === null || cfg.solo === "R") rumbleHit(t);
+        if (rumbleAudible()) rumbleHit(t);
       }
       else if (ch === 1) voiceRim(t, v, out, -0.18, sd);
       else if (ch === 2) voiceClap(t, v, out, sd);
@@ -2604,7 +2672,13 @@ let autoOn = false;
 // (seed, N, auto, holds). It comes from ?seed= — the QUERY, never the path,
 // because the page is served under /dub/ and a path-shaped anything resolves
 // against the owner's main site and breaks only in production.
-const SEED = seedFromQuery(location.search);
+// NOT a constant any more: the surface can take a new piece without reloading
+// the page, which is what used to cost the audio context. Everything that
+// draws a preview reads this, so the preview follows the hand.
+let SEED = seedFromQuery(location.search);
+// A seed asked for while the transport runs, waiting for a bar line. Null when
+// nothing is waiting.
+let pendingSeed = null;
 
 /* --- THE SEEK. Given a bar number, the composition is that bar's state with
    no history: `compositionAt` is asked for the bar and answers without having
@@ -2620,6 +2694,47 @@ function seek(bar) {
   if (engine) engine.recompose();
   say(`seek to bar ${bar + 1} — section ${Math.floor(bar / MOVEMENT.section) + 1} of ${Math.ceil(MOVEMENT.bars / MOVEMENT.section)}.`);
   return bar;
+}
+
+/* A NEW PIECE, AND IT LANDS ON A BAR LINE ----------------------------------
+   The composition is memoised on the bar; bumping the generation mid-bar would
+   re-resolve the bar that is ALREADY being played, and a pattern redrawn under
+   a bar that has started is the tear [G] rule 5 exists to forbid. So a seed
+   asked for while the transport runs waits in `pendingSeed` and is taken by
+   `tick` at the next multiple of 16 steps. With the transport stopped there is
+   no bar to wait for and it lands at once.
+
+   THE URL FOLLOWS, so the piece on the page can be sent to somebody. It is
+   written with `replaceState` — a seed is not a place you go back to with the
+   browser's back button, it is which piece this page is. The path is kept
+   exactly as served, because everything here lives under /dub/ and a path
+   written from scratch would resolve against the main site. --- */
+function seedText() {
+  const el = ui("seedin");
+  return el && el.value.trim() !== "" ? el.value.trim() : String(SEED);
+}
+function applySeed(v, spoken) {
+  SEED = v | 0;
+  if (engine) engine.set("seed", SEED);
+  ui("seedline").textContent = "seed " + SEED;
+  ui("seedin_v").textContent = String(SEED);
+  try {
+    history.replaceState(null, "", location.pathname + "?seed=" + encodeURIComponent(seedText()));
+  } catch (e) { /* a file:// page cannot, and it does not matter */ }
+  lastPainted = -1;
+  refreshHand();
+  if (spoken) say(spoken);
+}
+function takeSeed(text) {
+  const v = seedFromText(text);
+  if (v === SEED && pendingSeed === null) { say("same seed — same piece."); return; }
+  if (T.running) {
+    pendingSeed = v;
+    ui("seedin_v").textContent = "\u2192 " + v;         // asked for, not landed
+    say(`seed ${v} — lands on the next bar.`);
+  } else {
+    applySeed(v, `seed ${v} — a different piece. Press start.`);
+  }
 }
 
 function tick() {
@@ -2646,6 +2761,13 @@ function tick() {
       break;
     }
     const stepDur = 60 / T.bpm / 4;
+    // THE BAR LINE, and it is the step being SCHEDULED rather than the step
+    // being heard: this is the one moment at which changing the piece does not
+    // cut a bar in half.
+    if (pendingSeed !== null && T.step % 16 === 0) {
+      const v = pendingSeed; pendingSeed = null;
+      applySeed(v, `seed ${v} — a different piece, from this bar.`);
+    }
     engine.scheduleStep(T.step, T.nextT, stepDur);
     uiQueue.push({ step: T.step, at: T.nextT });
     T.nextT += stepDur;
@@ -2694,6 +2816,18 @@ function say(msg, sticky) {
 // Where each fader starts. [M] has an opinion about eight of them; the ninth
 // is the reference's own default, because [M]'s round has no rumble in it.
 const FADER_START = Object.assign({}, PIECE.levels, { R: 0.70 });
+
+/* --- WHAT THE HAND HAS MUTED AND SOLOED -----------------------------------
+   Held here as well as in the engine, for the reason `autoOn` and `HOLDS` are:
+   the controls are drawn on load, a hand can reach them on load, and there is
+   no engine until the first gesture. `MIX.mutes` is handed to `createEngine`
+   rather than copied into it, so a channel muted before `start` is muted when
+   the first bar runs.
+
+   SOLO IS ONE AT A TIME, because the engine's `cfg.solo` is one channel and
+   not a set. A surface that offered several would be showing a state the
+   engine cannot hold. --- */
+const MIX = { solo: null, mutes: {} };
 
 // Named for what they are, not for the slot they live in.
 const CHANNELS = [
@@ -2849,6 +2983,14 @@ function buildChannels() {
       + `<span class="pat">${patternText(ch)}</span>`
       + `<input class="fad" type="range" id="fad${ch}" min="0" max="${c.max || 1.2}"`
       + ` step="0.005" value="${lvl}" aria-label="fader channel ${ch}"${empty ? " disabled" : ""}>`
+      + `<button class="mx mu" id="mu${ch}" aria-pressed="false"`
+      + ` title="mute channel ${ch}. NOT a fader at zero: the fader keeps the`
+      + ` position your hand set and the step is simply not scheduled, so`
+      + ` un-muting comes back to where you were."${empty ? " disabled" : ""}>M</button>`
+      + `<button class="mx so" id="so${ch}" aria-pressed="false"`
+      + ` title="solo channel ${ch}. One at a time — pressing another moves it,`
+      + ` pressing this one again clears it. The noise floor goes with it, because`
+      + ` a floor under a soloed voice is not that voice."${empty ? " disabled" : ""}>S</button>`
       + `<span class="n" id="lvl${ch}">${lvl.toFixed(3)}</span>`
       + `<span class="in">in ${ch === "R" ? "—" : (INPUT_GAIN[ch] || 1).toFixed(3)}</span>`
       + `<button class="vx rel" id="hr_${ch}" disabled>release channel</button>`
@@ -2924,6 +3066,64 @@ function wireHand() {
     hand.release();
     say("released — everything is back under the schedule.");
   });
+}
+
+/* M AND S, AND THEY LAND NOW. A mute is a mixer gesture, not an arrangement
+   one: it belongs with the fader beside it, and a fader lands now. Nothing
+   here is regenerated and nothing is rescheduled — the step is let through or
+   it is not, which is exactly the door solo already went through. */
+function setMute(ch, on) {
+  if (on) MIX.mutes[ch] = true; else delete MIX.mutes[ch];
+  if (engine) engine.cfg.mutes = MIX.mutes;
+  paintMix();
+  const n = Object.keys(MIX.mutes).length;
+  say(on ? `channel ${ch} muted — its fader is where you left it.`
+         : `channel ${ch} back.${n ? ` ${n} still muted.` : ""}`);
+}
+function setSolo(ch) {
+  MIX.solo = (MIX.solo === ch) ? null : ch;
+  if (engine) engine.set("solo", MIX.solo);
+  paintMix();
+  say(MIX.solo === null ? "solo cleared — the whole mix again."
+                        : `channel ${MIX.solo} soloed — everything else is silent, and says so.`);
+}
+function wireMix() {
+  for (const c of CHANNELS) {
+    const ch = c.ch;
+    if (PIECE.empty[ch]) continue;                 // no material: drawn dead, wired to nothing
+    ui("mu" + ch).addEventListener("click", () => setMute(ch, !MIX.mutes[ch]));
+    ui("so" + ch).addEventListener("click", () => setSolo(ch));
+  }
+}
+
+/* WHAT THE HAND HAS DONE TO THE MIX, drawn. A channel that is not sounding
+   because of one of these says which one — a row that has simply gone quiet
+   looks identical to one that broke, and that is the fault this project has a
+   law about. */
+function paintMix() {
+  for (const c of CHANNELS) {
+    const ch = c.ch;
+    if (PIECE.empty[ch]) continue;
+    const muted = !!MIX.mutes[ch];
+    const soloed = MIX.solo === ch;
+    ui("mu" + ch).setAttribute("aria-pressed", String(muted));
+    ui("so" + ch).setAttribute("aria-pressed", String(soloed));
+    ui("ch" + ch).classList.toggle("hushed", !mixAudible(ch));
+  }
+  refreshHand();       // the why lines below the faders carry the reason
+}
+// The surface's copy of the engine's own rule, and it has to stay the same
+// rule: `audible()` in the engine reads mute first and solo second.
+function mixAudible(ch) {
+  if (MIX.mutes[ch]) return false;
+  return MIX.solo === null || MIX.solo === ch;
+}
+// Why a channel is not sounding, when the reason is the hand rather than the
+// composition. Empty string when the hand is not the reason.
+function mixSilence(ch) {
+  if (MIX.mutes[ch]) return "muted by you";
+  if (MIX.solo !== null && MIX.solo !== ch) return `silent · ${MIX.solo} is soloed`;
+  return "";
 }
 
 function eventText(ev) {
@@ -3081,9 +3281,28 @@ function shortSilence(ch, C) {
 }
 function paintWhy(ch, C) {
   const el = ui("why" + ch);
-  if (!el || ch === "R") return;
+  if (!el) return;
+  if (ch === "R") {
+    // the rumble's line is written once in the markup — it has no pattern of
+    // its own — so the only thing that can change it is the hand.
+    const byHandR = mixSilence("R");
+    ui("chR").classList.toggle("hushed", !mixAudible("R"));
+    el.textContent = byHandR || "no pattern of its own · it follows the kick";
+    return;
+  }
   let t = "", full = "";
-  if (C.silent[ch]) { t = shortSilence(ch, C); full = C.silent[ch]; }
+  // THE HAND'S OWN SILENCE COMES FIRST, because it is the most recent thing
+  // that happened and because the composition's reason is not the answer to
+  // "why can I not hear this": a muted channel whose line said "chance let
+  // nothing through" would be true and useless.
+  const byHand = mixSilence(ch);
+  if (byHand) {
+    t = byHand;
+    full = MIX.mutes[ch]
+      ? "You muted it. The fader is where you left it and the step is not scheduled."
+      : `Channel ${MIX.solo} is soloed, so every other channel is gated at the step. `
+        + "Press its S again for the whole mix.";
+  } else if (C.silent[ch]) { t = shortSilence(ch, C); full = C.silent[ch]; }
   if (C.frozen[ch]) {
     t += (t ? "  ·  " : "") + "cannot vary · phrase 1, move 0";
     full += (full ? " — " : "") + C.frozen[ch];
@@ -3091,8 +3310,8 @@ function paintWhy(ch, C) {
   if (el.textContent !== t) { el.textContent = t; el.title = full; }
   const block = ui("ch" + ch);
   if (block) {
-    block.classList.toggle("silent", !!C.silent[ch]);
-    block.classList.toggle("frozen", !C.silent[ch] && !!C.frozen[ch]);
+    block.classList.toggle("silent", !byHand && !!C.silent[ch]);
+    block.classList.toggle("frozen", !byHand && !C.silent[ch] && !!C.frozen[ch]);
   }
 }
 
@@ -3102,7 +3321,9 @@ function paintHand() {
                                   { auto: autoOn, holds: HOLDS });
   for (const c of CHANNELS) {
     const ch = c.ch;
-    if (ch === "R" || PIECE.empty[ch]) { if (PIECE.empty[ch]) paintWhy(ch, C); continue; }
+    // the rumble and the empty channel have no verbs, but both have a why
+    // line, and the hand can silence either of them
+    if (ch === "R" || PIECE.empty[ch]) { paintWhy(ch, C); continue; }
     for (const v of VERBS) paintCell(ch, v, C, engC);
     paintWhy(ch, C);
     let n = 0;
@@ -3234,6 +3455,15 @@ function wire() {
   // exist until the first gesture, and the switch has to be settable before
   // there is anything to play it.
   ui("auto").addEventListener("click", () => setAuto(!autoOn));
+  ui("seedgo").addEventListener("click", () => takeSeed(ui("seedin").value));
+  ui("seedin").addEventListener("keydown", e => { if (e.key === "Enter") takeSeed(ui("seedin").value); });
+  // ROLL is a seed nobody chose, which is the point: the fastest way to hear
+  // another piece is not to think of a word for it.
+  ui("seedroll").addEventListener("click", () => {
+    const v = (Math.random() * 0x7FFFFFFF) | 0;
+    ui("seedin").value = String(v);
+    takeSeed(String(v));
+  });
   ui("revsize").addEventListener("change", () => { if (engine) engine.set("revSeconds", val("revsize")); });
   ui("dlydiv").addEventListener("change", () => { if (engine) engine.set("dlyBeats", parseFloat(ui("dlydiv").value)); });
 }
@@ -3255,7 +3485,11 @@ async function start() {
     ctx = new (window.AudioContext || window.webkitAudioContext)();
     // The held values are section 4c's object, handed over rather than copied:
     // anything set before this gesture is already waiting in it.
-    engine = createEngine(ctx, { seed: SEED, movement: MOVEMENT, auto: autoOn, holds: HOLDS });
+    engine = createEngine(ctx, { seed: SEED, movement: MOVEMENT, auto: autoOn, holds: HOLDS,
+                                // handed over, not copied: what the hand muted
+                                // before there was an engine is muted now
+                                mutes: MIX.mutes });
+    if (MIX.solo !== null) engine.set("solo", MIX.solo);
     engine.tail.connect(ctx.destination);
     engine.set("master", val("vol"));
     engine.set("pump", val("pump"));
@@ -3305,6 +3539,7 @@ async function renderOffline(o) {
   const off = new OfflineAudioContext(2, Math.ceil(seconds * rate), rate);
   const eng = createEngine(off, {
     solo: o.solo === undefined ? null : o.solo,
+    mutes: o.mutes,
     bypassFaders: !!o.bypassFaders,
     raw: !!o.raw,
     calibrate: !!o.calibrate,
@@ -3388,6 +3623,13 @@ window.p02 = {
     contextCreated: !!ctx, running: T.running, muted, auto: autoOn,
     holds: HOLDS,
     step: T.step, bar: Math.floor(T.step / 16), bpm: T.bpm, seed: SEED, perf: perfReport(),
+    // WHAT THE HAND HAS DONE TO THE MIX, and then what the ENGINE has, which
+    // is not the same claim: the surface's copy and the engine's copy are two
+    // places for one state to be wrong in.
+    solo: MIX.solo, mutes: Object.keys(MIX.mutes),
+    engineSolo: engine ? engine.cfg.solo : null,
+    engineMutes: engine ? Object.keys(engine.cfg.mutes) : null,
+    pendingSeed,
     // WHAT THE ENGINE HAS, not what the slider says, and then WHAT THE GAIN
     // NODE HAS, which is not the same claim again: `bedTrim` is what `set`
     // was told and `bedGain` is what the audio graph is actually multiplying
@@ -3461,9 +3703,12 @@ window.p02 = {
 buildChannels();
 wireFaders();
 wireHand();
+wireMix();
 buildSections();
 buildSteps();
-ui("seedline").textContent = "seed " + SEED + (location.search.indexOf("seed=") === -1 ? " (default — add ?seed=… to the URL)" : "");
+ui("seedline").textContent = "seed " + SEED + (location.search.indexOf("seed=") === -1 ? " (the default piece)" : "");
+ui("seedin").value = (/(?:^|[?&])seed=([^&]+)/.exec(location.search || "") || [, String(SEED)])[1];
+ui("seedin_v").textContent = String(SEED);
 outputs();
 wire();
 ui("go").addEventListener("click", start);
@@ -3475,6 +3720,7 @@ ui("mute").addEventListener("click", () => {
 applyMute();
 // The controls are drawn in their real state before a single sound: what is
 // running, what your hand is holding, and what cannot apply here at all.
+paintMix();
 refreshHand();
 if (!muted) say("press start — a browser needs a gesture before it will make a sound.");
 paint();

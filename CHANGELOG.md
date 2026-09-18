@@ -9,6 +9,27 @@
 - It runs green and then **red on purpose** in the same job. A gate only ever
   run in the direction where it passes is a decoration.
 
+## 2026-09-18 — three controls that were already in there
+
+- **Mute and solo, per channel.** Solo was implemented in the engine and
+  unreachable from the page; mute is new and is a state rather than a fader at
+  zero, so the fader keeps the position your hand set. Muting the kick leaves
+  the rumble where it was — the rumble is the kick's tail and has its own
+  button. Soloing takes the noise floor with it.
+- **A channel that is not sounding says which of the two did it.** "muted by
+  you" and "silent · 5 is soloed" are different sentences from "chance let
+  nothing through", and a row that has simply gone quiet looks exactly like one
+  that broke.
+- **The seed is a control.** It was reachable only through `?seed=`, which cost
+  a page reload and the audio context with it. A number or a word, `roll` for
+  one nobody chose, and it lands on the next bar rather than tearing the one
+  you are hearing. The URL follows, so a piece can be sent to somebody.
+
+  Measured, 4 bars, auto on: whole mix peak −5.26 RMS −18.97; kick muted −7.51
+  / −19.28; rumble muted −5.03 / −19.72; kick soloed −9.69 / −29.64; kick muted
+  while the rumble is soloed −14.54 / −26.46, which is the rumble still playing
+  with its trigger gone from the mix.
+
 ## 2026-09-18 — a measurement can tell quiet from broken
 
 - `renderOffline` reports which channels are silent and why, beside the peak.
