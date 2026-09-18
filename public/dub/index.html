@@ -19,7 +19,13 @@
     margin: 0; padding: 24px 16px; background: var(--bg); color: var(--ink);
     font: 13px/1.5 ui-monospace, SFMono-Regular, Menlo, monospace;
   }
-  main { max-width: 720px; margin: 0 auto; }
+  /* THE PAGE IS AS WIDE AS THE GRID NEEDS, AND NOTHING ELSE IS.
+     `the channels` is a grid of eleven columns and wants the room; every other
+     block keeps the 720 px measure it has always had. The narrow measure is
+     applied BY EXCLUSION rather than by a class, so a fieldset added later
+     inherits it without having to know this rule exists. */
+  main { max-width: 1240px; margin: 0 auto; }
+  main > *:not(#chanbox) { max-width: 720px; }
   h1 { font-size: 13px; font-weight: 400; color: var(--dim); margin: 0 0 20px; letter-spacing: .08em; }
   h1 b { color: var(--ink); font-weight: 400; }
   button {
@@ -65,52 +71,100 @@
   td { padding: 2px 8px 2px 0; color: var(--ink); vertical-align: top; }
   td.n { color: var(--hot); text-align: right; }
   td.why { color: var(--dim); }
-  /* --- THE CHANNEL BLOCKS, AND THE FOUR STATES A VERB CELL CAN BE IN -------
-     One channel is one block: who it is and how loud on the first line, the
-     five composition verbs on the second, and the reason line on the third.
-     There is no second table printing the same channel twice, because two
-     tables is how a surface ends up with two vocabularies for one value. --- */
-  .chan { border-top: 1px solid var(--line); padding: 7px 0 6px; }
+  /* --- THE CHANNELS, AS ONE GRID -------------------------------------------
+     Nine channels are nine ROWS; every mixer control and every composition
+     verb is a COLUMN. The eye lands on a position instead of reading a line,
+     and a column is named ONCE at the top instead of forty-five times down the
+     page. This grid REPLACED the per-channel blocks rather than sitting above
+     them: two surfaces telling one story disagree the first time one of them
+     is changed, and nothing here prints a value twice.
+
+     The header and every channel share ONE pair of custom properties, `--cols`
+     and `--areas`, so a column cannot drift between the header and a row, or
+     between one row and the next. A width changes those two and nothing else.
+     --------------------------------------------------------------------- */
+  .chan {
+    display: grid; align-items: center;
+    grid-template-columns: var(--cols);
+    grid-template-areas: var(--areas);
+    column-gap: 5px; row-gap: 2px;
+    border-top: 1px solid var(--line); padding: 6px 0 5px;
+    /* THE DEFAULT IS THE MIDDLE WIDTH — the iPad, and any desktop under 1260.
+       MEASURED: the one-line form further down needs 1160 px inside the
+       fieldset and 1024 px of iPad gives 962, so the row folds onto three
+       lines there. Both control lines are placed in the SAME twelve-column
+       track set, and that is what keeps them aligned down all nine channels —
+       two grids that happen to look alike is how a column drifts. */
+    --cols: repeat(12, minmax(0, 1fr));
+    --areas:
+      "id id pat pat pat fad fad fad lvl lvl mix mix"
+      "chance chance phrase phrase move move lock lock delay delay reverb reverb"
+      "why why why why why why why why why why rel rel";
+  }
   .chan:first-child { border-top: 0; }
-  .cid { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; }
-  .cid b { color: var(--ink); font-weight: 400; min-width: 66px; }
-  .cid .pat { letter-spacing: .12em; color: var(--dim); }
-  .cid .fad { flex: 1; min-width: 120px; max-width: 200px; accent-color: var(--hot); }
-  .cid .n { color: var(--hot); min-width: 52px; text-align: right; }
-  .cid .in { color: var(--dim); }
+  /* THE SPINE. One header, at the top, in the same tracks as the rows. */
+  .ghead { border-top: 0; border-bottom: 1px solid var(--line); padding-bottom: 7px; }
+  .ghead i { font-style: normal; color: var(--dim); font-size: 11px; letter-spacing: .07em; }
+  .g-id { grid-area: id; color: var(--ink); font-weight: 400; }
+  .g-pat { grid-area: pat; letter-spacing: .06em; color: var(--dim); }
+  .g-fad { grid-area: fad; }
+  input.g-fad { width: 100%; min-width: 0; accent-color: var(--hot); }
+  .g-lvl { grid-area: lvl; display: flex; align-items: baseline; gap: 6px; }
+  .ghead .g-lvl, .ghead .g-mix { display: block; }
+  /* BOTH OF THESE ARE `<i>`, and an `<i>` is italic until it is told not to
+     be: a level that leaned while nothing else on the page did was the first
+     thing a screenshot caught. */
+  .g-lvl .n { color: var(--hot); font-style: normal; }
+  .g-lvl .in { color: var(--dim); font-size: 11px; font-style: normal; }
+  .g-lvl, .g-pat, .g-id { white-space: nowrap; }
+  .g-mix { grid-area: mix; display: flex; align-items: center; gap: 6px; }
+  .g-chance { grid-area: chance; }
+  .g-phrase { grid-area: phrase; }
+  .g-move { grid-area: move; }
+  /* LOCK IS A VALUE OF `move`, NOT A SECOND CONTROL, so it has no column name
+     of its own in the header: it sits under `move`'s label and says its own
+     name on its face. It is the only cell on the row with nothing written
+     above it, which is the whole of the distinction. */
+  .g-lock { grid-area: lock; justify-self: start; }
+  .g-delay { grid-area: delay; }
+  .g-reverb { grid-area: reverb; }
+  .g-why { grid-area: why; }
+  .g-rel { grid-area: rel; justify-self: start; }
   /* M AND S. Two latches, and they wear the latch look this page already has
      rather than inventing a third vocabulary. Sized for a finger at the base
      size, like every other small control here. */
-  .cid .mx { flex: none; padding: 2px 7px; font-size: 11px; line-height: 1.2;
-             min-height: 21px; background: transparent; min-width: 26px; }
-  .cid .mx[aria-pressed="true"] { background: var(--ink); color: var(--bg); border-color: var(--ink); }
-  .cid .mx.so[aria-pressed="true"] { background: var(--hot); border-color: var(--hot); }
+  .mx { flex: none; padding: 2px 7px; font-size: 11px; line-height: 1.2;
+        min-height: 21px; background: transparent; min-width: 26px; }
+  .mx[aria-pressed="true"] { background: var(--ink); color: var(--bg); border-color: var(--ink); }
+  .mx.so[aria-pressed="true"] { background: var(--hot); border-color: var(--hot); }
   /* NOT SOUNDING BECAUSE OF THE HAND — the row keeps its layout and loses its
      ink, which is the same thing `silent` already does for the composition's
      own reasons. Nothing moves when a channel is muted. */
-  .chan.hushed .cid b, .chan.hushed .cid .pat, .chan.hushed .cid .n { color: var(--inert); }
-  .cverbs { display: grid; grid-template-columns: repeat(auto-fit, minmax(128px, 1fr)); gap: 4px; margin: 5px 0 0; }
+  .chan.hushed .g-id, .chan.hushed .g-pat, .chan.hushed .g-lvl .n { color: var(--inert); }
   /* A cell always carries a 1px edge and never changes size when its state
      changes: state changes INK, never layout. A surface that reflows when
      something latches is disorienting and expensive at once. */
   .vc { border: 1px solid transparent; padding: 2px 4px 3px; }
-  .vc .vl { font-style: normal; color: var(--dim); font-size: 11px; letter-spacing: .06em;
-            display: flex; align-items: center; justify-content: space-between; gap: 6px; }
-  .vc .vr { display: flex; align-items: center; gap: 4px; margin-top: 1px; }
-  .vc .vs { flex: 1; min-width: 34px; accent-color: var(--hot); height: 18px; }
-  .vc .vv { flex: none; color: var(--hot); font-weight: 400; min-width: 44px; text-align: right; padding: 0 2px; }
+  /* THE VERB'S NAME LIVES IN THE COLUMN HEADER NOW, not in the cell — that is
+     what a grid buys, and it takes forty-five repeated words off the page. It
+     comes back only where the columns cannot survive, below 560 px. */
+  .vc .vl { display: none; font-style: normal; color: var(--dim); font-size: 11px;
+            letter-spacing: .06em; }
+  .vc .vr { display: flex; align-items: center; gap: 4px; }
+  .vc .vs { flex: 1; min-width: 28px; accent-color: var(--hot); height: 18px; }
+  .vc .vv { flex: none; color: var(--hot); font-weight: 400; min-width: 34px; text-align: right; padding: 0 2px; }
   /* A FINGER IS ONE OF THE TWO POINTERS THIS IS PLAYED WITH, so the smallest
      control on the page is sized for one at its base size rather than only
      under a media query the emulator may not report. */
-  .vc .vx, .vc .vk { flex: none; padding: 2px 6px; font-size: 11px; line-height: 1.2;
-                     min-height: 21px; background: transparent; }
-  .vc .vk { padding: 1px 6px; }
+  .vc .vx, .vk { flex: none; padding: 2px 6px; font-size: 11px; line-height: 1.2;
+                 min-height: 21px; background: transparent; }
+  .vk { padding: 1px 6px; }
   /* THE LATCH LOOK AGAIN, at a specificity that beats the line above. Without
-     it the pressed LOCK keeps the transparent background from `.vc .vk` and
-     its dark text disappears into the panel: a latched control reading as an
-     empty box. Found by looking at a screenshot, which is the only way it
-     could have been found. */
-  .vc .vk[aria-pressed="true"] { background: var(--ink); color: var(--bg); border-color: var(--ink); }
+     it the pressed LOCK keeps the transparent background and its dark text
+     disappears into the panel: a latched control reading as an empty box.
+     Found by looking at a screenshot, which is the only way it could have
+     been found. */
+  .vk[aria-pressed="true"] { background: var(--ink); color: var(--bg); border-color: var(--ink); }
   /* HELD BY YOU — the value is inverted and the cell is edged in the same ink. */
   .vc.is-held { border-color: var(--ink); }
   .vc.is-held .vv { background: var(--ink); color: var(--bg); }
@@ -123,22 +177,70 @@
   .vc.is-dead { border-color: var(--inert); border-style: dotted; }
   .vc.is-dead .vl, .vc.is-dead .vv { color: var(--inert); }
   .vc.is-dead .vs { accent-color: var(--inert); opacity: .3; pointer-events: none; }
-  .cwhy { color: var(--warn); min-height: 1.4em; margin-top: 3px; font-size: 12px; }
+  .cwhy { color: var(--warn); min-height: 1.4em; font-size: 12px; }
   /* a channel that is silent, or sounding but unable to vary, is marked where
      its name is as well as on its reason line: one colour, one meaning */
-  .chan.silent .cid b, .chan.silent .cid .pat, .chan.frozen .cid b { color: var(--warn); }
+  .chan.silent .g-id, .chan.silent .g-pat, .chan.frozen .g-id { color: var(--warn); }
   .rel { padding: 2px 6px !important; font-size: 11px; background: transparent; }
   .cwhy:empty::before { content: "\00a0"; }
-  .crel { display: flex; align-items: center; gap: 8px; margin-top: 5px; }
   .note { color: var(--dim); margin-top: 10px; }
   details { margin: 6px 0; }
   summary { color: var(--dim); cursor: pointer; padding: 3px 0; }
   summary:hover { color: var(--hot); }
   .src { color: var(--dim); font-size: 12px; margin: 6px 0 0; }
   .src b { color: var(--ink); font-weight: 400; }
+  /* THE ONE-LINE FORM — one channel, one line, eleven columns, and the reason
+     line under it. MEASURED: its tracks add up to 1160 px inside the
+     fieldset, so it is asked for only from 1260 px of viewport upward. That is
+     the 1280 desktop; the iPad falls back to the three-line form above, which
+     is the same grid with the same column names, folded. */
+  @media (min-width: 1260px) {
+    .chan {
+      /* EVERY MINIMUM HERE IS A MEASUREMENT, not a guess. A track narrower
+         than its cell does not wrap, it OVERFLOWS into its neighbour, and the
+         first pass of this line put the phrase cell 5 px over and the level
+         2 px over — caught by asking the browser for scrollWidth against
+         clientWidth on every cell, not by looking. The two send columns are
+         the wide ones because their value can read `0.44\u25b80.51`: the base
+         and what the engine received, which is nine characters. THE LEVEL
+         COLUMN IS WIDE FOR THE SAME REASON: with a modulator on a channel's
+         level it reads `0.67\u25b80.64 in 1.425`, and at 100 px that ran over
+         the top of the M and S buttons. The tracks add up to 1188 px and the
+         breakpoint gives at least 1203 px on a real 1280 desktop, scrollbar
+         included \u2014 the headless browser has no scrollbar and would not have
+         shown that. */
+      --cols: 72px 138px minmax(68px, 1fr) 132px 60px
+              minmax(106px, .9fr) minmax(106px, .8fr) minmax(106px, .9fr) 52px
+              minmax(146px, 1.1fr) minmax(146px, 1.1fr);
+      --areas:
+        "id pat fad lvl mix chance phrase move lock delay reverb"
+        "why why why why why why why why why rel rel";
+    }
+    .g-rel { justify-self: end; }
+    /* WHERE THE MIXER STOPS AND THE COMPOSITION STARTS. One hairline, drawn
+       once per row, in the structure colour and not in an accent: the page
+       spends colour on time and nothing else. */
+    .g-mix { border-right: 1px solid var(--line); padding-right: 10px; }
+  }
   @media (max-width: 560px) {
-    .cverbs { grid-template-columns: repeat(auto-fit, minmax(150px, 1fr)); }
-    .cid .fad { max-width: none; }
+    .chan {
+      --cols: repeat(4, minmax(0, 1fr));
+      --areas:
+        "id id mix mix"
+        "pat pat pat pat"
+        "fad fad lvl lvl"
+        "chance chance phrase phrase"
+        "move move move lock"
+        "delay delay reverb reverb"
+        "why why why why"
+        "rel rel rel rel";
+    }
+    /* BELOW 560 THERE ARE NO COLUMNS LEFT TO NAME, so the header would be
+       pointing at tracks that are not there. It is hidden and every cell
+       carries its own label again — a name in a header this width never shows
+       is a name nobody has. */
+    .ghead { display: none; }
+    .vc .vl { display: block; }
     /* the NOW controls were laid out as a fixed 150 px label beside a fixed
        78 px readout and pushed the page 236 px wider than a phone. They were
        already doing that before the channels moved above them; the label goes
@@ -150,8 +252,8 @@
   }
   @media (pointer: coarse), (hover: none) {
     .vc .vs { height: 24px; }
-    .vc .vx, .vc .vk { padding: 5px 8px; }
-    .cid .mx { padding: 5px 9px; }
+    .vc .vx, .vk { padding: 5px 8px; }
+    .mx { padding: 5px 9px; }
     .rel { padding: 5px 8px !important; }
   }
   #status { color: var(--warn); min-height: 1.5em; margin: 8px 0 0; }
@@ -188,7 +290,7 @@
        clock. The controls under "the space" land NOW, and the difference is
        carried by which block a control is in rather than by decoration.
        =================================================================== -->
-  <fieldset>
+  <fieldset id="chanbox">
     <legend>the channels · LANDS ON THE BAR</legend>
     <div id="chans"></div>
     <div class="note">
@@ -3175,27 +3277,40 @@ function modSuffix(param, ch, C) {
 function verbCell(ch, v, dead) {
   const id = v.p + "_" + ch;
   const d = dead ? " disabled" : "";
-  return `<div class="vc${dead ? " is-dead" : ""}" id="hc_${id}"${dead ? ' data-dead="1"' : ""}>`
-    + `<i class="vl">${v.label}`
-    // LOCK is a VALUE of `move` and not a second control, so it sits on the
-    // verb's own label line rather than in the row of numbers: every control
-    // row on the page is then [slider][value][release] and nothing overflows
-    // its column.
-    + (v.p === "move" ? `<button class="vk" id="hk_${ch}" aria-pressed="false"${d}>LOCK</button>` : "")
-    + `</i><div class="vr">`
+  // The label is NOT in the cell any more: it is the column header, printed
+  // once. It is still emitted, because below 560 px there are no columns left
+  // to name and the cell has to say what it is again.
+  return `<div class="vc g-${v.p}${dead ? " is-dead" : ""}" id="hc_${id}"${dead ? ' data-dead="1"' : ""}>`
+    + `<i class="vl">${v.label}</i><div class="vr">`
     + `<input class="vs" type="range" id="hs_${id}" min="${v.min}" max="${v.max}"`
     + ` step="${v.step}" value="${v.min}" aria-label="${v.label} channel ${ch}"${d}>`
-    + `<b class="vv" id="hv_${id}">${dead ? "——" : ""}</b>`
-    + `<button class="vx" id="hx_${id}" aria-label="release ${v.label} on channel ${ch}" disabled>×</button>`
+    + `<b class="vv" id="hv_${id}">${dead ? "\u2014\u2014" : ""}</b>`
+    + `<button class="vx" id="hx_${id}" aria-label="release ${v.label} on channel ${ch}" disabled>\u00d7</button>`
     + `</div></div>`;
 }
 
-/* ONE CHANNEL IS ONE BLOCK: who it is and how loud, then the five verbs, then
-   the reason line. There is no second table printing the same channel again —
-   two tables is how a surface ends up with two vocabularies for one value. */
+/* THE COLUMN NAMES, PRINTED ONCE. It is laid out from the same `--cols` and
+   `--areas` as every channel row, so a name sits over its column at every
+   width the grid has — and the reason line gets a name too, which it never
+   had while it was a loose third line under a block. `lock` is deliberately
+   blank: LOCK is a value of `move` and not a column of its own. */
+function channelHead() {
+  return `<div class="chan ghead" id="chhead">`
+    + `<i class="g-id">channel</i><i class="g-pat">pattern</i>`
+    + `<i class="g-fad">fader</i><i class="g-lvl">level \u00b7 in</i>`
+    + `<i class="g-mix">m \u00b7 s</i>`
+    + VERBS.map(v => `<i class="g-${v.p}">${v.label}</i>`).join("")
+    + `<i class="g-lock"></i>`
+    + `<i class="g-why">why it is silent, or why it cannot vary</i><i class="g-rel"></i>`
+    + `</div>`;
+}
+
+/* ONE CHANNEL IS ONE ROW OF THE GRID, and every cell it owns is a direct
+   child placed by name. There is no wrapper per band, because a band with a
+   box of its own is a second grid, and two grids drift. */
 function buildChannels() {
   const box = ui("chans");
-  box.innerHTML = "";
+  box.innerHTML = channelHead();
   for (const c of CHANNELS) {
     const ch = c.ch;
     const empty = !!PIECE.empty[ch];
@@ -3208,10 +3323,13 @@ function buildChannels() {
     el.className = "chan";
     el.id = "ch" + ch;
     el.innerHTML =
-      `<div class="cid"><b>${ch} ${empty ? "—" : c.voice}</b>`
-      + `<span class="pat">${patternText(ch)}</span>`
-      + `<input class="fad" type="range" id="fad${ch}" min="0" max="${c.max || 1.2}"`
+      `<b class="g-id">${ch} ${empty ? "\u2014" : c.voice}</b>`
+      + `<span class="g-pat">${patternText(ch)}</span>`
+      + `<input class="g-fad" type="range" id="fad${ch}" min="0" max="${c.max || 1.2}"`
       + ` step="0.005" value="${lvl}" aria-label="fader channel ${ch}"${empty ? " disabled" : ""}>`
+      + `<span class="g-lvl"><i class="n" id="lvl${ch}">${lvl.toFixed(3)}</i>`
+      + `<i class="in">in ${ch === "R" ? "\u2014" : (INPUT_GAIN[ch] || 1).toFixed(3)}</i></span>`
+      + `<span class="g-mix">`
       + `<button class="mx mu" id="mu${ch}" aria-pressed="false"`
       + ` title="mute channel ${ch}. NOT a fader at zero: the fader keeps the`
       + ` position your hand set and the step is simply not scheduled, so`
@@ -3220,14 +3338,16 @@ function buildChannels() {
       + ` title="solo channel ${ch}. One at a time — pressing another moves it,`
       + ` pressing this one again clears it. The noise floor goes with it, because`
       + ` a floor under a soloed voice is not that voice."${empty ? " disabled" : ""}>S</button>`
-      + `<span class="n" id="lvl${ch}">${lvl.toFixed(3)}</span>`
-      + `<span class="in">in ${ch === "R" ? "—" : (INPUT_GAIN[ch] || 1).toFixed(3)}</span>`
-      + `<button class="vx rel" id="hr_${ch}" disabled>release channel</button>`
-      + `</div>`
-      + `<div class="cverbs">${VERBS.map(v => verbCell(ch, v, dead)).join("")}</div>`
-      + `<div class="cwhy" id="why${ch}"${ch === "R"
-          ? ' title="the rumble is a dark reverb on a copy of the kick: it has no pattern of its own, so none of the composition verbs applies to it">no pattern of its own · it follows the kick'
-          : '>'}</div>`;
+      + `</span>`
+      + VERBS.map(v => verbCell(ch, v, dead)).join("")
+      // LOCK is a value of `move` and not a second control, so it has no name
+      // in the header: it sits in the track immediately right of `move`, under
+      // that word, and says what it is on its own face.
+      + `<button class="vk g-lock" id="hk_${ch}" aria-pressed="false"${dead ? " disabled" : ""}>LOCK</button>`
+      + `<div class="cwhy g-why" id="why${ch}"${ch === "R"
+          ? ' title="the rumble is a dark reverb on a copy of the kick: it has no pattern of its own, so none of the composition verbs applies to it">no pattern of its own \u00b7 it follows the kick'
+          : '>'}</div>`
+      + `<button class="vx rel g-rel" id="hr_${ch}" disabled>release channel</button>`;
     box.appendChild(el);
   }
 }
