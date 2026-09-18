@@ -8,6 +8,11 @@
   :root {
     --bg: #0b0d0e; --panel: #131718; --line: #222829;
     --ink: #cdd3d2; --dim: #6b7574; --hot: #7fd6c4; --warn: #d6a97f;
+    /* DEAD HAS TO READ DEAD. `--inert` is dimmer than `--dim` and dimmer than
+       an empty live cell's edge, because the first version of this palette had
+       it the other way round somewhere else and a control that cannot apply
+       was the brightest thing in its row. */
+    --inert: #414a4a;
   }
   * { box-sizing: border-box; }
   body {
@@ -22,7 +27,19 @@
     border: 1px solid var(--line); padding: 10px 20px; cursor: pointer;
   }
   button:hover { border-color: var(--hot); color: var(--hot); }
-  button[aria-pressed="true"] { border-color: var(--warn); color: var(--warn); }
+  /* ONE LOOK FOR "THIS IS THE STATE YOU ARE IN, AND IT WILL STAY": inverted.
+     Every latch on the page uses it — mute, auto, LOCK, a held value's readout
+     — so nothing has to invent its own way of saying `on`. Inversion is
+     instantly readable, is static, costs nothing to paint, and does not become
+     exhausting over two hours; nothing on this page blinks. */
+  button[aria-pressed="true"],
+  button[aria-pressed="true"]:hover {
+    background: var(--ink); color: var(--bg); border-color: var(--ink);
+  }
+  button:disabled, button:disabled:hover {
+    color: var(--inert); border-color: var(--inert); border-style: dotted;
+    background: transparent; cursor: default;
+  }
   .top { display: flex; gap: 10px; align-items: center; }
   .row { display: flex; align-items: center; gap: 12px; margin: 6px 0; }
   .row label { width: 150px; color: var(--dim); flex: none; }
@@ -42,7 +59,83 @@
   td { padding: 2px 8px 2px 0; color: var(--ink); vertical-align: top; }
   td.n { color: var(--hot); text-align: right; }
   td.why { color: var(--dim); }
-  tr.silent td { color: var(--warn); }
+  /* --- THE CHANNEL BLOCKS, AND THE FOUR STATES A VERB CELL CAN BE IN -------
+     One channel is one block: who it is and how loud on the first line, the
+     five composition verbs on the second, and the reason line on the third.
+     There is no second table printing the same channel twice, because two
+     tables is how a surface ends up with two vocabularies for one value. --- */
+  .chan { border-top: 1px solid var(--line); padding: 7px 0 6px; }
+  .chan:first-child { border-top: 0; }
+  .cid { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; }
+  .cid b { color: var(--ink); font-weight: 400; min-width: 66px; }
+  .cid .pat { letter-spacing: .12em; color: var(--dim); }
+  .cid .fad { flex: 1; min-width: 120px; max-width: 200px; accent-color: var(--hot); }
+  .cid .n { color: var(--hot); min-width: 52px; text-align: right; }
+  .cid .in { color: var(--dim); }
+  .cverbs { display: grid; grid-template-columns: repeat(auto-fit, minmax(128px, 1fr)); gap: 4px; margin: 5px 0 0; }
+  /* A cell always carries a 1px edge and never changes size when its state
+     changes: state changes INK, never layout. A surface that reflows when
+     something latches is disorienting and expensive at once. */
+  .vc { border: 1px solid transparent; padding: 2px 4px 3px; }
+  .vc .vl { font-style: normal; color: var(--dim); font-size: 11px; letter-spacing: .06em;
+            display: flex; align-items: center; justify-content: space-between; gap: 6px; }
+  .vc .vr { display: flex; align-items: center; gap: 4px; margin-top: 1px; }
+  .vc .vs { flex: 1; min-width: 34px; accent-color: var(--hot); height: 18px; }
+  .vc .vv { flex: none; color: var(--hot); font-weight: 400; min-width: 44px; text-align: right; padding: 0 2px; }
+  /* A FINGER IS ONE OF THE TWO POINTERS THIS IS PLAYED WITH, so the smallest
+     control on the page is sized for one at its base size rather than only
+     under a media query the emulator may not report. */
+  .vc .vx, .vc .vk { flex: none; padding: 2px 6px; font-size: 11px; line-height: 1.2;
+                     min-height: 21px; background: transparent; }
+  .vc .vk { padding: 1px 6px; }
+  /* THE LATCH LOOK AGAIN, at a specificity that beats the line above. Without
+     it the pressed LOCK keeps the transparent background from `.vc .vk` and
+     its dark text disappears into the panel: a latched control reading as an
+     empty box. Found by looking at a screenshot, which is the only way it
+     could have been found. */
+  .vc .vk[aria-pressed="true"] { background: var(--ink); color: var(--bg); border-color: var(--ink); }
+  /* HELD BY YOU — the value is inverted and the cell is edged in the same ink. */
+  .vc.is-held { border-color: var(--ink); }
+  .vc.is-held .vv { background: var(--ink); color: var(--bg); }
+  /* ASKED FOR, NOT LANDED YET — dashed, and the value carries an arrow. A 1px
+     dash does not survive a small cell on its own, so it gets a faint fill
+     too. The wait is the feature: a hold lands on the next bar. */
+  .vc.is-wait { border-color: var(--warn); border-style: dashed; background: rgba(214,169,127,.08); }
+  .vc.is-wait .vv { color: var(--warn); }
+  /* CANNOT APPLY HERE — dotted, dimmer than everything, reading nothing. */
+  .vc.is-dead { border-color: var(--inert); border-style: dotted; }
+  .vc.is-dead .vl, .vc.is-dead .vv { color: var(--inert); }
+  .vc.is-dead .vs { accent-color: var(--inert); opacity: .3; pointer-events: none; }
+  .cwhy { color: var(--warn); min-height: 1.4em; margin-top: 3px; font-size: 12px; }
+  /* a channel that is silent, or sounding but unable to vary, is marked where
+     its name is as well as on its reason line: one colour, one meaning */
+  .chan.silent .cid b, .chan.silent .cid .pat, .chan.frozen .cid b { color: var(--warn); }
+  .rel { padding: 2px 6px !important; font-size: 11px; background: transparent; }
+  .cwhy:empty::before { content: "\00a0"; }
+  .crel { display: flex; align-items: center; gap: 8px; margin-top: 5px; }
+  .note { color: var(--dim); margin-top: 10px; }
+  details { margin: 6px 0; }
+  summary { color: var(--dim); cursor: pointer; padding: 3px 0; }
+  summary:hover { color: var(--hot); }
+  .src { color: var(--dim); font-size: 12px; margin: 6px 0 0; }
+  .src b { color: var(--ink); font-weight: 400; }
+  @media (max-width: 560px) {
+    .cverbs { grid-template-columns: repeat(auto-fit, minmax(150px, 1fr)); }
+    .cid .fad { max-width: none; }
+    /* the NOW controls were laid out as a fixed 150 px label beside a fixed
+       78 px readout and pushed the page 236 px wider than a phone. They were
+       already doing that before the channels moved above them; the label goes
+       onto its own line rather than the page scrolling sideways. */
+    .row { flex-wrap: wrap; }
+    .row label { width: auto; flex: 1 0 100%; }
+    .row output { width: 62px; }
+    .row input[type=range], .row select { min-width: 0; }
+  }
+  @media (pointer: coarse), (hover: none) {
+    .vc .vs { height: 24px; }
+    .vc .vx, .vc .vk { padding: 5px 8px; }
+    .rel { padding: 5px 8px !important; }
+  }
   #status { color: var(--warn); min-height: 1.5em; margin: 8px 0 0; }
   #perf { color: var(--dim); font-size: 12px; margin-top: 10px; }
   a { color: var(--hot); }
@@ -52,55 +145,47 @@
 <main>
   <h1>dubsession playing <b>221-dub-basic</b> · 125 BPM · G minor · <span id="seedline">seed —</span></h1>
 
+  <!-- THE TRANSPORT AND THE TWO SWITCHES THAT DECIDE WHO OWNS THE PIECE.
+       `auto` is the ring; `release all` is the way back out of everything the
+       hand is holding. Both are latches and both wear the one `on` look. -->
   <div class="top">
     <button id="go">start</button>
     <button id="mute" aria-pressed="false">mute</button>
-    <!-- THE RING, AS A SWITCH. Off by default: with it off the arrangement
-         holds still and only the modulators breathe. This control is
-         deliberately the plainest thing that works; the surface for the
-         switch and for the held values is its own piece of work. -->
-    <label style="margin-left:14px" title="let the movement's schedule run. Off by default: with it off the arrangement holds still and nothing changes it but your hand.">
-      <input id="auto" type="checkbox"> auto</label>
+    <button id="auto" aria-pressed="false" style="margin-left:14px">auto</button>
+    <button id="releaseall" disabled>release all</button>
   </div>
+
+  <div id="movenow" style="color:var(--dim);margin-top:8px">
+    auto is OFF — the schedule is not running. The arrangement is yours.</div>
 
   <div id="status"></div>
 
   <div id="bars">bar — · step —</div>
   <div id="steps"></div>
 
+  <!-- ===================================================================
+       THE CHANNELS. This is the instrument, so it is first. Everything in
+       here lands ON THE BAR: a value you move is held from the next bar,
+       because this bar is already scheduled up to 140 ms ahead on the audio
+       clock. The controls under "the space" land NOW, and the difference is
+       carried by which block a control is in rather than by decoration.
+       =================================================================== -->
   <fieldset>
-    <legend>the movement — 256 bars, 8 sections of 32, one event each</legend>
-    <div class="row"><label>seek to bar</label>
-      <input id="seek" type="range" min="0" max="255" step="1" value="0"><output id="seek_v"></output>
-      <button id="seekgo" style="padding:3px 10px;margin-left:8px">go</button></div>
-    <p id="seekwhy" style="color:var(--dim);margin:4px 0 10px">
-      Seek is not a convenience. Composition state at bar N is a pure function of
-      (seed, N, auto, and whatever you are holding) — no counters, no memory of
-      what happened last bar — so bar 200 reached by seeking fires exactly what
-      bar 200 fires when it is played into. That is what makes a two-hour set
-      judgeable: nobody can listen to two hours in order at every gate.
-      The <em>sound</em> is a weaker claim, and measured on 2026-09-18 it does not
-      hold: a cold start at bar 96 differs from the played-through render by about
-      20 dB below programme, and more run-up does not close it. The notes fire the
-      same; the engine underneath them has not been proved to.</p>
-    <p style="color:var(--dim);margin:4px 0 10px">
-    </p>
-    <div id="movenow" style="color:var(--dim)">not running</div>
-    <table id="sections" style="margin-top:10px"><thead><tr>
-      <th style="width:52px">bar</th><th style="width:210px">event</th><th>why</th>
-    </tr></thead><tbody></tbody></table>
+    <legend>the channels · LANDS ON THE BAR</legend>
+    <div id="chans"></div>
+    <div class="note">
+      <button id="reset" style="padding:3px 10px">faders back to the manifest</button>
+      <details><summary>what the four looks mean</summary>
+      <p class="src"><b>inverted</b> held by you · <b>dashed, with an arrow</b> asked
+      for, lands next bar · <b>plain</b> the schedule owns it · <b>dotted, ——</b>
+      cannot apply here. Every figure is what the engine resolved for the bar
+      you are hearing; <em>base</em>▸<em>received</em> where a modulator is writing it.</p>
+      </details>
+    </div>
   </fieldset>
 
   <fieldset>
-    <legend>the set</legend>
-    <div class="row"><label>tempo</label><input id="bpm" type="range" min="110" max="140" step="1" value="125"><output id="bpm_v"></output></div>
-    <div class="row"><label>master</label><input id="vol" type="range" min="0" max="1" step="0.01" value="0.8"><output id="vol_v"></output></div>
-    <div class="row"><label>kick pump</label><input id="pump" type="range" min="0" max="1" step="0.01" value="0"
-      title="The sidechain duck on everything tonal, from the Endless Set's deck (:8479): 15 ms down, 240 ms back. IT STARTS AT ZERO, and here is why. The manifest's twenty-piece round has no ducking anywhere in it — this is the reference's architecture, not the piece's. And it does not earn its place on the rumble either: MEASURED, a pump of 0.25 takes 1.4 dB off the rumble's own level inside 30-120 Hz and does NOT sharpen its swell into the gap (crest 11.8 dB against 12.9 dB with no pump at all) — the rumble already has a duck of its own. It also costs 0.68 dB of mix RMS. So it is here, it works, and the owner turns it up if the piece wants it."><output id="pump_v"></output></div>
-  </fieldset>
-
-  <fieldset>
-    <legend>the space — the echo and the room are the instruments</legend>
+    <legend>the space · LANDS NOW</legend>
     <div class="row"><label>echo division</label><select id="dlydiv">
       <option value="0.5" selected>1/8 — the manifest</option>
       <option value="0.75">3/16 dotted eighth — the genre default</option>
@@ -112,30 +197,47 @@
     <div class="row"><label>room size</label><input id="revsize" type="range" min="1.5" max="6" step="0.1" value="4.5"><output id="revsize_v"></output></div>
     <div class="row"><label>room send trim</label><input id="revtrim" type="range" min="0" max="2" step="0.01" value="1"><output id="revtrim_v"></output></div>
     <div class="row"><label>send modulation</label><input id="moddepth" type="range" min="0" max="1" step="0.01" value="1"><output id="moddepth_v"></output></div>
-  </fieldset>
-
-  <fieldset>
-    <legend>the stab — its filter is what moves</legend>
     <div class="row"><label>stab cutoff</label><input id="stabcut" type="range" min="0.35" max="2" step="0.01" value="1"><output id="stabcut_v"></output></div>
   </fieldset>
 
   <fieldset>
-    <legend>the mix</legend>
-    <table id="chans"><thead><tr>
-      <th>ch</th><th>voice</th><th>pattern</th><th style="width:150px">fader</th><th title="the input gain: a fixed stage BEFORE the fader, so the fader values mean the same thing from one channel to the next">in</th><th title="phrase length in bars. Lengths that disagree are the point: 3 against 4 comes round every 12 bars">phr</th><th title="how often a step of this channel actually fires. On a tonal channel the odds are rolled once per NOTE">chn</th><th title="how often the machine may touch this channel at all. LOCK means it holds, bar to bar">mov</th><th>echo</th><th>room</th><th>from</th>
-    </tr></thead><tbody></tbody></table>
-    <div style="color:var(--dim);margin-top:10px">
-      eight faders start where <b>221-dub-basic</b> put them; the rumble is the
-      reference's own idea and starts at its default —
-      <button id="reset" style="padding:3px 10px">back to the manifest</button>
-      <p style="margin:10px 0 0"><b>in</b> is the input gain: one fixed number per channel,
-      ahead of the fader and not on it. A kick built to the reference's recipe peaks 17 dB
-      above a clap built to the reference's recipe, so without this the fader positions would
-      not mean the same thing from one channel to the next. Measured once, each voice alone
-      at the deck sum, and it does not move. It is written here rather than left invisible,
-      because a gain nobody can see is a gain nobody can account for.</p>
-    </div>
+    <legend>the set · LANDS NOW</legend>
+    <div class="row"><label>tempo</label><input id="bpm" type="range" min="110" max="140" step="1" value="125"><output id="bpm_v"></output></div>
+    <div class="row"><label>master</label><input id="vol" type="range" min="0" max="1" step="0.01" value="0.8"><output id="vol_v"></output></div>
+    <div class="row"><label>kick pump</label><input id="pump" type="range" min="0" max="1" step="0.01" value="0"
+      title="The sidechain duck on everything tonal, from the Endless Set's deck (:8479): 15 ms down, 240 ms back. IT STARTS AT ZERO, and here is why. The manifest's twenty-piece round has no ducking anywhere in it — this is the reference's architecture, not the piece's. And it does not earn its place on the rumble either: MEASURED, a pump of 0.25 takes 1.4 dB off the rumble's own level inside 30-120 Hz and does NOT sharpen its swell into the gap (crest 11.8 dB against 12.9 dB with no pump at all) — the rumble already has a duck of its own. It also costs 0.68 dB of mix RMS. So it is here, it works, and the owner turns it up if the piece wants it."><output id="pump_v"></output></div>
   </fieldset>
+
+  <!-- ===================================================================
+       THE MOVEMENT. It is below the instrument on purpose. With `auto` off
+       nothing in the schedule has happened, and a wall of reasoning for
+       events that are not running is not what should stand between a hand
+       and the controls. The reasoning stays REACHABLE — it is the one
+       writable home for why each event exists — so it is one click away
+       rather than deleted.
+       =================================================================== -->
+  <fieldset>
+    <legend>the movement · 256 bars</legend>
+    <div class="row"><label>seek to bar</label>
+      <input id="seek" type="range" min="0" max="255" step="1" value="0"><output id="seek_v"></output>
+      <button id="seekgo" style="padding:3px 10px;margin-left:8px">go</button></div>
+    <details id="schedule">
+      <summary id="schedsum">the schedule — what auto would do, bar by bar</summary>
+      <table id="sections" style="margin-top:6px"><thead><tr>
+        <th style="width:52px">bar</th><th>event</th>
+      </tr></thead><tbody></tbody></table>
+    </details>
+    <!-- THE SEEK'S OWN PARAGRAPH IS GONE, not moved. It explained that
+         composition state at bar N is a pure function of (seed, N, auto,
+         holds) — which is true, is documented where documentation lives, and
+         is not something a player needs mid-set — and it carried a claim about
+         the SOUND seeking identically that was measured false on 2026-09-18.
+         A false sentence rendered on the page is worse than no sentence. -->
+  </fieldset>
+
+  <!-- WHERE THE VOICES COME FROM is not printed either. Every source line and
+       every input gain is still in `CHANNELS` and `INPUT_GAIN` below, which is
+       where they are written down; the page is an instrument. -->
 
   <div id="perf">scheduler: not running</div>
 </main>
@@ -1182,6 +1284,49 @@ function fingerprint(C, seed) {
 /* ==== COMPOSITION LAYER END ==== */
 
 /* ---------------------------------------------------------------------------
+   4c. THE HELD VALUES — ONE OBJECT, AND IT OUTLIVES THE ENGINE
+   ---------------------------------------------------------------------------
+   `holds` was the ENGINE's until 2026-09-18, and the engine does not exist
+   until the first gesture, so `p02.hold(...)` before `start` answered
+   "no engine yet". That is the wrong shape for a surface: the controls are
+   drawn on load, a hand can reach them on load, and a value set there has to
+   be waiting when the first bar resolves rather than refused.
+
+   So the object lives HERE, at module level, and is handed to `createEngine`.
+   The composition layer still only READS it — it remains an input to a pure
+   function of (seed, bar, auto, holds), which is why a hold set before start
+   and a hold set at bar 3000 are the same kind of thing.
+
+   `holdInto` and `releaseFrom` are the only two writers, and both the engine's
+   door and the surface's door go through them, so there is exactly one
+   implementation of "release is the absence of a key, not a flag".
+   --------------------------------------------------------------------------- */
+function emptyHolds() {
+  const h = {};
+  for (const p of HOLD_PARAMS) h[p] = {};
+  return h;
+}
+function holdInto(holds, param, ch, value) {
+  if (HOLD_PARAMS.indexOf(param) === -1)
+    throw new Error("hold: " + param + " is not one of " + HOLD_PARAMS.join(", "));
+  if (!holds[param]) holds[param] = {};
+  holds[param][ch] = value;
+  return holds;
+}
+function releaseFrom(holds, param, ch) {
+  if (param === undefined) {                       // release everything
+    for (const p of HOLD_PARAMS) holds[p] = {};
+  } else if (ch === undefined) {
+    holds[param] = {};
+  } else if (holds[param]) delete holds[param][ch];
+  return holds;
+}
+// THE ONE OBJECT. The surface writes it through `hand.hold`/`hand.release`
+// below; the engine is handed the same reference at `start`, so there is never
+// a second copy to disagree with this one.
+const HOLDS = emptyHolds();
+
+/* ---------------------------------------------------------------------------
    5. THE ENGINE
       Built against a context rather than against `window`, so the same code
       renders offline for measurement as plays live. [E] does the same thing
@@ -1218,12 +1363,15 @@ function createEngine(ctx, opts) {
     // With this false the arrangement holds still and [M]'s modulators keep
     // breathing; nothing in the page moves a value the hand did not move.
     auto: !!opts.auto,
-    // THE HAND'S HELD VALUES. This object is the ENGINE's — the composition
+    // THE HAND'S HELD VALUES. The object belongs to the CALLER — section 4c's
+    // `HOLDS` when this is the live page, `o.holds` when it is a measurement
+    // render — because the surface exists before the engine does and a value
+    // set on load must be waiting when the first bar resolves. The composition
     // layer only reads it, which is what keeps that layer a pure function of
     // (seed, bar, auto, holds). Mutating it must go through `hold`/`release`
-    // below, because the per-bar composition is MEMOISED and the memo has to
-    // be told that its input changed.
-    holds: opts.holds || { chance: {}, move: {}, phrase: {}, delay: {}, reverb: {} }
+    // below or through the surface's own door, because the per-bar composition
+    // is MEMOISED and the memo has to be told that its input changed.
+    holds: opts.holds || emptyHolds()
   };
 
   /* --- EVERYTHING RANDOM IN THIS ENGINE IS NOW SEEDED, AND HERE IS WHY. -----
@@ -1970,18 +2118,12 @@ function createEngine(ctx, opts) {
      writes a gain: the bar's resolution does that, once, where every other
      arrangement value lands. */
   function hold(param, ch, value) {
-    if (HOLD_PARAMS.indexOf(param) === -1)
-      throw new Error("hold: " + param + " is not one of " + HOLD_PARAMS.join(", "));
-    cfg.holds[param][ch] = value;
+    holdInto(cfg.holds, param, ch, value);
     recompose();
     return cfg.holds;
   }
   function release(param, ch) {
-    if (param === undefined) {                       // release everything
-      for (const p of HOLD_PARAMS) cfg.holds[p] = {};
-    } else if (ch === undefined) {
-      cfg.holds[param] = {};
-    } else delete cfg.holds[param][ch];
+    releaseFrom(cfg.holds, param, ch);
     recompose();
     return cfg.holds;
   }
@@ -2236,9 +2378,14 @@ let muted = localStorage.getItem("p02.muted") === "1";
 // remembered because forgetting it makes a noise nobody asked for; `auto` is
 // the opposite — the safe state is off, and a page that came back with the
 // schedule running because of something the owner clicked last week is the
-// arrangement moving where the hand did not put it. Persisting the switch, and
-// the surface for the held values, belong to the piece of work that builds
-// that surface.
+// arrangement moving where the hand did not put it.
+//
+// ASKED AGAIN ON 2026-09-18, WITH THE SURFACE FOR IT BUILT, AND THE ANSWER IS
+// THE SAME, for a second reason: "reload and it is exactly the same piece" is
+// the claim the gate procedure rests on, and a switch restored from last
+// week's click makes the piece depend on history that is in neither the seed
+// nor the URL. THE HELD VALUES ARE NOT PERSISTED EITHER, and for the same
+// reason. `muted` is the only thing this page remembers.
 let autoOn = false;
 // The seed is the whole set: composition state at bar N is a pure function of
 // (seed, N, auto, holds). It comes from ?seed= — the QUERY, never the path,
@@ -2258,7 +2405,7 @@ function seek(bar) {
   uiQueue.length = 0;
   if (ctx && T.running) T.nextT = ctx.currentTime + 0.1;
   if (engine) engine.recompose();
-  say(`seek to bar ${bar + 1} — section ${Math.floor(bar / MOVEMENT.section) + 1} of ${Math.ceil(MOVEMENT.bars / MOVEMENT.section)}. Nothing was replayed to get here.`);
+  say(`seek to bar ${bar + 1} — section ${Math.floor(bar / MOVEMENT.section) + 1} of ${Math.ceil(MOVEMENT.bars / MOVEMENT.section)}.`);
   return bar;
 }
 
@@ -2379,36 +2526,136 @@ function patternText(ch) {
   return "—";
 }
 
-function buildTable() {
-  const tb = ui("chans").querySelector("tbody");
-  tb.innerHTML = "";
-  for (const c of CHANNELS) {
-    const tr = document.createElement("tr");
-    tr.id = "ch" + c.ch;
-    const empty = !!PIECE.empty[c.ch];
-    if (empty) tr.className = "silent";
-    const w = PIECE.wets[c.ch] || { delay: 0, reverb: 0 };
-    const lvl = FADER_START[c.ch];
-    tr.innerHTML =
-      `<td>${c.ch}</td>`
-      + `<td>${empty ? "—" : c.voice}</td>`
-      + `<td style="letter-spacing:.12em">${patternText(c.ch)}</td>`
-      + `<td><input type="range" id="fad${c.ch}" min="0" max="${c.max || 1.2}" step="0.005" value="${lvl}"`
-      + `${empty ? ' disabled title="nothing is written on this channel — see the note"' : ''}`
-      + ` style="width:100px;accent-color:var(--hot)"> <span class="n" id="lvl${c.ch}">${lvl.toFixed(3)}</span></td>`
-      + `<td class="n" title="input gain — fixed, measured once, ahead of the fader">`
-      + `${c.ch === "R" ? "\u2014" : (INPUT_GAIN[c.ch] || 1).toFixed(3)}</td>`
-      + (c.ch === "R"
-          ? `<td class="n">\u2014</td><td class="n">\u2014</td><td class="n">\u2014</td>`
-          : `<td class="n" id="phr${c.ch}">1</td><td class="n" id="chn${c.ch}">1.00</td>`
-            + `<td class="n" id="mov${c.ch}">0.00</td>`)
-      + (c.ch === "R"
-          ? `<td class="n">\u2014</td><td class="n">\u2014</td>`
-          : `<td class="n" id="dly${c.ch}">${(w.delay / 100).toFixed(2)}</td>`
-            + `<td class="n" id="rev${c.ch}">${(w.reverb / 100).toFixed(2)}</td>`)
-      + `<td class="why">${empty ? PIECE.empty[c.ch] : c.from}</td>`;
-    tb.appendChild(tr);
+/* ---------------------------------------------------------------------------
+   THE HAND'S DOOR ON THE SURFACE SIDE
+   ---------------------------------------------------------------------------
+   The engine has its own door (`engine.hold`), and it is the same one: both
+   write section 4c's `HOLDS` through `holdInto`/`releaseFrom`. The difference
+   is that this one works BEFORE THERE IS AN ENGINE — the controls are drawn on
+   load, a hand can reach them on load, and a value set there is waiting when
+   the first bar resolves rather than refused.
+
+   Everything here lands ON THE NEXT BAR. `recompose()` is what says so: the
+   memoised composition is keyed on the bar, and without the bump the bar the
+   hand just changed would be served out of the cache.
+   --------------------------------------------------------------------------- */
+const hand = {
+  ask: (param, ch) => (HOLDS[param] ? HOLDS[param][ch] : undefined),
+  hold(param, ch, value) {
+    holdInto(HOLDS, param, ch, value);
+    if (engine) engine.recompose();
+    refreshHand();
+    return HOLDS;
+  },
+  release(param, ch) {
+    releaseFrom(HOLDS, param, ch);
+    if (engine) engine.recompose();
+    refreshHand();
+    return HOLDS;
+  },
+  count() {
+    let n = 0;
+    for (const p of HOLD_PARAMS) n += Object.keys(HOLDS[p] || {}).length;
+    return n;
   }
+};
+
+/* THE FIVE VERBS, IN THE ORDER A HAND REACHES FOR THEM. `chance` first because
+   it is the one that thins a channel out; the two sends last because they are
+   the ones the schedule and the modulators also write. The ranges are the
+   composition layer's own — `holdClamp` clamps every one of them again on the
+   way in, because a surface is a claim and the layer does not take its word
+   for it. The sends are offered over 0..1; the clamp allows 2 and the two send
+   TRIMS under "the space" are where a channel is pushed past its own base. */
+const VERBS = [
+  { p: "chance", label: "chance", min: 0, max: 1, step: 0.01 },
+  { p: "phrase", label: "phrase", min: 1, max: 8, step: 1 },
+  { p: "move",   label: "move",   min: 0, max: 1, step: 0.01 },
+  { p: "delay",  label: "echo send", min: 0, max: 1, step: 0.01 },
+  { p: "reverb", label: "room send", min: 0, max: 1, step: 0.01 }
+];
+
+const resolvedOf = (C, param, ch) =>
+  (param === "delay" || param === "reverb") ? C.wet[ch][param] : C[param][ch];
+const sameValue = (a, b) => a === b ||
+  (typeof a === "number" && typeof b === "number" && Math.abs(a - b) < 1e-9);
+function fmtVerb(param, v) {
+  if (param === "move") return v === LOCK ? "LOCK" : v.toFixed(2);
+  if (param === "phrase") return String(v);
+  return typeof v === "number" ? v.toFixed(2) : String(v);
+}
+// "base ▸ what the engine received". [G] "The displayed value is always the
+// base, the number your hand owns; the motion is shown as a span, not an
+// animated number." The base is on the left and the ENGINE's own number is on
+// the right, because a number the surface shows and a number the engine
+// receives are different claims and this is where they are put side by side.
+function modSuffix(param, ch, C) {
+  if (!engine || !C) return "";
+  if (!C.mods.some(m => m.channel === ch && m.verb === param)) return "";
+  const v = engine.modState[ch + ":" + param];
+  return v === undefined ? "" : "▸" + v.toFixed(2);
+}
+
+function verbCell(ch, v, dead) {
+  const id = v.p + "_" + ch;
+  const d = dead ? " disabled" : "";
+  return `<div class="vc${dead ? " is-dead" : ""}" id="hc_${id}"${dead ? ' data-dead="1"' : ""}>`
+    + `<i class="vl">${v.label}`
+    // LOCK is a VALUE of `move` and not a second control, so it sits on the
+    // verb's own label line rather than in the row of numbers: every control
+    // row on the page is then [slider][value][release] and nothing overflows
+    // its column.
+    + (v.p === "move" ? `<button class="vk" id="hk_${ch}" aria-pressed="false"${d}>LOCK</button>` : "")
+    + `</i><div class="vr">`
+    + `<input class="vs" type="range" id="hs_${id}" min="${v.min}" max="${v.max}"`
+    + ` step="${v.step}" value="${v.min}" aria-label="${v.label} channel ${ch}"${d}>`
+    + `<b class="vv" id="hv_${id}">${dead ? "——" : ""}</b>`
+    + `<button class="vx" id="hx_${id}" aria-label="release ${v.label} on channel ${ch}" disabled>×</button>`
+    + `</div></div>`;
+}
+
+/* ONE CHANNEL IS ONE BLOCK: who it is and how loud, then the five verbs, then
+   the reason line. There is no second table printing the same channel again —
+   two tables is how a surface ends up with two vocabularies for one value. */
+function buildChannels() {
+  const box = ui("chans");
+  box.innerHTML = "";
+  for (const c of CHANNELS) {
+    const ch = c.ch;
+    const empty = !!PIECE.empty[ch];
+    // THE VERBS CANNOT APPLY TO TWO OF THESE AND THEY ARE DRAWN DEAD, not left
+    // as numbers that change no sound. Channel 4 has no material at all; the
+    // rumble has no pattern of its own — it sounds wherever the kick does.
+    const dead = empty || ch === "R";
+    const lvl = FADER_START[ch];
+    const el = document.createElement("div");
+    el.className = "chan";
+    el.id = "ch" + ch;
+    el.innerHTML =
+      `<div class="cid"><b>${ch} ${empty ? "—" : c.voice}</b>`
+      + `<span class="pat">${patternText(ch)}</span>`
+      + `<input class="fad" type="range" id="fad${ch}" min="0" max="${c.max || 1.2}"`
+      + ` step="0.005" value="${lvl}" aria-label="fader channel ${ch}"${empty ? " disabled" : ""}>`
+      + `<span class="n" id="lvl${ch}">${lvl.toFixed(3)}</span>`
+      + `<span class="in">in ${ch === "R" ? "—" : (INPUT_GAIN[ch] || 1).toFixed(3)}</span>`
+      + `<button class="vx rel" id="hr_${ch}" disabled>release channel</button>`
+      + `</div>`
+      + `<div class="cverbs">${VERBS.map(v => verbCell(ch, v, dead)).join("")}</div>`
+      + `<div class="cwhy" id="why${ch}"${ch === "R"
+          ? ' title="the rumble is a dark reverb on a copy of the kick: it has no pattern of its own, so none of the composition verbs applies to it">no pattern of its own · it follows the kick'
+          : '>'}</div>`;
+    box.appendChild(el);
+  }
+}
+
+// The prose that used to sit in a column beside the controls. It is still
+// reachable — it is the one written home for where each voice came from — and
+// it is no longer the widest thing on the page.
+function buildSources_unused() {
+  ui("sources").innerHTML = CHANNELS.map(c =>
+    `<p class="src"><b>${c.ch} ${c.voice}</b> · in `
+    + `${c.ch === "R" ? "—" : (INPUT_GAIN[c.ch] || 1).toFixed(3)} · `
+    + `${PIECE.empty[c.ch] ? PIECE.empty[c.ch] + " " : ""}${c.from}</p>`).join("");
 }
 
 function wireFaders() {
@@ -2427,7 +2674,42 @@ function wireFaders() {
       if (engine) engine.setLevel(c.ch, v);
       if (c.ch !== 3) ui("lvl" + c.ch).textContent = v.toFixed(3);
     }
-    say("the faders are back where 221-dub-basic put them.");
+    say("faders back to the manifest.");
+  });
+}
+
+/* TOUCHING A VALUE HOLDS IT. That is the whole rule from the sibling issue,
+   made into a gesture: there is no separate "hold" button to forget to press,
+   and the hand outranks the schedule from the moment it moves something. The
+   `×` beside each value is how it goes back under the schedule; the button on
+   the channel's own line releases its five at once; `release all` at the top
+   releases the page. */
+function wireHand() {
+  for (const c of CHANNELS) {
+    const ch = c.ch;
+    if (PIECE.empty[ch] || ch === "R") continue;      // dead, and wired to nothing
+    for (const v of VERBS) {
+      const sl = ui("hs_" + v.p + "_" + ch);
+      sl.addEventListener("input", () => hand.hold(v.p, ch, parseFloat(sl.value)));
+      ui("hx_" + v.p + "_" + ch).addEventListener("click", () => hand.release(v.p, ch));
+    }
+    // LOCK is a value of `move`, not a second control: it holds the channel on
+    // one bar for ever. Pressing it again releases, which is what every other
+    // latch on this page does.
+    ui("hk_" + ch).addEventListener("click", () => {
+      if (hand.ask("move", ch) === LOCK) hand.release("move", ch);
+      else hand.hold("move", ch, LOCK);
+    });
+    ui("hr_" + ch).addEventListener("click", () => {
+      for (const v of VERBS) releaseFrom(HOLDS, v.p, ch);
+      if (engine) engine.recompose();
+      refreshHand();
+      say("channel " + ch + " released.");
+    });
+  }
+  ui("releaseall").addEventListener("click", () => {
+    hand.release();
+    say("released — everything is back under the schedule.");
   });
 }
 
@@ -2441,14 +2723,19 @@ function buildSections() {
   MOVEMENT.sections.forEach((sec, i) => {
     const tr = document.createElement("tr");
     tr.id = "sec" + i;
-    tr.innerHTML = `<td class="n">${sec.at + 1}</td><td>${eventText(sec.event)}</td><td class="why">${sec.why}</td>`;
+    // THE `why` IS NOT PRINTED. Owner, 2026-09-18: "i want to play instrument,
+    // not read/scroll". It stays in `MOVEMENT.sections` as the one writable
+    // home for why each event exists, and it is carried on the row as a title
+    // rather than as a paragraph between the owner and the controls.
+    tr.title = sec.why;
+    tr.innerHTML = `<td class="n">${sec.at + 1}</td><td>${eventText(sec.event)}</td>`;
     tb.appendChild(tr);
   });
   (MOVEMENT.gestures || []).forEach((g, i) => {
     const tr = document.createElement("tr");
     tr.id = "ges" + i;
-    tr.innerHTML = `<td class="n">${g.at + 1}</td><td>${eventText(g.what)}</td>`
-      + `<td class="why">gesture — ${g.why}</td>`;
+    tr.title = g.why;
+    tr.innerHTML = `<td class="n">${g.at + 1}</td><td>gesture ${eventText(g.what)}</td>`;
     tb.appendChild(tr);
   });
 }
@@ -2479,21 +2766,171 @@ function paint() {
     for (let i = 0; i < 16; i++) lamps[i].classList.toggle("on", i === s);
     paintMovement(bar);
   }
-  // what the ENGINE received for the three modulated parameters, not what the
-  // surface thinks it sent
-  // [G] "The displayed value is always the base, the number your hand owns;
-  // the motion is shown as a span, not an animated number." The base is kept on
-  // the left; what the ENGINE actually received is on the right, because a
-  // number the surface shows and a number the engine receives are different
-  // claims and this is the one place they are put side by side.
-  const ms = engine.modState;
-  if (ms["6:delay"]  !== undefined) ui("dly6").textContent = "0.00\u25b8" + ms["6:delay"].toFixed(2);
-  if (ms["6:reverb"] !== undefined) ui("rev6").textContent = "0.06\u25b8" + ms["6:reverb"].toFixed(2);
-  if (ms["3:level"]  !== undefined)
-    ui("lvl3").textContent = parseFloat(ui("fad3").value).toFixed(2) + "\u25b8"
-                           + (ms["3:level"] / (INPUT_GAIN[3] || 1)).toFixed(2);
+  // WHAT THE ENGINE RECEIVED for the parameters a modulator is writing. This is
+  // the only thing repainted per frame, it is at most three leaf nodes, and it
+  // writes `textContent` rather than markup: nothing that is not moving is
+  // repainted.
+  const C = engine.composition();
+  if (C) for (let i = 0; i < C.mods.length; i++) {
+    const m = C.mods[i];
+    if (m.verb === "delay" || m.verb === "reverb") {
+      const cell = ui("hc_" + m.verb + "_" + m.channel);
+      // a value the hand has asked for and the bar has not landed yet keeps
+      // its arrow: the engine's number is not the answer to that question
+      if (cell && !cell.classList.contains("is-wait"))
+        ui("hv_" + m.verb + "_" + m.channel).textContent =
+          fmtVerb(m.verb, C.wet[m.channel][m.verb]) + modSuffix(m.verb, m.channel, C);
+    } else if (m.verb === "level") {
+      const ms = engine.modState[m.channel + ":level"];
+      if (ms !== undefined)
+        ui("lvl" + m.channel).textContent =
+          parseFloat(ui("fad" + m.channel).value).toFixed(2) + "▸"
+          + (ms / (INPUT_GAIN[m.channel] || 1)).toFixed(2);
+    }
+  }
   ui("perf").textContent = perfReport();
 }
+
+/* ---------------------------------------------------------------------------
+   PAINTING THE HAND
+   ---------------------------------------------------------------------------
+   Four states and one look each, and nothing invents a fifth:
+
+     running   the schedule owns this value   plain edge, value in --hot
+     held      you own it, and it has landed  solid --ink edge, value inverted
+     wait      you asked; the bar has not     dashed --warn edge, value "→ 0.40"
+               come round yet
+     dead      cannot apply here              dotted --inert edge, value "——"
+
+   `wait` is not decoration. A hold lands on the NEXT bar, because this bar is
+   already scheduled up to 140 ms ahead on the audio clock, and before `start`
+   there is no bar at all — so the arrow is the honest answer to "has this
+   happened yet". It flips to `held` only when the ENGINE's own composition for
+   the bar being heard says the value is held AND reads back what was asked
+   for. What the surface thinks it sent is not evidence.
+   --------------------------------------------------------------------------- */
+function previewBar() {
+  const el = ui("seek");
+  return el ? (parseInt(el.value, 10) || 0) : 0;
+}
+// The engine's own resolution if there is one; otherwise the same pure
+// function the engine would ask, for the bar `start` would begin on. The two
+// are never mixed: `engC` is passed separately and is the only thing allowed
+// to answer "has it landed".
+function shownComposition() {
+  const engC = engine ? engine.composition() : null;
+  return engC || compositionAt(SEED, PIECE, MOVEMENT, previewBar(),
+                               { auto: autoOn, holds: HOLDS });
+}
+
+function paintCell(ch, v, C, engC) {
+  const cell = ui("hc_" + v.p + "_" + ch);
+  if (!cell || cell.dataset.dead === "1") return;   // dead is drawn once and never moves
+  const val = ui("hv_" + v.p + "_" + ch);
+  const sl = ui("hs_" + v.p + "_" + ch);
+  const want = hand.ask(v.p, ch);
+  const held = want !== undefined;
+  const asked = held ? holdClamp(v.p, want) : undefined;
+  const landed = held && !!engC && engC.held[v.p] && engC.held[v.p][ch] === true
+                 && sameValue(resolvedOf(engC, v.p, ch), asked);
+  cell.classList.toggle("is-held", held && landed);
+  cell.classList.toggle("is-wait", held && !landed);
+  ui("hx_" + v.p + "_" + ch).disabled = !held;
+  if (held && !landed) val.textContent = "→" + fmtVerb(v.p, asked);
+  else {
+    const r = resolvedOf(C, v.p, ch);
+    val.textContent = fmtVerb(v.p, r) + modSuffix(v.p, ch, C);
+  }
+  if (v.p === "move") ui("hk_" + ch).setAttribute("aria-pressed", String(held && want === LOCK));
+  // An untouched slider reads the value that is actually running, so picking it
+  // up does not jump. A slider under a hand is left alone.
+  if (document.activeElement !== sl) {
+    const r = held ? asked : resolvedOf(C, v.p, ch);
+    if (r !== LOCK && typeof r === "number") sl.value = String(r);
+  }
+}
+
+/* A SILENT CHANNEL MUST SAY WHY IT IS SILENT, and a channel that is sounding
+   but CANNOT VARY has to say that too — two different questions, one line,
+   whichever applies. The second one is the phrase-1 trap: at phrase 1 with
+   move 0, a chance below 1 is one fixed thinned pattern for ever rather than
+   variation, and a hand can now dial it directly.
+
+   BOTH ARE SHORT AND BOTH ARE VISIBLE. The layer writes a full sentence for
+   each; the page is an instrument and prints a label. The sentence rides along
+   as a `title`, which is a redundant hint and never the only copy — a tooltip
+   shows nothing on the iPad, and the iPad is half of what this is played on. */
+function shortSilence(ch, C) {
+  if (PIECE.empty[ch]) return "silent · no material";
+  if (C.present[ch] <= 0) return "silent · left the arrangement";
+  if (C.chance[ch] <= 0) return "silent · chance 0";
+  return "silent · chance let nothing through this bar";
+}
+function paintWhy(ch, C) {
+  const el = ui("why" + ch);
+  if (!el || ch === "R") return;
+  let t = "", full = "";
+  if (C.silent[ch]) { t = shortSilence(ch, C); full = C.silent[ch]; }
+  if (C.frozen[ch]) {
+    t += (t ? "  ·  " : "") + "cannot vary · phrase 1, move 0";
+    full += (full ? " — " : "") + C.frozen[ch];
+  }
+  if (el.textContent !== t) { el.textContent = t; el.title = full; }
+  const block = ui("ch" + ch);
+  if (block) {
+    block.classList.toggle("silent", !!C.silent[ch]);
+    block.classList.toggle("frozen", !C.silent[ch] && !!C.frozen[ch]);
+  }
+}
+
+function paintHand() {
+  const engC = engine ? engine.composition() : null;
+  const C = engC || compositionAt(SEED, PIECE, MOVEMENT, previewBar(),
+                                  { auto: autoOn, holds: HOLDS });
+  for (const c of CHANNELS) {
+    const ch = c.ch;
+    if (ch === "R" || PIECE.empty[ch]) { if (PIECE.empty[ch]) paintWhy(ch, C); continue; }
+    for (const v of VERBS) paintCell(ch, v, C, engC);
+    paintWhy(ch, C);
+    let n = 0;
+    for (const v of VERBS) if (hand.ask(v.p, ch) !== undefined) n++;
+    ui("hr_" + ch).disabled = n === 0;
+  }
+  return C;
+}
+
+/* WHICH OF THE TWO OWNS THIS BAR IS THE FIRST THING THE LINE SAYS. With the
+   ring off, "section 5 of 8" would be a lie dressed as a readout: no section
+   event has run at all. --- */
+function paintHeader(C) {
+  const bar = C.bar;
+  const n = hand.count();
+  ui("releaseall").disabled = n === 0;
+  ui("movenow").textContent =
+    (C.auto ? `auto ON · section ${Math.floor(bar / MOVEMENT.section) + 1} of ${Math.ceil(MOVEMENT.bars / MOVEMENT.section)}`
+            : "auto OFF · the schedule is not running · the arrangement is yours")
+    + ` · bar ${bar + 1}`
+    + ` · walk ${C.walk >= 0 ? "+" : ""}${C.walk} ${Math.abs(C.walk) === 1 ? "degree" : "degrees"}`
+    + ` · ${C.mods.length} modulator${C.mods.length === 1 ? "" : "s"} bound`
+    + (n ? ` · ${n} value${n === 1 ? "" : "s"} held by you` : " · nothing held")
+    + (T.running ? "" : " · not playing");
+  // The disclosure says what is inside it, so nobody has to open it to find
+  // out that nothing in there is running.
+  let live = -1;
+  if (C.auto) MOVEMENT.sections.forEach((x, i) => { if (x.at <= bar) live = i; });
+  const nEv = MOVEMENT.sections.length + (MOVEMENT.gestures || []).length;
+  ui("schedsum").textContent = live === -1
+    ? `the schedule — ${nEv} events over ${MOVEMENT.bars} bars, and none of them has run: auto is off`
+    : `the schedule — section ${Math.floor(bar / MOVEMENT.section) + 1} of ${Math.ceil(MOVEMENT.bars / MOVEMENT.section)}, last event ${eventText(MOVEMENT.sections[live].event)} at bar ${MOVEMENT.sections[live].at + 1}`;
+  MOVEMENT.sections.forEach((x, i) => {
+    const tr = ui("sec" + i); if (!tr) return;
+    tr.style.color = i === live ? "var(--hot)" : "";
+  });
+}
+
+// One entry point for everything that is not per-frame: the hand moved, the
+// ring was switched, a bar came round, the page was seeked.
+function refreshHand() { paintHeader(paintHand()); }
 
 /* What the ENGINE resolved for this bar, not what the surface thinks it sent.
    A number the surface shows and a number the engine receives are different
@@ -2504,60 +2941,10 @@ function paintMovement(bar) {
   if (!engine) return;
   const C = engine.composition();
   if (!C) return;
-  const sec = Math.floor(bar / MOVEMENT.section);
-  const phr = Math.floor(bar / MOVEMENT.phrase);
-  // WHICH OF THE TWO OWNS THIS BAR IS THE FIRST THING THE LINE SAYS. With the
-  // ring off, "section 5 of 8" would be a lie dressed as a readout: no section
-  // event has run at all.
-  const heldCount = HOLD_PARAMS.reduce((n, p) => n + Object.keys(C.held[p] || {})
-    .filter(ch => C.held[p][ch]).length, 0);
-  ui("movenow").textContent =
-    (C.auto ? `auto ON · section ${sec + 1} of ${Math.ceil(MOVEMENT.bars / MOVEMENT.section)}`
-            : "auto OFF · the schedule is not running · the arrangement is yours")
-    + ` · phrase ${phr + 1} · bar ${bar % MOVEMENT.section + 1} of ${MOVEMENT.section}`
-    + ` · walk ${C.walk >= 0 ? "+" : ""}${C.walk} ${Math.abs(C.walk) === 1 ? "degree" : "degrees"}`
-    + ` · ${C.mods.length} modulator${C.mods.length === 1 ? "" : "s"} bound`
-    + (heldCount ? ` · ${heldCount} value${heldCount === 1 ? "" : "s"} held by you` : "");
+  paintHeader(C);
   if (bar === lastPainted) return;
   lastPainted = bar;
-  // which scheduled event is the most recent one — and none of them, with the
-  // ring off, because none of them has happened
-  let live = -1;
-  if (C.auto) MOVEMENT.sections.forEach((x, i) => { if (x.at <= bar) live = i; });
-  MOVEMENT.sections.forEach((x, i) => {
-    const tr = ui("sec" + i); if (!tr) return;
-    tr.style.color = i === live ? "var(--hot)" : "";
-  });
-  for (const c of CHANNELS) {
-    if (c.ch === "R") continue;
-    const ch = c.ch;
-    const p = ui("phr" + ch), n = ui("chn" + ch), m = ui("mov" + ch);
-    if (!p) continue;
-    // A HELD VALUE IS MARKED, because "held by you" and "running" are two
-    // different claims about the same number. The mark is a trailing dot and
-    // the cell's own title says which.
-    const mark = (el, param, text) => {
-      const h = C.held[param] && C.held[param][ch];
-      el.textContent = text + (h ? "·" : "");
-      el.title = h ? "held by you — the schedule cannot move it until you release it"
-                   : "running — the schedule owns this value";
-    };
-    mark(p, "phrase", String(C.phrase[ch]));
-    mark(n, "chance", C.chance[ch].toFixed(2));
-    mark(m, "move", C.move[ch] === "LOCK" ? "LOCK" : C.move[ch].toFixed(2));
-    // A SILENT CHANNEL MUST SAY WHY IT IS SILENT. Every way a channel can go
-    // quiet is named by the composition layer, and this is where the name is
-    // shown — silence with nothing to explain it is the one thing this
-    // instrument refuses to produce.
-    const tr = ui("ch" + ch);
-    const why = C.silent[ch];
-    if (tr) {
-      tr.classList.toggle("silent", !!why);
-      const cell = tr.lastElementChild;
-      if (why) { if (cell.dataset.from === undefined) cell.dataset.from = cell.innerHTML; cell.textContent = why; }
-      else if (cell.dataset.from !== undefined) { cell.innerHTML = cell.dataset.from; delete cell.dataset.from; }
-    }
-  }
+  paintHand();
 }
 
 function outputs() {
@@ -2579,6 +2966,26 @@ function outputs() {
   };
   dv.addEventListener("change", updDv); updDv();
   ui("bpm").addEventListener("input", updDv);
+}
+
+/* THE RING, AS A LATCH. One function, so the button, `p02.auto()` and a
+   measurement all leave the surface in the same state. It is NOT REMEMBERED
+   ACROSS A LOAD, and that is a decision rather than an omission: mute is
+   remembered because forgetting it makes a noise nobody asked for, and `auto`
+   is the opposite — its safe state is off. There is a second reason now that
+   the hand holds values too. "Reload and it is exactly the same piece" is the
+   claim this page rests on, and a switch restored from something clicked last
+   week would make the piece depend on history that is not in the seed and not
+   in the URL. What persists here is `muted`, and nothing else. */
+function setAuto(on) {
+  autoOn = !!on;
+  ui("auto").setAttribute("aria-pressed", String(autoOn));
+  if (engine) engine.set("auto", autoOn);
+  lastPainted = -1;
+  refreshHand();
+  say(autoOn ? "auto on — the schedule runs from the next bar. What you hold stays held."
+             : "auto off — the arrangement holds still. Only the modulators breathe.");
+  return autoOn;
 }
 
 function wire() {
@@ -2603,19 +3010,13 @@ function wire() {
     const b = parseInt(sk.value, 10);
     sko.textContent = `${b + 1} / ${MOVEMENT.bars}`;
   };
-  sk.addEventListener("input", updSeek); updSeek();
-  ui("seekgo").addEventListener("click", () => { seek(parseInt(sk.value, 10)); lastPainted = -1; });
-  // THE RING, SWITCHED BY HAND. `autoOn` is held here as well as in the engine
-  // because the engine does not exist until the first gesture, and the switch
-  // has to be settable before there is anything to play it.
-  ui("auto").addEventListener("change", () => {
-    autoOn = ui("auto").checked;
-    if (engine) engine.set("auto", autoOn);
-    lastPainted = -1;
-    say(autoOn
-      ? "auto on — the movement's schedule is running. Anything you hold stays held."
-      : "auto off — the arrangement holds still. The modulators keep breathing; nothing else moves unless you move it.");
-  });
+  sk.addEventListener("input", () => { updSeek(); if (!engine) refreshHand(); }); updSeek();
+  ui("seekgo").addEventListener("click", () => { seek(parseInt(sk.value, 10)); lastPainted = -1; refreshHand(); });
+  // THE RING, SWITCHED BY HAND, AND IT IS A LATCH LIKE EVERY OTHER LATCH HERE.
+  // `autoOn` is held here as well as in the engine because the engine does not
+  // exist until the first gesture, and the switch has to be settable before
+  // there is anything to play it.
+  ui("auto").addEventListener("click", () => setAuto(!autoOn));
   ui("revsize").addEventListener("change", () => { if (engine) engine.set("revSeconds", val("revsize")); });
   ui("dlydiv").addEventListener("change", () => { if (engine) engine.set("dlyBeats", parseFloat(ui("dlydiv").value)); });
 }
@@ -2626,7 +3027,7 @@ function applyMute() {
   ui("mute").setAttribute("aria-pressed", String(muted));
   ui("mute").textContent = muted ? "muted" : "mute";
   if (engine) engine.A.out.gain.setTargetAtTime(muted ? 0 : 0.97, ctx.currentTime, 0.01);
-  if (muted) say("muted — the transport is still running and nothing reaches the output. Press mute again to hear it.", true);
+  if (muted) say("muted — the transport runs, nothing reaches the output.", true);
   else if (sayUntil === Infinity) { ui("status").textContent = ""; sayUntil = 0; }
 }
 
@@ -2635,7 +3036,9 @@ async function start() {
   if (T.running) { stop(); return; }
   if (!ctx) {
     ctx = new (window.AudioContext || window.webkitAudioContext)();
-    engine = createEngine(ctx, { seed: SEED, movement: MOVEMENT, auto: autoOn });
+    // The held values are section 4c's object, handed over rather than copied:
+    // anything set before this gesture is already waiting in it.
+    engine = createEngine(ctx, { seed: SEED, movement: MOVEMENT, auto: autoOn, holds: HOLDS });
     engine.tail.connect(ctx.destination);
     engine.set("master", val("vol"));
     engine.set("pump", val("pump"));
@@ -2653,7 +3056,7 @@ async function start() {
   timer = setInterval(tick, TICK_MS);
   ui("go").textContent = "stop";
   applyMute();
-  if (!muted) say("playing — channel 4 is silent on purpose; see the table.");
+  if (!muted) say("playing.");
 }
 function stop() {
   T.running = false;
@@ -2754,7 +3157,7 @@ function window0(buf, from, len) {
 window.p02 = {
   state: () => ({
     contextCreated: !!ctx, running: T.running, muted, auto: autoOn,
-    holds: engine ? engine.cfg.holds : null,
+    holds: HOLDS,
     step: T.step, bar: Math.floor(T.step / 16), bpm: T.bpm, seed: SEED, perf: perfReport()
   }),
   renderOffline,
@@ -2762,31 +3165,22 @@ window.p02 = {
 
   /* --- THE SWITCH AND THE HAND, FOR A SURFACE AND FOR A MEASUREMENT --------
      `auto` is the ring: off by default, and off again on every load. `hold`
-     and `release` are the hand. Both work before there is an audio context —
-     the switch is remembered here and handed to the engine when the first
-     gesture creates it; a hold before the context exists is refused rather
-     than silently dropped, and says so. --- */
-  auto: on => {
-    if (on === undefined) return autoOn;
-    autoOn = !!on;
-    if (ui("auto")) ui("auto").checked = autoOn;
-    if (engine) engine.set("auto", autoOn);
-    lastPainted = -1;
-    return autoOn;
-  },
+     and `release` are the hand. BOTH WORK BEFORE THERE IS AN AUDIO CONTEXT:
+     the switch is remembered here and `HOLDS` is module-level (section 4c),
+     and both are handed to the engine when the first gesture creates it. A
+     hold set on a cold page is waiting when the first bar resolves — it used
+     to be refused, which made every control on a silent page a lie. --- */
+  auto: on => (on === undefined ? autoOn : setAuto(on)),
   // hold(param, ch, value) — param is one of HOLD_PARAMS. It lands on the NEXT
   // bar, because this bar is already scheduled up to 140 ms ahead.
-  hold: (param, ch, value) => {
-    if (!engine) return { error: "no engine yet — press start first; a hold needs something to hold" };
-    return engine.hold(param, ch, value);
-  },
+  // IT WORKS BEFORE `start` DOES. `HOLDS` is module-level and is handed to the
+  // engine when the first gesture creates it, so a value set on a cold page is
+  // waiting when the first bar resolves rather than refused.
+  hold: (param, ch, value) => hand.hold(param, ch, value),
   // release(), release(param) or release(param, ch): back under the schedule
   // at the next bar.
-  release: (param, ch) => {
-    if (!engine) return { error: "no engine yet" };
-    return engine.release(param, ch);
-  },
-  holds: () => (engine ? engine.cfg.holds : null),
+  release: (param, ch) => hand.release(param, ch),
+  holds: () => HOLDS,
   // WHAT THE ENGINE WROTE, not what the surface thinks it sent. The paint
   // loop reads this for the three modulated parameters; a measurement has to
   // be able to read it too, or a held send is only ever a claim.
@@ -2812,8 +3206,9 @@ window.p02 = {
 };
 
 /* --- boot --- */
-buildTable();
+buildChannels();
 wireFaders();
+wireHand();
 buildSections();
 buildSteps();
 ui("seedline").textContent = "seed " + SEED + (location.search.indexOf("seed=") === -1 ? " (default — add ?seed=… to the URL)" : "");
@@ -2826,7 +3221,10 @@ ui("mute").addEventListener("click", () => {
   applyMute();
 });
 applyMute();
-if (!muted) say("nothing is playing yet — press start. Audio needs a gesture before a browser will allow it.");
+// The controls are drawn in their real state before a single sound: what is
+// running, what your hand is holding, and what cannot apply here at all.
+refreshHand();
+if (!muted) say("press start — a browser needs a gesture before it will make a sound.");
 paint();
 </script>
 </body>
