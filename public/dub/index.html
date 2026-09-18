@@ -1572,13 +1572,18 @@ const VOICE_PARAMS = {
 
   "voice.pad.tone": {
     id: "vpadtone", label: "pad tone", hand: "live", unit: "Hz",
-    base: 4200, min: 0.45, max: 1.8, step: 0.01, def: 1,
+    base: 4200, min: 0.45, max: 1.25, step: 0.01, def: 1,
     of: "the pad's cutoff — [E] padLp corner :8289, already multiplied by the "
       + "`cutoff` modulator on channel 7. The breath's bandpass and the pad "
       + "foundation's lowpass are derived from it and follow.",
     why: "1890 Hz is a pad under cloth, which is where this genre keeps it "
-       + "half the time; 7560 Hz is as open as it goes before the detuned "
-       + "saws stop being a pad and start being a string section."
+       + "half the time. THE TOP IS WHERE THE CONTROL STOPS ARRIVING, AND IT "
+       + "WAS MEASURED RATHER THAN CHOSEN: the pad's own ceiling is "
+       + "min(10000, cutoff x 1.55..2.1) and a stack of detuned saws has "
+       + "little left up there, so past x1.25 the corner moves and the sound "
+       + "does not. 3-8 kHz RMS, ch7 soloed, 4 bars, 2026-09-18: x0.45 -45.27, "
+       + "x1.00 -41.93, x1.25 -41.85, x1.80 -41.74 dBFS — the last 0.55 of "
+       + "travel is worth 0.11 dB, which is a control that does nothing."
   }
 };
 const VOICE_KEYS = Object.keys(VOICE_PARAMS);

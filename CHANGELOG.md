@@ -1,5 +1,39 @@
 # Changelog
 
+## 2026-09-18 — the voices are reachable while they play
+
+- **Nine controls for what a channel SOUNDS like**, in their own block under
+  the room: the kick's tune, decay and click; the clap's and the rimshot's
+  tone; the sub's edge; the hats' corner, the stab's resonance and the pad's
+  tone. Tuning the drums is the headline, and it was the thing asked for.
+- **Every one is a trim on the recipe's own number, and x1.00 is the recipe
+  exactly** — the same shape the echo and room send trims already use. The
+  number inside the voice is the reference's opinion about this piece; a hand
+  multiplies it rather than replacing it, which is why "back to the recipe" is
+  a single figure and not a second copy of nine defaults.
+- **The block says which controls are which.** The kit is set and left; the
+  three filters are the ones worth moving mid-set. It is carried by position,
+  the way this page carries every other distinction.
+- **A trim lands on the next hit of that voice**, not on the next bar: a voice
+  is built when it fires. That is also why none of them zippers.
+- **Nothing about the default sound changed.** Measured against the previous
+  build, two bars captured sample for sample and compared: the difference is
+  -84.14 dBFS RMS, where the same build compared against ITSELF differs by
+  -85.31 dBFS — the offline render's own spread, 65 dB under a programme at
+  -18.97. Mix peak -5.26, RMS -18.97, unchanged.
+- **Each control was measured at its ends, in the band it acts in** (4 bars,
+  channel soloed, worst of two renders, dBFS RMS): kick tune 30-40 Hz -33.39 →
+  -44.83; kick decay 20-120 Hz -31.53 → -23.99; kick click above 1.2 kHz -58.22
+  → -48.92; clap tone 2.4-3.2 kHz -43.39 → -35.58; rim tune 2.6-3.2 kHz -58.40
+  → -39.68; sub tone 200 Hz-4 kHz -73.70 → -45.53; hats tone 4-6 kHz -40.11 →
+  -60.84; stab resonance 1-4 kHz -60.84 → -57.72; pad tone 3-8 kHz -45.27 →
+  -41.84. Every range does something, and the pad's top was pulled in from
+  x1.80 to x1.25 because past there it moved the corner and not the sound.
+- **No control smuggles level in by the back door.** Whole mix with all nine at
+  once: minimum peak -5.55 RMS -19.23, default -5.26 / -18.97, maximum -4.89 /
+  -18.36. Nothing near the clip knee, and 0.66 dB of peak across the whole
+  instrument's travel.
+
 ## 2026-09-18 — the gate is required, not advised
 
 - The audio gate runs in CI against the built image on every pull request, and
