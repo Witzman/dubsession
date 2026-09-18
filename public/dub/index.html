@@ -55,6 +55,12 @@
   <div class="top">
     <button id="go">start</button>
     <button id="mute" aria-pressed="false">mute</button>
+    <!-- THE RING, AS A SWITCH. Off by default: with it off the arrangement
+         holds still and only the modulators breathe. This control is
+         deliberately the plainest thing that works; the surface for the
+         switch and for the held values is its own piece of work. -->
+    <label style="margin-left:14px" title="let the movement's schedule run. Off by default: with it off the arrangement holds still and nothing changes it but your hand.">
+      <input id="auto" type="checkbox"> auto</label>
   </div>
 
   <div id="status"></div>
@@ -69,10 +75,15 @@
       <button id="seekgo" style="padding:3px 10px;margin-left:8px">go</button></div>
     <p id="seekwhy" style="color:var(--dim);margin:4px 0 10px">
       Seek is not a convenience. Composition state at bar N is a pure function of
-      (seed, N) — no counters, no memory of what happened last bar — so bar 200
-      reached by seeking is bar 200 reached by playing, sample for sample once
-      the echo and the room have settled. That is what makes a two-hour set
+      (seed, N, auto, and whatever you are holding) — no counters, no memory of
+      what happened last bar — so bar 200 reached by seeking fires exactly what
+      bar 200 fires when it is played into. That is what makes a two-hour set
       judgeable: nobody can listen to two hours in order at every gate.
+      The <em>sound</em> is a weaker claim, and measured on 2026-09-18 it does not
+      hold: a cold start at bar 96 differs from the played-through render by about
+      20 dB below programme, and more run-up does not close it. The notes fire the
+      same; the engine underneath them has not been proved to.</p>
+    <p style="color:var(--dim);margin:4px 0 10px">
     </p>
     <div id="movenow" style="color:var(--dim)">not running</div>
     <table id="sections" style="margin-top:10px"><thead><tr>
@@ -388,7 +399,11 @@ function mulberry32(a) {
 
    THE RULE THIS LAYER EXISTS TO KEEP:
 
-       Composition state at bar N is a pure function of (seed, N).
+       Composition state at bar N is a pure function of (seed, N, auto, holds).
+
+   `auto` is the ring, off by default; `holds` is what the owner's hand is
+   holding. Both are INPUTS the caller passes and neither is state this layer
+   accumulates, which is why adding them cost the purity nothing.
 
    No accumulating counters. No "what happened last bar". Ask for bar 3000 and
    you get bar 3000's state without having played bars 0..2999, which is what
@@ -648,7 +663,25 @@ const COMPOSITION_VERBS = {
    not an ACCUMULATOR: it starts from the base every time it is asked, so
    asking for bar 3000 costs the same whether or not bar 2999 was ever played.
    ------------------------------------------------------------------------ */
-function scheduleStateAt(piece, movement, bar) {
+function scheduleStateAt(piece, movement, bar, auto) {
+  // THE RING IS A SWITCH, AND IT IS OFF BY DEFAULT. Owner decision 2026-09-18:
+  // "no 'autoplay' ring of changes, endless, controllable by me", refined the
+  // same hour to "reachable is main goal, but it could also evolve on itself".
+  // Read together: the instrument MAY evolve on its own; what it may not do is
+  // evolve somewhere the hand cannot reach.
+  //
+  // With `auto` false this returns the BASE and nothing else — no section
+  // event, no scheduled walk, no enter or leave. The base still carries [M]'s
+  // three modulators, because the continuous modulators are the TEXTURE and
+  // not the autoplay: the row keeps breathing, the arrangement holds still.
+  //
+  // `auto` DEFAULTS TO FALSE HERE, in the pure function, and not only on the
+  // surface. A caller that forgets to pass it gets the arrangement holding
+  // still, which is the owner's default; the failure mode of the other
+  // direction is the page moving something behind their back, which is the
+  // exact complaint this switch answers.
+  if (!auto) return baseComposition(piece, movement.phrase);
+
   // THE MOVEMENT IS ENDLESS. Owner decision 2026-09-18: "i want no exit - i
   // want to let it run endless and steerable." The schedule is a ring, not a
   // line: DISCRETE state resolves against `bar % movement.bars`, so bar 256 is
@@ -706,14 +739,65 @@ function scheduleStateAt(piece, movement, bar) {
    ------------------------------------------------------------------------ */
 const OFFGRID = 1000003;
 
-function compositionAt(seed, piece, movement, bar) {
-  const now = scheduleStateAt(piece, movement, bar);
+/* --- THE HAND OUTRANKS THE SCHEDULE -------------------------------------
+   Owner decision 2026-09-18. A value the owner has set is HELD: it survives
+   any scheduled event that would move it, and any one-shot gesture, until
+   they release it. Releasing puts that channel's value back under the
+   schedule at the next bar — there is no ramp and no memory, because the
+   fold is asked again from the base every bar anyway.
+
+   `holds` IS AN INPUT, NOT STATE THIS LAYER ACCUMULATES. The caller owns the
+   object; the layer only reads it. That is what keeps composition state a
+   pure function of (seed, bar, auto, holds) — ask bar 3000 with a given set
+   of holds and you get the same answer from anywhere, including from a seek
+   and including from the test with no browser at all.
+
+   The shape is one map per parameter, keyed by channel, because a surface for
+   it is a grid of channel by parameter and because these are the four things
+   a section event can move on a channel:
+
+       holds = { chance: {3: 0.7}, move: {0: LOCK}, phrase: {6: 5},
+                 delay: {6: 0.55}, reverb: {7: 0.62} }
+
+   `delay` and `reverb` are the channel's two SENDS — the same numbers `wet`
+   writes. The walk is deliberately not holdable: it is the movement's, not a
+   channel's, and nothing in the issue asks for it. Every held value goes
+   through the SAME CLAMP the verb uses, so the hand cannot dial a phrase of
+   twelve or a chance of five by reaching past the surface.
+   ------------------------------------------------------------------------ */
+const HOLD_PARAMS = ["chance", "move", "phrase", "delay", "reverb"];
+
+function heldValue(holds, param, ch) {
+  if (!holds) return undefined;
+  const m = holds[param];
+  if (!m) return undefined;
+  const v = m[ch];
+  return (v === undefined || v === null) ? undefined : v;
+}
+// the hand's value, clamped exactly as the verb of the same name clamps it
+function holdClamp(param, v) {
+  if (param === "move") return v === LOCK ? LOCK : clamp(v, 0, 1);
+  if (param === "phrase") return clamp(Math.round(v), 1, 8);
+  if (param === "chance") return clamp(v, 0, 1);
+  return clamp(v, 0, 2);                    // delay, reverb: the send's range
+}
+
+function compositionAt(seed, piece, movement, bar, opts) {
+  opts = opts || {};
+  const auto = !!opts.auto;
+  const holds = opts.holds || null;
+  const now = scheduleStateAt(piece, movement, bar, auto);
   const out = {
-    bar, seed, mods: now.mods, root: now.root, scale: now.scale,
+    bar, seed, auto, mods: now.mods, root: now.root, scale: now.scale,
     walk: walkAt(seed, now.walk, bar), walkCfg: now.walk,
     phrase: {}, chance: {}, move: {}, key: {}, present: {}, wet: {},
-    silent: {}, holds: {}, gesture: null
+    // `silent` says why a channel makes no sound; `frozen` says why a channel
+    // that IS sounding cannot vary. `held` is the third and newest: which of
+    // the hand and the schedule owns each value right now, so the surface can
+    // print "held by you" against "running" rather than guessing.
+    silent: {}, frozen: {}, held: {}, gesture: null
   };
+  for (const p of HOLD_PARAMS) out.held[p] = {};
   for (const ch of ALL_CHANNELS) out.wet[ch] = { delay: now.wet[ch].delay, reverb: now.wet[ch].reverb };
 
   /* --- THE PHRASE LEVEL: one-shot dub gestures on the 8-bar grid ----------
@@ -721,8 +805,10 @@ function compositionAt(seed, piece, movement, bar) {
      returns it to whatever the schedule says it is. IT NEVER TOUCHES
      FEEDBACK — feedback is a NOW knob and the owner's hand owns it, and a
      gesture that moved it could run away while nobody was holding it.
-     Pure: whether a gesture is live at bar N is a fact about the schedule. --- */
-  const gestures = movement.gestures || [];
+     A gesture is part of the SCHEDULE, so `auto` off silences it with the rest
+     of the ring: an automatic flick of a send is exactly the "page changing
+     its own arrangement" the switch exists to stop. --- */
+  const gestures = auto ? (movement.gestures || []) : [];
   for (let g = 0; g < gestures.length; g++) {
     const gs = gestures[g];
     if (!gs.what || gs.what[0] !== "throw") continue;
@@ -732,11 +818,32 @@ function compositionAt(seed, piece, movement, bar) {
     out.gesture = { at: gs.at, ch, wet: v, bars: len, why: gs.why };
   }
   for (const ch of ALL_CHANNELS) {
-    const L = now.phrase[ch];
+    /* THE HAND LANDS ON THE NEXT BAR; THE SCHEDULE LANDS ON THE CHANNEL'S OWN
+       WRAP. Those are two different rules on purpose. The wrap rule exists so
+       a section event does not rewrite a pattern under a bar that is already
+       playing — it is about the MACHINE not cutting across the music. A held
+       value is the player's own hand: it takes effect at the next bar this
+       function is asked for, which is the soonest anything can land at all
+       without tearing the bar in half. So a hold is read here, at the bar,
+       and not at `wrapBar`. */
+    const hPhrase = heldValue(holds, "phrase", ch);
+    const L = hPhrase === undefined ? now.phrase[ch] : holdClamp("phrase", hPhrase);
     const wrapBar = bar - (bar % L);
-    const atWrap = wrapBar === bar ? now : scheduleStateAt(piece, movement, wrapBar);
-    const m = atWrap.move[ch];
-    const p = atWrap.chance[ch];
+    const atWrap = wrapBar === bar ? now : scheduleStateAt(piece, movement, wrapBar, auto);
+    const hMove = heldValue(holds, "move", ch);
+    const hChance = heldValue(holds, "chance", ch);
+    const m = hMove === undefined ? atWrap.move[ch] : holdClamp("move", hMove);
+    const p = hChance === undefined ? atWrap.chance[ch] : holdClamp("chance", hChance);
+    // the two sends, held over whatever the schedule and the gestures left
+    const hDelay = heldValue(holds, "delay", ch);
+    const hReverb = heldValue(holds, "reverb", ch);
+    if (hDelay !== undefined) out.wet[ch].delay = holdClamp("delay", hDelay);
+    if (hReverb !== undefined) out.wet[ch].reverb = holdClamp("reverb", hReverb);
+    out.held.phrase[ch] = hPhrase !== undefined;
+    out.held.move[ch] = hMove !== undefined;
+    out.held.chance[ch] = hChance !== undefined;
+    out.held.delay[ch] = hDelay !== undefined;
+    out.held.reverb[ch] = hReverb !== undefined;
     out.phrase[ch] = L;
     out.move[ch] = m;
     out.chance[ch] = p;
@@ -774,12 +881,24 @@ function compositionAt(seed, piece, movement, bar) {
     // phrase 1 with move 0 the key is 0 for ever, so `chance` below 1 is one
     // fixed thinned pattern repeated indefinitely — a different frozen loop.
     // The default phrase is the movement's precisely so this cannot happen by
-    // accident, but a schedule can still dial it, and if it does the surface
-    // says so rather than letting it look like variation.
+    // accident, but a schedule OR A HAND can still dial it, and if it does the
+    // surface says so rather than letting it look like variation.
+    //
+    // THIS FIELD WAS CALLED `holds` UNTIL 2026-09-18 AND IS NOW `frozen`. The
+    // rename is the whole reason it is worth a comment: `holds` is now the
+    // INPUT that carries the owner's held values, and one object with a
+    // `holds` input meaning "the hand owns this" and a `holds` output meaning
+    // "this channel cannot vary" is the kind of collision that gets read wrong
+    // once and believed for a sprint.
     if (p < 1 && L === 1 && m === 0)
-      out.holds[ch] = "phrase 1 and move 0: chance " + p.toFixed(2)
+      out.frozen[ch] = "phrase 1 and move 0: chance " + p.toFixed(2)
         + " is one fixed thinned pattern, the same every bar";
   }
+
+  // A GESTURE THE HAND OVERRULED DID NOT HAPPEN, and must not read as if it
+  // did. A control that does nothing must look dead [G rule 2].
+  if (out.gesture && heldValue(holds, "delay", out.gesture.ch) !== undefined)
+    out.gesture.heldBack = true;
   return out;
 }
 
@@ -1088,12 +1207,23 @@ function createEngine(ctx, opts) {
     bypassFaders: !!opts.bypassFaders,   // calibration render: [M]'s faders off
     raw: !!opts.raw,                     // …and the input gain off too: the voice exactly as built
     solo: (opts.solo === undefined ? null : opts.solo),
-    // THE SEED. Composition state at bar N is a pure function of (seed, N), so
+    // THE SEED. Composition state at bar N is a pure function of (seed, N, auto,
+    // holds), so
     // the seed is the whole set. It comes from ?seed= in the query — the page
     // is served under /dub/ and never under /, so this reads the QUERY and not
     // the path, and a path-shaped seed would resolve against the main site.
     seed: (opts.seed === undefined ? 0x11CE9E : opts.seed | 0),
-    movement: opts.movement || MOVEMENT
+    movement: opts.movement || MOVEMENT,
+    // THE RING IS OFF UNLESS SOMEBODY TURNS IT ON. Owner decision 2026-09-18.
+    // With this false the arrangement holds still and [M]'s modulators keep
+    // breathing; nothing in the page moves a value the hand did not move.
+    auto: !!opts.auto,
+    // THE HAND'S HELD VALUES. This object is the ENGINE's — the composition
+    // layer only reads it, which is what keeps that layer a pure function of
+    // (seed, bar, auto, holds). Mutating it must go through `hold`/`release`
+    // below, because the per-bar composition is MEMOISED and the memo has to
+    // be told that its input changed.
+    holds: opts.holds || { chance: {}, move: {}, phrase: {}, delay: {}, reverb: {} }
   };
 
   /* --- EVERYTHING RANDOM IN THIS ENGINE IS NOW SEEDED, AND HERE IS WHY. -----
@@ -1823,12 +1953,38 @@ function createEngine(ctx, opts) {
   let gen = 0;
   function compositionFor(bar) {
     if (compBar !== bar || compGen !== gen) {
-      comp = compositionAt(cfg.seed, PIECE, cfg.movement, bar);
+      comp = compositionAt(cfg.seed, PIECE, cfg.movement, bar,
+                           { auto: cfg.auto, holds: cfg.holds });
       compBar = bar; compGen = gen;
     }
     return comp;
   }
   function recompose() { gen++; }
+
+  /* --- THE HAND, AND THE ONE DOOR IT COMES THROUGH -----------------------
+     `hold(param, ch, value)` pins a value; `release(param, ch)` puts it back
+     under the schedule. Both bump the memo's generation, because the memo is
+     keyed on the bar and would otherwise serve the bar the hand just changed
+     out of a cache. THE NEXT BAR IS WHEN IT LANDS — not this one, which is
+     already scheduled up to 140 ms ahead on the audio clock. Nothing here
+     writes a gain: the bar's resolution does that, once, where every other
+     arrangement value lands. */
+  function hold(param, ch, value) {
+    if (HOLD_PARAMS.indexOf(param) === -1)
+      throw new Error("hold: " + param + " is not one of " + HOLD_PARAMS.join(", "));
+    cfg.holds[param][ch] = value;
+    recompose();
+    return cfg.holds;
+  }
+  function release(param, ch) {
+    if (param === undefined) {                       // release everything
+      for (const p of HOLD_PARAMS) cfg.holds[p] = {};
+    } else if (ch === undefined) {
+      cfg.holds[param] = {};
+    } else delete cfg.holds[param][ch];
+    recompose();
+    return cfg.holds;
+  }
 
   /* =========================================================================
      THE MODULATORS — [M]'s three, plus whatever the schedule binds.
@@ -2015,6 +2171,10 @@ function createEngine(ctx, opts) {
     if (key === "dlyFbk") A.pp.fb.gain.setTargetAtTime(value, t, 0.05);
     if (key === "revSeconds") A.rev.buffer = makeImpulse(value, 2.2);
     if (key === "seed" || key === "movement") { cfg[key] = key === "seed" ? (value | 0) : value; recompose(); }
+    // the ring, switched. It changes what the NEXT bar resolves to and nothing
+    // else — no gain is written here, and a value the hand holds stays held
+    // across the switch in both directions.
+    if (key === "auto") { cfg.auto = !!value; recompose(); }
     if (key === "dlyTrim" || key === "revTrim") {
       // the base is the COMPOSITION's, not [M]'s: `wet` is an arrangement verb
       // and a trim multiplies whatever the arrangement currently asks for.
@@ -2034,7 +2194,7 @@ function createEngine(ctx, opts) {
   set("dlyTrim", 1); set("revTrim", 1);
 
   return { A, cfg, set, setLevel, scheduleStep, modState, silences, tail: A.tail, DRUM_PAT,
-           compositionFor, recompose,
+           compositionFor, recompose, hold, release,
            // what the ENGINE resolved for this bar — not what the surface
            // thinks it sent. The two are different claims and only this one is
            // evidence.
@@ -2072,10 +2232,18 @@ const PERF = { late: [], task: [], slack: [], worstLate: 0, worstTask: 0, minSla
 
 let ctx = null, engine = null, timer = null;
 let muted = localStorage.getItem("p02.muted") === "1";
+// THE RING IS OFF ON EVERY LOAD, and deliberately not remembered. Mute is
+// remembered because forgetting it makes a noise nobody asked for; `auto` is
+// the opposite — the safe state is off, and a page that came back with the
+// schedule running because of something the owner clicked last week is the
+// arrangement moving where the hand did not put it. Persisting the switch, and
+// the surface for the held values, belong to the piece of work that builds
+// that surface.
+let autoOn = false;
 // The seed is the whole set: composition state at bar N is a pure function of
-// (seed, N). It comes from ?seed= — the QUERY, never the path, because the
-// page is served under /dub/ and a path-shaped anything resolves against the
-// owner's main site and breaks only in production.
+// (seed, N, auto, holds). It comes from ?seed= — the QUERY, never the path,
+// because the page is served under /dub/ and a path-shaped anything resolves
+// against the owner's main site and breaks only in production.
 const SEED = seedFromQuery(location.search);
 
 /* --- THE SEEK. Given a bar number, the composition is that bar's state with
@@ -2338,16 +2506,24 @@ function paintMovement(bar) {
   if (!C) return;
   const sec = Math.floor(bar / MOVEMENT.section);
   const phr = Math.floor(bar / MOVEMENT.phrase);
+  // WHICH OF THE TWO OWNS THIS BAR IS THE FIRST THING THE LINE SAYS. With the
+  // ring off, "section 5 of 8" would be a lie dressed as a readout: no section
+  // event has run at all.
+  const heldCount = HOLD_PARAMS.reduce((n, p) => n + Object.keys(C.held[p] || {})
+    .filter(ch => C.held[p][ch]).length, 0);
   ui("movenow").textContent =
-    `section ${sec + 1} of ${Math.ceil(MOVEMENT.bars / MOVEMENT.section)}`
+    (C.auto ? `auto ON · section ${sec + 1} of ${Math.ceil(MOVEMENT.bars / MOVEMENT.section)}`
+            : "auto OFF · the schedule is not running · the arrangement is yours")
     + ` · phrase ${phr + 1} · bar ${bar % MOVEMENT.section + 1} of ${MOVEMENT.section}`
     + ` · walk ${C.walk >= 0 ? "+" : ""}${C.walk} ${Math.abs(C.walk) === 1 ? "degree" : "degrees"}`
-    + ` · ${C.mods.length} modulator${C.mods.length === 1 ? "" : "s"} bound`;
+    + ` · ${C.mods.length} modulator${C.mods.length === 1 ? "" : "s"} bound`
+    + (heldCount ? ` · ${heldCount} value${heldCount === 1 ? "" : "s"} held by you` : "");
   if (bar === lastPainted) return;
   lastPainted = bar;
-  // which scheduled event is the most recent one
+  // which scheduled event is the most recent one — and none of them, with the
+  // ring off, because none of them has happened
   let live = -1;
-  MOVEMENT.sections.forEach((x, i) => { if (x.at <= bar) live = i; });
+  if (C.auto) MOVEMENT.sections.forEach((x, i) => { if (x.at <= bar) live = i; });
   MOVEMENT.sections.forEach((x, i) => {
     const tr = ui("sec" + i); if (!tr) return;
     tr.style.color = i === live ? "var(--hot)" : "";
@@ -2357,9 +2533,18 @@ function paintMovement(bar) {
     const ch = c.ch;
     const p = ui("phr" + ch), n = ui("chn" + ch), m = ui("mov" + ch);
     if (!p) continue;
-    p.textContent = C.phrase[ch];
-    n.textContent = C.chance[ch].toFixed(2);
-    m.textContent = C.move[ch] === "LOCK" ? "LOCK" : C.move[ch].toFixed(2);
+    // A HELD VALUE IS MARKED, because "held by you" and "running" are two
+    // different claims about the same number. The mark is a trailing dot and
+    // the cell's own title says which.
+    const mark = (el, param, text) => {
+      const h = C.held[param] && C.held[param][ch];
+      el.textContent = text + (h ? "·" : "");
+      el.title = h ? "held by you — the schedule cannot move it until you release it"
+                   : "running — the schedule owns this value";
+    };
+    mark(p, "phrase", String(C.phrase[ch]));
+    mark(n, "chance", C.chance[ch].toFixed(2));
+    mark(m, "move", C.move[ch] === "LOCK" ? "LOCK" : C.move[ch].toFixed(2));
     // A SILENT CHANNEL MUST SAY WHY IT IS SILENT. Every way a channel can go
     // quiet is named by the composition layer, and this is where the name is
     // shown — silence with nothing to explain it is the one thing this
@@ -2420,6 +2605,17 @@ function wire() {
   };
   sk.addEventListener("input", updSeek); updSeek();
   ui("seekgo").addEventListener("click", () => { seek(parseInt(sk.value, 10)); lastPainted = -1; });
+  // THE RING, SWITCHED BY HAND. `autoOn` is held here as well as in the engine
+  // because the engine does not exist until the first gesture, and the switch
+  // has to be settable before there is anything to play it.
+  ui("auto").addEventListener("change", () => {
+    autoOn = ui("auto").checked;
+    if (engine) engine.set("auto", autoOn);
+    lastPainted = -1;
+    say(autoOn
+      ? "auto on — the movement's schedule is running. Anything you hold stays held."
+      : "auto off — the arrangement holds still. The modulators keep breathing; nothing else moves unless you move it.");
+  });
   ui("revsize").addEventListener("change", () => { if (engine) engine.set("revSeconds", val("revsize")); });
   ui("dlydiv").addEventListener("change", () => { if (engine) engine.set("dlyBeats", parseFloat(ui("dlydiv").value)); });
 }
@@ -2439,7 +2635,7 @@ async function start() {
   if (T.running) { stop(); return; }
   if (!ctx) {
     ctx = new (window.AudioContext || window.webkitAudioContext)();
-    engine = createEngine(ctx, { seed: SEED, movement: MOVEMENT });
+    engine = createEngine(ctx, { seed: SEED, movement: MOVEMENT, auto: autoOn });
     engine.tail.connect(ctx.destination);
     engine.set("master", val("vol"));
     engine.set("pump", val("pump"));
@@ -2493,7 +2689,11 @@ async function renderOffline(o) {
     calibrate: !!o.calibrate,
     masterTrim: o.masterTrim,
     seed: o.seed,
-    movement: o.movement
+    movement: o.movement,
+    // an offline render can be asked for either instrument: the ring running,
+    // or the arrangement holding still with the hand's values on it
+    auto: !!o.auto,
+    holds: o.holds
   });
   eng.cfg.bpm = bpm;
   if (o.set) for (const k of Object.keys(o.set)) eng.set(k, o.set[k]);
@@ -2553,23 +2753,59 @@ function window0(buf, from, len) {
 
 window.p02 = {
   state: () => ({
-    contextCreated: !!ctx, running: T.running, muted,
+    contextCreated: !!ctx, running: T.running, muted, auto: autoOn,
+    holds: engine ? engine.cfg.holds : null,
     step: T.step, bar: Math.floor(T.step / 16), bpm: T.bpm, seed: SEED, perf: perfReport()
   }),
   renderOffline,
-  PIECE, INPUT_GAIN, MASTER_TRIM, MOVEMENT, MOD_RATE_BARS, MOD_RATES,
+  PIECE, INPUT_GAIN, MASTER_TRIM, MOVEMENT, MOD_RATE_BARS, MOD_RATES, HOLD_PARAMS,
+
+  /* --- THE SWITCH AND THE HAND, FOR A SURFACE AND FOR A MEASUREMENT --------
+     `auto` is the ring: off by default, and off again on every load. `hold`
+     and `release` are the hand. Both work before there is an audio context —
+     the switch is remembered here and handed to the engine when the first
+     gesture creates it; a hold before the context exists is refused rather
+     than silently dropped, and says so. --- */
+  auto: on => {
+    if (on === undefined) return autoOn;
+    autoOn = !!on;
+    if (ui("auto")) ui("auto").checked = autoOn;
+    if (engine) engine.set("auto", autoOn);
+    lastPainted = -1;
+    return autoOn;
+  },
+  // hold(param, ch, value) — param is one of HOLD_PARAMS. It lands on the NEXT
+  // bar, because this bar is already scheduled up to 140 ms ahead.
+  hold: (param, ch, value) => {
+    if (!engine) return { error: "no engine yet — press start first; a hold needs something to hold" };
+    return engine.hold(param, ch, value);
+  },
+  // release(), release(param) or release(param, ch): back under the schedule
+  // at the next bar.
+  release: (param, ch) => {
+    if (!engine) return { error: "no engine yet" };
+    return engine.release(param, ch);
+  },
+  holds: () => (engine ? engine.cfg.holds : null),
+  // WHAT THE ENGINE WROTE, not what the surface thinks it sent. The paint
+  // loop reads this for the three modulated parameters; a measurement has to
+  // be able to read it too, or a held send is only ever a claim.
+  modState: () => (engine ? engine.modState : null),
   setLevel: (ch, v) => engine && engine.setLevel(ch, v),
   patterns: () => { const e = createEngine(new OfflineAudioContext(2, 1024, 44100), {}); return e.DRUM_PAT; },
   // THE COMPOSITION LAYER, ON THE SURFACE OF THE PAGE, so a measurement can
   // ask it the same question the engine asks it — without a clock, without a
   // context, and from any bar in any order.
-  compositionAt: (bar, seed, movement) =>
-    compositionAt(seed === undefined ? SEED : seed, PIECE, movement || MOVEMENT, bar),
+  // `opts` is { auto, holds } and DEFAULTS TO auto OFF, the same way the layer
+  // itself does — asking without saying which instrument you mean gets the one
+  // that does not move on its own.
+  compositionAt: (bar, seed, movement, opts) =>
+    compositionAt(seed === undefined ? SEED : seed, PIECE, movement || MOVEMENT, bar, opts),
   stepFires, walkAt, transposeDegrees, modValue, shapeAt, scheduleStateAt,
   // WHAT FIRES, PER BAR — the loop-detector's evidence. This is the function
   // that would return the same string 256 times if the frozen loop came back.
-  barFingerprint: (bar, seed, movement) => fingerprint(
-    compositionAt(seed === undefined ? SEED : seed, PIECE, movement || MOVEMENT, bar),
+  barFingerprint: (bar, seed, movement, opts) => fingerprint(
+    compositionAt(seed === undefined ? SEED : seed, PIECE, movement || MOVEMENT, bar, opts),
     seed === undefined ? SEED : seed),
   seek: bar => seek(bar),
   engineComposition: () => engine && engine.composition()
