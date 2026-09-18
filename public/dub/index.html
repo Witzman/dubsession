@@ -1832,7 +1832,10 @@ function createEngine(ctx, opts) {
       while (true) {
         at += -Math.log(1 - engRnd()) / 42;
         const i0 = (at * rate) | 0;
-        if (i0 >= n - 32) break;
+        // WRITTEN AS A POSITIVE TEST ON PURPOSE. `(Infinity)|0` is 0, so an
+        // `i0 >= n - 32` guard would turn one bad draw into an endless loop
+        // writing into sample 0 — a page that never finishes loading.
+        if (!(i0 >= 0 && i0 < n - 32)) break;
         const rev = 0.5 + 0.5 * Math.sin(2 * Math.PI * 0.55 * at + rev0);
         if (engRnd() > 0.25 + 0.65 * rev) continue;
         const amp = Math.pow(engRnd(), 3) * 0.55 + 0.02;
@@ -1877,9 +1880,9 @@ function createEngine(ctx, opts) {
     // second record. Its rate is 2^(-1/4) — see the block above for why an
     // irrational ratio and not 0.84.
     const second = ctx.createGain(); second.gain.value = 0.8;
-    for (const [rate, offset, into] of [[1, 0, bedSatIn], [Math.pow(2, -0.25), 3.17, second]]) {
+    for (const [speed, offset, into] of [[1, 0, bedSatIn], [Math.pow(2, -0.25), 3.17, second]]) {
       const src = ctx.createBufferSource();
-      src.buffer = A.bedBuf; src.loop = true; src.playbackRate.value = rate;
+      src.buffer = A.bedBuf; src.loop = true; src.playbackRate.value = speed;
       src.connect(into);
       // NOTHING SOUNDS BEFORE A GESTURE. This runs inside createEngine, which
       // the live page only calls from the start button's handler; offline it
@@ -3377,9 +3380,13 @@ window.p02 = {
     contextCreated: !!ctx, running: T.running, muted, auto: autoOn,
     holds: HOLDS,
     step: T.step, bar: Math.floor(T.step / 16), bpm: T.bpm, seed: SEED, perf: perfReport(),
-    // WHAT THE ENGINE HAS, not what the slider says. The two are different
-    // claims and this is the one that is evidence.
-    bedTrim: engine ? engine.cfg.bedTrim : null
+    // WHAT THE ENGINE HAS, not what the slider says, and then WHAT THE GAIN
+    // NODE HAS, which is not the same claim again: `bedTrim` is what `set`
+    // was told and `bedGain` is what the audio graph is actually multiplying
+    // by. A surface, a config and a parameter are three places for one number
+    // to be wrong in, and only the last one is audible.
+    bedTrim: engine ? engine.cfg.bedTrim : null,
+    bedGain: engine ? engine.A.bedGain.gain.value : null
   }),
   renderOffline,
   PIECE, INPUT_GAIN, MASTER_TRIM, BED_LEVEL, MOVEMENT, MOD_RATE_BARS, MOD_RATES, HOLD_PARAMS,
