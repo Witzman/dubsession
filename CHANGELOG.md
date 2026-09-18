@@ -1,6 +1,6 @@
 # Changelog
 
-## Unreleased
+## 2026-09-18 — a measurement can tell quiet from broken
 
 - `renderOffline` reports which channels are silent and why, beside the peak.
   Nothing audible changed: it is the hook a measurement needs to tell a
