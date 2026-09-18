@@ -106,9 +106,19 @@ const distinct = new Set(prints).size;
 // Section 0 IS deliberately frozen: it is the reference, "the piece as the
 // manifest left it". So the assertion is a PAIR, and both halves matter — one
 // says the reference holds, the other says the movement moves.
-const sec0 = new Set(prints.slice(0, 32)).size;
+// Section 0 is the reference, MINUS its gestures. A one-shot echo throw is a
+// hand on a send for a bar, not a change of material, so the bars it lands on
+// are excluded and then the rest must be bar-for-bar identical. Excluding them
+// silently would be excluding the evidence, so they are named.
+const gestureBars = new Set();
+for (const g of (M.gestures || [])) for (let i = 0; i < (g.what[3] || 1); i++) gestureBars.add(g.at + i);
+const sec0 = new Set(prints.slice(0, 32).filter((_, b) => !gestureBars.has(b))).size;
 ok(sec0 === 1, 'section 0 is the reference and holds, bar for bar',
-   `${sec0} distinct fingerprint(s) across bars 1-32`);
+   `${sec0} distinct fingerprint(s) across bars 1-32, excluding gesture bar(s) `
+   + [...gestureBars].filter(b => b < 32).map(b => b + 1).join(', '));
+ok(new Set(prints.slice(0, 32)).size === 2,
+   'and the one gesture in it is the only thing that moves',
+   `${new Set(prints.slice(0, 32)).size} distinct bars including the throw`);
 ok(distinct >= 64, 'the movement is not one loop',
    `${distinct} distinct bars in ${N}`);
 
@@ -159,9 +169,32 @@ const at = (bar, mv) => L.compositionAt(SEED, L.PIECE, mv || MOVE, bar);
 // base state == today's page: chance 1, move 0, phrase 1 -> key 0 every bar
 const bare = { phrase: 8, section: 32, bars: 256, sections: [{ at: 0, event: null, why: 'reference' }] };
 const b0 = at(0, bare), b77 = at(77, bare);
-ok(L.ALL_CHANNELS.every(ch => b0.chance[ch] === 1 && b0.move[ch] === 0 && b0.phrase[ch] === 1),
-   'the base state is chance 1, move 0, phrase 1 — today\'s page');
-ok(L.ALL_CHANNELS.every(ch => b77.key[ch] === 0), 'and every bar of it resolves to key 0 (the frozen loop, reproduced)');
+ok(L.ALL_CHANNELS.every(ch => b0.chance[ch] === 1 && b0.move[ch] === 0 && b0.phrase[ch] === 8),
+   'the base state is chance 1, move 0, and the MOVEMENT\'s phrase — not 1',
+   `phrase ${b0.phrase[0]}`);
+const bareFp = [];
+for (let b = 0; b < 64; b++) bareFp.push(L.fingerprint(at(b, bare), SEED));
+ok(new Set(bareFp).size === 1,
+   'and with chance 1 it still reproduces today\'s page exactly — the key varies, every step fires anyway',
+   `${new Set(bareFp).size} distinct bar(s) in 64`);
+
+// THE REGRESSION TEST FOR THE BUG THAT WOULD HAVE SHIPPED A DIFFERENT FROZEN
+// LOOP. The base phrase used to be 1, and `stepFires` is keyed on
+// `bar % phrase`, so `chance(ch, 0.7)` ALONE produced one fixed thinned
+// pattern repeated for ever — a different loop, not the end of looping, which
+// is the entire increment. `chance` with no `phrase` beside it must vary.
+const chanceOnly = { phrase: 8, section: 32, bars: 256, sections: [
+  { at: 0, event: ['chance', 3, 0.7], why: 'chance and nothing else' }] };
+const co = [];
+for (let b = 0; b < 32; b++) co.push(L.fingerprint(at(b, chanceOnly), SEED));
+ok(new Set(co).size === 8,
+   'CHANCE ALONE varies bar to bar and comes round on the movement\'s phrase',
+   `${new Set(co).size} distinct bars in 32, repeating every ${co.indexOf(co[0], 1)}`);
+const pinned1 = { phrase: 1, section: 32, bars: 256, sections: [
+  { at: 0, event: ['chance', 3, 0.7], why: 'the bug, dialled on purpose' }] };
+ok(typeof at(4, pinned1).holds[3] === 'string',
+   'and a movement that dials phrase 1 under a chance is TOLD it cannot vary',
+   at(4, pinned1).holds[3]);
 
 // STRUCTURE LANDS ON THE BAR: a chance event at bar 32 must NOT reach a
 // phrase-3 channel until bar 33, which is that channel's own next wrap.
@@ -204,6 +237,29 @@ ok([31, 41, 43, 46, 50, 55, 58, 62].every(m => L.transposeDegrees(m, 0, 7, 0) ==
 ok(L.transposeDegrees(55, 1, 7, 0) === 57 && L.transposeDegrees(55, 2, 7, 0) === 58,
    'it steps by DEGREES of G natural minor, not semitones', 'G3 +1 = A3 (57), +2 = B♭3 (58)');
 ok(L.transposeDegrees(55, 7, 7, 0) === 67, 'seven degrees is an octave in a seven-note scale');
+
+// THE SIGN OF SPAN IS LOAD-BEARING, and this is what it is load-bearing FOR.
+// In G natural minor, down one degree is F major — the flat VII, the genre's
+// own move. Up one degree is A DIMINISHED.
+ok(L.transposeDegrees(55, -1, 7, 0) === 53 && L.transposeDegrees(58, -1, 7, 0) === 57
+   && L.transposeDegrees(62, -1, 7, 0) === 60,
+   'walk -1 on the manifest\'s triad gives F major', 'G3 B♭3 D4 -> F3 A3 C4');
+ok(L.transposeDegrees(55, 1, 7, 0) === 57 && L.transposeDegrees(58, 1, 7, 0) === 60
+   && L.transposeDegrees(62, 1, 7, 0) === 63,
+   'and walk +1 gives A diminished, which is why an unsigned span is a defect',
+   'G3 B♭3 D4 -> A3 C4 E♭4');
+let up = 0, down = 0;
+for (let sd = 0; sd < 2000; sd++) { const w = L.walkAt(sd, { bars: 96, span: -1 }, 128); if (w > 0) up++; if (w < 0) down++; }
+ok(up === 0 && down === 2000, 'a NEGATIVE span may only go below the tonic, for every seed',
+   `2000 seeds: ${up} up, ${down} down`);
+let up2 = 0;
+for (let sd = 0; sd < 2000; sd++) if (L.walkAt(sd, { bars: 96, span: 1 }, 128) > 0) up2++;
+ok(up2 > 800 && up2 < 1200, 'an UNSIGNED span still goes either way — the behaviour is not removed, it is signed',
+   `2000 seeds: ${up2} up (${(up2 / 20).toFixed(1)}%)`);
+let home = 0;
+for (let sd = 0; sd < 2000; sd++) if (L.walkAt(sd, { bars: 96, span: -1 }, 192) === 0) home++;
+ok(home === 2000, 'and at bar 192 it is home at exactly the key dialled, for every seed',
+   `2000 of ${home} seeds at degree 0`);
 let outside = 0, seen = new Set();
 for (let b = 0; b < 4000; b++) { const w = L.walkAt(SEED, { bars: 4, span: 2 }, b); seen.add(w); if (Math.abs(w) > 2) outside++; }
 ok(outside === 0, 'the walk reflects at the edge of its span rather than leaving it', `span 2, 4000 bars`);
@@ -330,6 +386,23 @@ ok(typeof at(96, lv).silent[7] === 'string' && at(96, lv).silent[7].includes('65
 ok(typeof at(0, lv).silent[4] === 'string', 'channel 4 says why it has never made a sound', at(0, lv).silent[4]);
 const ch0 = { phrase: 8, section: 32, bars: 256, sections: [{ at: 0, event: ['chance', 2, 0], why: 'x' }] };
 ok(typeof at(8, ch0).silent[2] === 'string', 'a channel at chance 0 says so too', at(8, ch0).silent[2]);
+
+// the gestures, if the movement carries any
+group('the phrase-level gestures');
+if ((M.gestures || []).length) {
+  const g = M.gestures[0];
+  const [, gch, gwet, glen] = g.what;
+  ok(at(g.at, M).wet[gch].delay === gwet, 'a throw lands on the bar it says',
+     `bar ${g.at + 1}: ch${gch} delay ${gwet}`);
+  ok(at(g.at + glen, M).wet[gch].delay !== gwet, 'and is gone after its own length',
+     `bar ${g.at + glen + 1}: ch${gch} delay ${at(g.at + glen, M).wet[gch].delay}`);
+  ok(M.gestures.every(x => at(x.at, M).gesture && at(x.at, M).gesture.at === x.at),
+     `all ${M.gestures.length} gestures are live on their own bar`,
+     M.gestures.map(x => x.at + 1).join(', '));
+  const gaps = M.gestures.slice(1).map((x, i) => x.at - M.gestures[i].at);
+  ok(new Set(gaps).size > 1, 'and they are unevenly spaced — eight events evenly spaced is itself a metronome',
+     `gaps ${gaps.join(', ')} bars`);
+} else ok(true, 'this movement carries no gestures');
 
 // wet
 const wt = { phrase: 8, section: 32, bars: 256, sections: [{ at: 32, event: ['wet', 6, 'delay', 0.55], why: 'x' }] };

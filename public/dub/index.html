@@ -526,12 +526,24 @@ function transposeDegrees(midi, degrees, root, scale) {
 function walkAt(seed, walk, bar) {
   if (!walk || !walk.bars || !walk.span) return 0;
   const steps = Math.floor(bar / walk.bars);
-  const span = Math.abs(walk.span);
+  // THE SIGN OF SPAN IS LOAD-BEARING, and this was wrong for one commit.
+  // An unsigned span walks either way, and in G natural minor that is the
+  // difference between F major (down one degree — the flat VII, the genre's
+  // own move) and A DIMINISHED (up one degree). Measured across 2000 seeds by
+  // #16: the unsigned walk goes up 49.3% of the time. The shipped default seed
+  // happens to go down, so the page sounded right and roughly half of every
+  // other seed put the movement into a diminished triad for two minutes — and
+  // the seed is in the URL, so "the default is fine" is not a defence.
+  //
+  //   span < 0  the root may only go BELOW the tonic
+  //   span > 0  either way, up to `span` degrees
+  const lo = walk.span < 0 ? walk.span : -walk.span;
+  const hi = walk.span < 0 ? 0 : walk.span;
   let pos = 0;
   for (let i = 0; i < steps; i++) {
     pos += rand01(seed, 0x5741, i, walk.bars) < 0.5 ? -1 : 1;
-    if (pos > span) pos = 2 * span - pos;         // reflect, do not park
-    if (pos < -span) pos = -2 * span - pos;
+    if (pos > hi) pos = 2 * hi - pos;             // reflect, do not park
+    if (pos < lo) pos = 2 * lo - pos;
   }
   return pos;
 }
@@ -551,7 +563,7 @@ function shapeAt(shape, phase, seed, id) {
    THE VERBS. Every section event is one call to one of these, and they are
    the whole vocabulary for sprint 2.
    ========================================================================= */
-function baseComposition(piece) {
+function baseComposition(piece, defaultPhrase) {
   const st = {
     chance: {}, move: {}, phrase: {}, present: {}, wet: {}, why: {},
     walk: { bars: 0, span: 0 },
@@ -564,14 +576,25 @@ function baseComposition(piece) {
   };
   for (const ch of ALL_CHANNELS) {
     // THE BASE STATE IS TODAY'S PAGE, EXACTLY.
-    //   chance 1  — every step of the pattern fires
+    //   chance 1  — every step of the pattern fires, so nothing is thinned
     //   move   0  — the machine never steps off the phrase grid
-    //   phrase 1  — a one-bar phrase, so the grid key is always 0
-    // which together mean every bar is bar 0's realisation: the frozen loop
-    // the owner heard, reproduced bit for bit, as section 0's reference.
+    // which together mean every bar is the same realisation: the frozen loop
+    // the owner heard, reproduced bit for bit, as section 0's reference. The
+    // phrase length is invisible while chance is 1 and every step fires
+    // whatever bar of the phrase it is.
+    //
+    // THE DEFAULT PHRASE IS THE MOVEMENT'S, AND THAT IS A CORRECTION. It was
+    // 1, and 1 is a trap: `stepFires` is keyed on `bar % phrase`, so at phrase
+    // 1 the key is 0 for ever and `chance(ch, 0.7)` produces ONE fixed thinned
+    // pattern repeated indefinitely — a different frozen loop, not the end of
+    // looping, which is the entire increment. At the movement's phrase a
+    // chance change alone gives eight bars that differ and then come round,
+    // which is what a listener calls "the loop" and what the genre actually
+    // does. A channel that wants more than that raises its own `phrase`, or
+    // `move` above 0 to step off the grid.
     st.chance[ch] = 1;
     st.move[ch] = 0;
-    st.phrase[ch] = 1;
+    st.phrase[ch] = clamp(Math.round(defaultPhrase || 8), 1, 8);
     st.present[ch] = { at: 0, bars: 0, from: 1, to: 1 };
     const w = piece.wets[ch] || { delay: 0, reverb: 0 };
     st.wet[ch] = { delay: w.delay / 100, reverb: w.reverb / 100 };
@@ -590,7 +613,7 @@ const COMPOSITION_VERBS = {
   move(st, at, ch, m) { st.move[ch] = (m === LOCK) ? LOCK : clamp(m, 0, 1); },
 
   // that channel's phrase length in bars. Lengths that disagree are the point.
-  phrase(st, at, ch, bars) { st.phrase[ch] = clamp(Math.round(bars), 1, 5); },
+  phrase(st, at, ch, bars) { st.phrase[ch] = clamp(Math.round(bars), 1, 8); },
 
   // the chord walker: period in bars, span in SCALE DEGREES.
   walk(st, at, bars, span) { st.walk = { bars: Math.max(0, Math.round(bars)), span: Math.round(span) }; },
@@ -626,7 +649,7 @@ const COMPOSITION_VERBS = {
    asking for bar 3000 costs the same whether or not bar 2999 was ever played.
    ------------------------------------------------------------------------ */
 function scheduleStateAt(piece, movement, bar) {
-  const st = baseComposition(piece);
+  const st = baseComposition(piece, movement.phrase);
   const secs = movement.sections || [];
   for (let i = 0; i < secs.length; i++) {
     const s = secs[i];
@@ -668,9 +691,26 @@ function compositionAt(seed, piece, movement, bar) {
   const out = {
     bar, seed, mods: now.mods, root: now.root, scale: now.scale,
     walk: walkAt(seed, now.walk, bar), walkCfg: now.walk,
-    phrase: {}, chance: {}, move: {}, key: {}, present: {}, wet: now.wet,
-    silent: {}
+    phrase: {}, chance: {}, move: {}, key: {}, present: {}, wet: {},
+    silent: {}, holds: {}, gesture: null
   };
+  for (const ch of ALL_CHANNELS) out.wet[ch] = { delay: now.wet[ch].delay, reverb: now.wet[ch].reverb };
+
+  /* --- THE PHRASE LEVEL: one-shot dub gestures on the 8-bar grid ----------
+     `throw(ch, wet, bars)` jumps that channel's delay send for `bars` bars and
+     returns it to whatever the schedule says it is. IT NEVER TOUCHES
+     FEEDBACK — feedback is a NOW knob and the owner's hand owns it, and a
+     gesture that moved it could run away while nobody was holding it.
+     Pure: whether a gesture is live at bar N is a fact about the schedule. --- */
+  const gestures = movement.gestures || [];
+  for (let g = 0; g < gestures.length; g++) {
+    const gs = gestures[g];
+    if (!gs.what || gs.what[0] !== "throw") continue;
+    const ch = gs.what[1], v = gs.what[2], len = gs.what[3] || 1;
+    if (bar < gs.at || bar >= gs.at + len) continue;
+    out.wet[ch].delay = clamp(v, 0, 2);
+    out.gesture = { at: gs.at, ch, wet: v, bars: len, why: gs.why };
+  }
   for (const ch of ALL_CHANNELS) {
     const L = now.phrase[ch];
     const wrapBar = bar - (bar % L);
@@ -698,8 +738,51 @@ function compositionAt(seed, piece, movement, bar) {
     if (piece.empty[ch]) out.silent[ch] = "no material — " + piece.empty[ch].split(".")[0];
     else if (v <= 0) out.silent[ch] = "left the arrangement at bar " + (pr.at + 1) + ", over " + pr.bars + " bars";
     else if (p <= 0) out.silent[ch] = "chance 0 — the pattern is intact, nothing is being let through";
+    else if (p < 1 && countFirings(seed, ch, out.key[ch], p) === 0)
+      // A SILENCE THAT CARRIES NO REASON IS THE ONE THING THIS INSTRUMENT
+      // REFUSES TO PRODUCE [G rule 1]. On a channel with one hit in the bar —
+      // the rim, the clap; "one hit, not a pattern" — `chance` is not
+      // thinning, it is removal with a dice roll in front of it, and at
+      // phrase 1 it was a single coin flip held for ever. The odds are not
+      // overridden here, because forcing a hit would be inventing material
+      // the composer did not ask for. What is refused is the SILENCE WITH
+      // NOTHING TO EXPLAIN IT.
+      out.silent[ch] = "chance " + p.toFixed(2) + " let nothing through this bar — "
+        + "a channel with " + countHits(ch) + " hit(s) in the bar is removed by chance, not thinned";
+
+    // AND THE OTHER HALF OF THE SAME FAULT: a channel that CANNOT vary. At
+    // phrase 1 with move 0 the key is 0 for ever, so `chance` below 1 is one
+    // fixed thinned pattern repeated indefinitely — a different frozen loop.
+    // The default phrase is the movement's precisely so this cannot happen by
+    // accident, but a schedule can still dial it, and if it does the surface
+    // says so rather than letting it look like variation.
+    if (p < 1 && L === 1 && m === 0)
+      out.holds[ch] = "phrase 1 and move 0: chance " + p.toFixed(2)
+        + " is one fixed thinned pattern, the same every bar";
   }
   return out;
+}
+
+// How many hits the channel's pattern has in a bar, and how many of them the
+// odds let through. Used to catch a silence that would otherwise have no
+// reason attached to it.
+function countHits(ch) {
+  if (DRUM_PAT[ch]) return DRUM_PAT[ch].reduce((a, b) => a + b, 0);
+  const take = PIECE.chords[ch];
+  return take ? take.reduce((a, e) => a + e.notes.length, 0) : 0;
+}
+function countFirings(seed, ch, key, p) {
+  let n = 0;
+  if (DRUM_PAT[ch]) {
+    for (let st = 0; st < 16; st++) if (DRUM_PAT[ch][st] && stepFires(seed, ch, key, st, p)) n++;
+    return n;
+  }
+  const take = PIECE.chords[ch];
+  if (!take) return 1;                        // nothing to be silent about
+  for (let e = 0; e < take.length; e++)
+    for (let k = 0; k < take[e].notes.length; k++)
+      if (stepFires(seed, ch, key, take[e].step * 8 + e * 4 + k, p)) n++;
+  return n;
 }
 
 // Does this step of this channel fire this bar? One hash, no stream, so the
@@ -720,72 +803,182 @@ function modValue(mod, seed, i, barPos) {
 /* =========================================================================
    THE SCHEDULE — 256 bars = 8 sections of 32. Movement 1 of 14.
    -------------------------------------------------------------------------
-   *** THIS IS A STUB. *** It exists so the machinery above runs end to end
-   and can be MEASURED before the real schedule lands. Issue #16 is writing
-   the real eight sections as data, in exactly this shape, and the session
-   drops that object in where this one is. Nothing else has to change.
+   Written 2026-09-18 against the movement's own design record, which is kept
+   with the project's other process documents and not here. Every `why` below
+   is the musical reason the event exists; the record carries what each one
+   should SOUND like when it lands, and what the wrong answer sounds like.
 
-   `at` is bars from the start of the movement. `event` is [verb, ...args] or
-   null. `why` IS NOT OPTIONAL — an event with no reason is an event nobody
-   can judge.
-
-   The whys below are honest about what they are: they say what the event is
-   for MECHANICALLY, because the musical reason is #16's to write and it would
-   be dishonest for this file to pretend otherwise.
+   `at` is bars from the start of the movement. `event` is [verb, ...args]
+   or null. THE SIX ENTRIES AT BAR 0 ARE THE OPENING STATE, NOT EVENTS:
+   four of them are inaudible by construction (a phrase length is silent
+   while chance is 1; LOCK only pins a key that was already 0) and two are
+   tides rather than arrivals. One PERCEPTIBLE event per section holds from
+   bar 32 onward.
    ========================================================================= */
 const MOVEMENT = {
   phrase: 8,                  // bars — the listener's "loop"
   section: 32,                // bars — one perceptible event each
-  bars: 256,
-  stub: true,                 // #16 replaces this object; the surface says so
+  bars: 256,                  // 8.19 min at 125 BPM
   sections: [
-    { at: 0, event: null,
-      why: "the piece as the manifest left it — the reference. The base state " +
-           "is chance 1, move 0, phrase 1 everywhere, which is bar 0's " +
-           "realisation repeated: today's page, bit for bit." },
 
-    { at: 32, event: ["phrase", 6, 3],
-      why: "STUB: the stab gets a 3-bar phrase against everything else's 1. " +
-           "Proves the phrase key: the stab's bars now come round every 3." },
-    { at: 32, event: ["chance", 6, 0.72],
-      why: "STUB: and the odds are rolled once per NOTE, so the G minor triad " +
-           "becomes a different subset of itself across those 3 bars while the " +
-           "figure never moves. Two events at one `at` is the stub proving the " +
-           "fold applies them in order; #16's schedule is one event per section." },
+    /* --- SECTION 1, bar 0, 0:00 — the reference, and the slow clock ------ */
+    { at: 0, event: ["move", 0, "LOCK"],
+      why: "OPENING STATE, not an event. The kick is the pulse and it holds: " +
+           "'the tops can move while the kick stays put'. LOCK protects a " +
+           "channel from the machine, not from the composer — section 8 still " +
+           "removes it, and that is a decision rather than a gesture." },
 
-    { at: 64, event: ["phrase", 3, 4],
-      why: "STUB: the hats on 4 against the stab's 3 — they come round every 12." },
-    { at: 64, event: ["chance", 3, 0.8],
-      why: "STUB: thinned enough for the 4-bar phrase to be audible as a phrase." },
+    { at: 0, event: ["move", 7, "LOCK"],
+      why: "OPENING STATE. The pad is the backcloth, the sustained layer that " +
+           "fills the space between the noticeable sounds. A backcloth that " +
+           "flickers stops being a room. The kick and the pad are the floor and " +
+           "the ceiling; everything between them is weather." },
 
-    { at: 96, event: ["mod", 7, "reverb", 30, 5, "tri"],
-      why: "STUB: the pad's room on FIVE bars — a rate the parent could not " +
-           "reach. Against the stab's existing 3 and 8 that is the coprime " +
-           "argument taken seriously: 3, 5 and 8 co-peak every 120 bars." },
+    { at: 0, event: ["phrase", 3, 3],
+      why: "OPENING STATE, and SILENT here: a phrase length does nothing while " +
+           "chance is 1, because every step fires whatever bar of the phrase it " +
+           "is. It wakes at bar 96. Three bars against the stab's five come " +
+           "round every 15 — a period nothing else in the piece has, falling on " +
+           "no section boundary." },
 
-    { at: 128, event: ["walk", 4, 2],
-      why: "STUB: the root moves every 4 bars by one degree of G natural minor, " +
-           "reflecting at two degrees either side. Diatonic, never chromatic, " +
-           "and a walk that returns to zero returns to exactly G." },
+    { at: 0, event: ["phrase", 6, 5],
+      why: "OPENING STATE, silent for the same reason; it wakes at bar 32. Five " +
+           "is the longest cycle the listener can still feel AS a cycle. The " +
+           "hats and the stab are both at phrase key 0 at bars 105, 120, 135, " +
+           "150 — measured, not assumed." },
 
-    { at: 160, event: ["move", 1, 0.5],
-      why: "STUB: the rimshot may be touched about half the time — it steps off " +
-           "its phrase grid one bar in two. A different instrument from a frozen " +
-           "channel: it still surprises you, just less often." },
+    { at: 0, event: ["mod", 7, "reverb", 18, 32, "tri"],
+      why: "OPENING STATE. The pad's room over THIRTY-TWO BARS — four times the " +
+           "longest thing in the manifest. [D] on the parent's Static piece: " +
+           "the slowest modulator opens the pad's reverb over sixteen bars and " +
+           "in that piece THAT IS THE ARRANGEMENT. You should not be able to " +
+           "name the bar it happened on." },
 
-    { at: 192, event: ["wet", 6, "delay", 0.55],
-      why: "STUB: the echo thrown open on the stab. An arrangement fact, and it " +
-           "moves the BASE the existing 3-bar modulator sweeps around rather " +
-           "than replacing it." },
+    { at: 0, event: ["mod", 3, "reverb", 14, 7, "tri"],
+      why: "OPENING STATE, and the arithmetic this movement turns on. The " +
+           "manifest's three modulators are 3, 4 and 8 bars: LCM = 24 bars = " +
+           "46.1 s at 125 BPM, so the ENTIRE STATE of the page returns to " +
+           "itself every forty-six seconds. That is the measurement of 'only " +
+           "playing the same loop over and over'. With 7 and 32 added, " +
+           "LCM(3,4,7,8,32) = 672 bars = 21.5 min — longer than the movement, " +
+           "so nothing repeats inside it. Two modulators added and no more: " +
+           "the manifest's three are the owner's." },
 
-    { at: 224, event: ["leave", 7, 32],
-      why: "STUB: the pad goes, over the section's own 32 bars and not on one " +
-           "bar. The surface says WHY channel 7 is quiet for the rest of the " +
-           "movement — silence with nothing to explain it is the one thing this " +
-           "instrument refuses to produce." }
+    /* --- SECTION 2, bar 32, 1:01 — the chord starts breathing ----------- */
+    { at: 32, event: ["chance", 6, 0.75],
+      why: "The odds are rolled once per NOTE, so the G minor triad becomes a " +
+           "different subset of itself across the stab's five-bar phrase while " +
+           "the figure never moves — spontaneous repetition applied to notes. " +
+           "0.75 and not 0.5: fourteen of twenty stabs are still the full " +
+           "triad and about one in sixty drops out entirely, so it reads as a " +
+           "hand on the keys rather than as a fault. Lands on the stab's own " +
+           "wrap at BAR 35, not 32 — structure lands on the bar, so a section " +
+           "event on a long-phrase channel seeps in rather than cutting." },
+
+    /* --- SECTION 3, bar 64, 2:03 — the echo opens ----------------------- */
+    { at: 64, event: ["wet", 6, "delay", 0.55],
+      why: "The echo is the second instrument, not an effect on the first. The " +
+           "manifest's base is 0 with a +/-34 three-bar modulator sweeping " +
+           "around it, so today the echo swells from nothing; moving the BASE " +
+           "leaves that swell riding on top. AFTER the chance event and not " +
+           "before, and that order is the whole point: an echo carries forward " +
+           "only the variety that already exists. Opened over a frozen triad " +
+           "it just makes the frozen triad longer." },
+
+    /* --- SECTION 4, bar 96, 3:04 — the top thins ------------------------ */
+    { at: 96, event: ["chance", 3, 0.70],
+      why: "The hats are the only channel where thinning reads as thinning — " +
+           "the rim and the clap are one hit a bar, and 'one hit, not a " +
+           "pattern' means gambling with them is removal with a dice roll in " +
+           "front of it. At 0.70 on a three-bar phrase the measured bars are " +
+           "4/8, 4/8, 4/8: the same weight, never the same bar. The carpet " +
+           "lifts and what is left sits BEHIND the bass, which is where the " +
+           "genre puts hats. The sub is never thinned at any point — drop " +
+           "either of its two notes and the bar has no bass." },
+
+    /* --- SECTION 5, bar 128, 4:06 — the root falls to flat-VII ---------- */
+    { at: 128, event: ["walk", 96, -1],
+      why: "The only device in the whole inherited vocabulary that moves " +
+           "harmony over bars, and it is used ONCE. Down one degree of G " +
+           "natural minor: stab F3 A3 C4, pad F2 A2 C3, sub F1 then D#2 — F " +
+           "major, the bVII, with the flat seventh under the second half. " +
+           "Diatonic throughout; nothing chromatic. The bass has been playing " +
+           "F under every bar since bar 0, so the harmony moves to a note that " +
+           "was always there. THE SIGN IS LOAD-BEARING: +1 degree is A " +
+           "DIMINISHED, and across 2000 seeds the unsigned walk goes up 49.3% " +
+           "of the time. See finding 2 in the spec. Period 96 bars means it " +
+           "turns over by itself at bar 192 and is home for the exit." },
+
+    /* --- SECTION 6, bar 160, 5:07 — the room opens wide ----------------- */
+    { at: 160, event: ["wet", 7, "reverb", 0.62],
+      why: "The movement's peak, and in this genre the peak is the most " +
+           "ENCLOSED point and not the loudest — building to a loud peak is " +
+           "the one move that would make this tech-house. Nothing gets louder: " +
+           "the F major pad simply occupies a much larger space and everything " +
+           "else is heard inside it. The 32-bar tide still rides +/-0.18 " +
+           "around the new base, so the pad now breathes between 0.44 and " +
+           "0.80. Channel 7 only — if the drums go soft, this landed on the " +
+           "bus." },
+
+    /* --- SECTION 7, bar 192, 6:09 — the root comes home by itself ------- */
+    { at: 192, event: null,
+      why: "THE ONLY SECTION WITH NOTHING DIALLED, and one of the largest " +
+           "changes in the movement: the walk bound at bar 128 turns over on " +
+           "its own and the root returns to exactly G — not near it. With span " +
+           "1 the walk is at 0 after two steps for EVERY seed, so this is " +
+           "deterministic and not a hope. It is here to prove the thing the " +
+           "two-hour spec rests on: a device with a long period generates " +
+           "structure without anyone writing structure. Eight minutes can " +
+           "afford eight authored events; two hours cannot afford 112." },
+
+    /* --- SECTION 8, bar 224, 7:10 — the kick goes; the boundary --------- */
+    { at: 224, event: ["leave", 0, 12],
+      why: "Over twelve bars and not one: a dissolve, so you notice the floor " +
+           "has gone rather than that it went. Gone by bar 236, 7:33. What is " +
+           "left is still dub techno — a chord on every offbeat with a bass " +
+           "under it — in the widest room of the movement with the echo open. " +
+           "THIS SECTION IS ALREADY THE MOVEMENT BOUNDARY and building " +
+           "movement 2 will not change a line of it: 'everything but one " +
+           "element drops for 8-16 bars and the last chord rings into the new " +
+           "key through the echo'. Until movement 2 exists the wrap to bar 0 " +
+           "is a cut back into the full piece, which after a minute with no " +
+           "floor is the riddim coming back — the most normal event in dub. " +
+           "Discrete state must be home by bar 256; modulator phase need not " +
+           "be, and is not." }
   ],
-  gestures: []                // phrase-level one-shots: #16's, 8-bar grid
+
+  /* --- the phrase level: six one-shot dub gestures on the 8-bar grid,
+     unevenly spaced. throw(ch, wet, bars): that channel's delay send jumps
+     for `bars` bars and returns to whatever the schedule says it is. It
+     NEVER touches feedback — feedback is a NOW knob and the owner's hand
+     owns it. If gestures are not implemented this sprint, DELETE THIS
+     ARRAY: nothing structural depends on it. --- */
+  gestures: [
+    { at: 24,  what: ["throw", 2, 0.90, 1],
+      why: "the clap on beat 4 thrown into the echo — the first thing that " +
+           "happens in the movement, before any section event, because " +
+           "section 1 has no event and needs one flick of a hand in it" },
+    { at: 56,  what: ["throw", 6, 0.95, 2],
+      why: "the chord thrown, four bars before the echo opens — showing what " +
+           "the delay is about to be given" },
+    { at: 88,  what: ["throw", 2, 0.90, 1],
+      why: "the clap again, carrying the boundary into section 4" },
+    { at: 152, what: ["throw", 6, 0.95, 2],
+      why: "the first throw in F major. The same gesture, a different chord: " +
+           "the cheapest possible proof that the harmony really moved" },
+    { at: 184, what: ["throw", 2, 0.90, 1],
+      why: "the clap inside the big room, so the throw has somewhere to go" },
+    { at: 216, what: ["throw", 6, 0.95, 2],
+      why: "the chord thrown eight bars before the kick starts leaving — its " +
+           "tail is what carries the kick's disappearance, and it is still " +
+           "ringing while the floor goes" }
+  ]
+  /* Gaps of 32, 32, 64, 32, 32 bars. The 64-bar gap runs 2:49 to 4:52 and
+     covers the movement's rest AND the harmonic move, so section 5 — the
+     biggest event in the piece — arrives into an undecorated stretch. */
 };
+
+
 /* =========================================================================
    THE PATTERNS — built once from [M], in the pure region, because the loop
    detector has to be able to read them without an audio context.
@@ -2060,15 +2253,13 @@ function buildSections() {
     tr.innerHTML = `<td class="n">${sec.at + 1}</td><td>${eventText(sec.event)}</td><td class="why">${sec.why}</td>`;
     tb.appendChild(tr);
   });
-  if (MOVEMENT.stub) {
+  (MOVEMENT.gestures || []).forEach((g, i) => {
     const tr = document.createElement("tr");
-    tr.className = "silent";
-    tr.innerHTML = `<td>—</td><td>STUB</td><td class="why">This schedule is a stub: it exists so the `
-      + `machinery can be measured, and its whys say what each event proves mechanically rather `
-      + `than what it is for musically. The real eight sections are written separately and drop `
-      + `into this exact shape.</td>`;
+    tr.id = "ges" + i;
+    tr.innerHTML = `<td class="n">${g.at + 1}</td><td>${eventText(g.what)}</td>`
+      + `<td class="why">gesture — ${g.why}</td>`;
     tb.appendChild(tr);
-  }
+  });
 }
 
 function buildSteps() {
