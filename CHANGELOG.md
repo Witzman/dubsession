@@ -2,8 +2,9 @@
 
 ## Unreleased
 
-**The noise floor — a bed that never stops, and a switch for it.**
-On the branch, measured, *not yet merged and therefore not yet heard.*
+## 2026-09-18 — the noise floor
+
+A bed that never stops, and a switch for it.
 
 - Hiss, crackle and hum are not a byproduct of this genre, they are part
   of it: a patch with no noise floor sounds like a demo of an oscillator.
