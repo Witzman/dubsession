@@ -81,6 +81,13 @@ const exported = [
   'walkAt', 'transposeDegrees', 'degreeOf', 'fromDegree', 'shapeAt', 'modValue',
   'seedFromQuery', 'rand01', 'hash4', 'euclid', 'rotated', 'modBars', 'clamp',
   'MOD_SLOTS', 'MOD_SLOT_KEYS', 'modSlotsOf',
+  // the drawn manifest — #38. `STYLE` is the space, `draw` picks the point,
+  // `repair` is the seatbelt and `quiz` is the independent assertion that the
+  // seatbelt was fastened. `PATHS` and `D` are the seam three parallel streams
+  // write against; `RESERVED` is the coordinates that are allocated and not
+  // yet spent.
+  'STYLE', 'CONTRACT', 'D', 'RESERVED', 'PATHS', 'DEFAULT_SEED',
+  'draw', 'repair', 'quiz', 'fieldAt', 'drawSet', 'clone', 'rebuildDerived',
 ];
 const L = new Function(`${region}\n; return { ${exported.join(', ')} };`)();
 ok(typeof L.compositionAt === 'function', 'the region evaluates and exports the layer');
@@ -529,8 +536,12 @@ ok(offAt(24).gesture === null && offAt(24).wet[2].delay === L.PIECE.wets[2].dela
 // manifest's three must survive the switch being off, at their own rates,
 // while the two the SCHEDULE binds at bar 0 must not.
 const offMods = offAt(129).mods;
+// `mods[].bars` IS A BAR COUNT NOW, NOT AN INDEX INTO MOD_RATES (#38, §3.2).
+// It was an index on the piece and a bar count on a `mod` EVENT; 5 and 7 are
+// valid as both, so nothing complained and the two readings differed by a
+// factor of two and a half.
 ok(offMods.length === 3 && offMods.every((m, i) => m.channel === L.PIECE.mods[i].channel
-     && m.verb === L.PIECE.mods[i].verb && m.bars === L.MOD_RATES[L.PIECE.mods[i].rate]),
+     && m.verb === L.PIECE.mods[i].verb && m.bars === L.PIECE.mods[i].bars),
    'the manifest\'s three modulators keep breathing with the ring off',
    offMods.map(m => m.channel + ':' + m.verb + '/' + m.bars + 'b').join(' '));
 ok(!offMods.some(m => m.channel === 7 && m.verb === 'reverb'),
@@ -555,12 +566,25 @@ ok(L.fingerprint(offAt(3583), SEED) === offPrints[0],
 // A DELIBERATE SCHEDULE CHANGE MUST MOVE THIS NUMBER — that is the point of
 // pinning it. What it refuses is the switch changing the schedule's behaviour
 // by accident.
-const SHIPPED_DIGEST = 'a98594eccdd9a736';
+//
+// MOVED ONCE, 2026-09-19, BY #38, AND THE OLD NUMBER IS KEPT BECAUSE IT IS THE
+// CONTROL. `a98594eccdd9a736` / 79 distinct was the literal `PIECE`. The draw
+// replaced it, and with the CHANCE SLOT KEY LEFT AS IT WAS the drawn piece
+// reproduces that digest bar for bar — measured, both runs, in the same
+// process. So the draw changes nothing about the material, and the ONLY thing
+// that moved the number is the slot key itself: `take[e].step * 8 + e * 4 + k`
+// became `e * 4 + k` (§0.4), because the old key collides once a channel has
+// more than two events — `step*8 + 8` is `(step+1)*8 + 0` — and a drawn bass
+// with six onsets makes two different notes share one chance roll. The stab
+// sits at chance 0.75 from bar 33 to bar 224, so a different key drops a
+// different note of the same triad in those bars. Same material, same
+// statistics, a different throw of the same dice.
+const SHIPPED_DIGEST = 'bac4694aec2d6432';
 const shippedNow = createHash('sha256').update(prints.join('\n')).digest('hex').slice(0, 16);
 ok(PROVE_RED || shippedNow === SHIPPED_DIGEST,
    'with auto ON the movement is bar-for-bar the schedule that shipped at 0ea718c',
    `${prints.length} bars, digest ${shippedNow} against ${SHIPPED_DIGEST}`);
-ok(PROVE_RED || new Set(prints).size === 79,
+ok(PROVE_RED || new Set(prints).size === 83,
    'and its distinct-bar count is the measured one', `${new Set(prints).size} distinct bars in ${N}`);
 
 /* -- 5c. THE HAND OUTRANKS THE SCHEDULE ----------------------------------
