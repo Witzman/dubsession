@@ -1,0 +1,524 @@
+{
+ "file": "drawn/0x11CE9E",
+ "seed": 1167006,
+ "tempo": 125,
+ "globals": {
+  "root": 7,
+  "scale": 0,
+  "dlytime": 1,
+  "dlyfbk": 42,
+  "revSeconds": 4.5,
+  "rumble": 0.7,
+  "pump": 0,
+  "bedTrim": 1
+ },
+ "frame": {
+  "grammar": "rolling",
+  "phrase": 8,
+  "section": 32,
+  "bars": 256,
+  "swing": 0.08,
+  "swingShare": {
+   "0": 0,
+   "1": 1,
+   "2": 0,
+   "3": 1,
+   "4": 0,
+   "5": 0,
+   "6": 0,
+   "7": 0
+  },
+  "humanTime": 0.02,
+  "humanTimeShare": {
+   "1": 1,
+   "3": 1.5,
+   "4": 1.5
+  },
+  "humanVelo": 5,
+  "humanVeloShare": {
+   "1": 1,
+   "3": 1.6,
+   "4": 1.6
+  }
+ },
+ "drums": {
+  "0": {
+   "steps": [
+    0,
+    4,
+    8,
+    12
+   ],
+   "velo": 110,
+   "why": "four on the floor, hard and flat"
+  },
+  "1": {
+   "hits": 1,
+   "rotate": 4,
+   "velo": 68,
+   "why": "one rimshot on beat 2, and nothing else"
+  },
+  "2": {
+   "hits": 1,
+   "rotate": 12,
+   "velo": 72,
+   "why": "a single clap on beat 4, drenched"
+  },
+  "3": {
+   "hits": 8,
+   "rotate": 0,
+   "velo": 58,
+   "why": "eighth-note hats, quiet, under everything"
+  }
+ },
+ "chords": {
+  "5": [
+   {
+    "step": 0,
+    "notes": [
+     31
+    ],
+    "velo": 112,
+    "duration": 7
+   },
+   {
+    "step": 8,
+    "notes": [
+     41
+    ],
+    "velo": 112,
+    "duration": 7
+   }
+  ],
+  "6": [
+   {
+    "step": 2,
+    "notes": [
+     55,
+     58,
+     62
+    ],
+    "velo": 92,
+    "duration": 1.6
+   },
+   {
+    "step": 6,
+    "notes": [
+     55,
+     58,
+     62
+    ],
+    "velo": 92,
+    "duration": 1.6
+   },
+   {
+    "step": 10,
+    "notes": [
+     55,
+     58,
+     62
+    ],
+    "velo": 92,
+    "duration": 1.6
+   },
+   {
+    "step": 14,
+    "notes": [
+     55,
+     58,
+     62
+    ],
+    "velo": 92,
+    "duration": 1.6
+   }
+  ],
+  "7": [
+   {
+    "step": 0,
+    "notes": [
+     43,
+     46,
+     50
+    ],
+    "velo": 56,
+    "duration": 15
+   }
+  ]
+ },
+ "empty": {
+  "4": "silent in this piece — rhythm_reg 0 in the manifest. Said explicitly, because a channel that goes quiet with nothing explaining it is the one thing the instrument refuses to produce [G]."
+ },
+ "wets": {
+  "1": {
+   "delay": 0,
+   "reverb": 6
+  },
+  "2": {
+   "delay": 18,
+   "reverb": 30
+  },
+  "3": {
+   "delay": 30,
+   "reverb": 34
+  },
+  "4": {
+   "delay": 0,
+   "reverb": 8
+  },
+  "5": {
+   "delay": 0,
+   "reverb": 0
+  },
+  "6": {
+   "delay": 0,
+   "reverb": 6
+  },
+  "7": {
+   "delay": 44,
+   "reverb": 36
+  }
+ },
+ "levels": {
+  "0": 0.77,
+  "1": 0.7065,
+  "2": 0.7826,
+  "3": 0.67,
+  "4": 0.2065,
+  "5": 0.337,
+  "6": 0.3261,
+  "7": 0.2826
+ },
+ "mods": [
+  {
+   "channel": 6,
+   "verb": "delay",
+   "depth": 34,
+   "bars": 3,
+   "shape": "tri",
+   "phase0": 0.15,
+   "why": "the stab's echo swells and recedes over three bars"
+  },
+  {
+   "channel": 6,
+   "verb": "reverb",
+   "depth": 26,
+   "bars": 8,
+   "shape": "tri",
+   "phase0": 0.65,
+   "why": "and its room opens over eight, out of phase with the echo"
+  },
+  {
+   "channel": 3,
+   "verb": "level",
+   "depth": 28,
+   "bars": 4,
+   "shape": "tri",
+   "phase0": 0.8,
+   "why": "the hats breathe over four bars"
+  }
+ ],
+ "voices": {
+  "voice.kick.tune": 1,
+  "voice.kick.decay": 1,
+  "voice.kick.click": 1,
+  "voice.clap.tone": 1,
+  "voice.rim.tune": 1,
+  "voice.sub.tone": 1,
+  "voice.hats.tone": 1,
+  "voice.stab.reso": 1,
+  "voice.pad.tone": 1
+ },
+ "engines": {
+  "kick": "909",
+  "stab": "dubstab"
+ },
+ "budget": {
+  "voices": 7,
+  "strippable": [
+   1,
+   2,
+   4,
+   7
+  ],
+  "never": [
+   0,
+   6
+  ]
+ },
+ "violations": [],
+ "drawn": {
+  "frame.grammar": {
+   "pool": "frame.grammar",
+   "i": 0,
+   "of": 1,
+   "value": "rolling",
+   "why": ""
+  },
+  "frame.phrase": {
+   "pool": "frame.phrase",
+   "i": 0,
+   "of": 1,
+   "value": 8,
+   "why": ""
+  },
+  "frame.section": {
+   "pool": "frame.section",
+   "i": 0,
+   "of": 1,
+   "value": 32,
+   "why": ""
+  },
+  "frame.bars": {
+   "pool": "frame.bars",
+   "i": 0,
+   "of": 1,
+   "value": 256,
+   "why": ""
+  },
+  "frame.scale": {
+   "pool": "frame.scale",
+   "i": 0,
+   "of": 1,
+   "value": 0,
+   "why": ""
+  },
+  "drums.kick": {
+   "pool": "drums.kick",
+   "i": 0,
+   "of": 1,
+   "value": [
+    0,
+    4,
+    8,
+    12
+   ],
+   "why": "four on the floor, hard and flat"
+  },
+  "drums.lanes.1.hits": {
+   "pool": "drums.lanes.1.hits",
+   "i": 0,
+   "of": 1,
+   "value": 1,
+   "why": ""
+  },
+  "drums.lanes.1.rotate": {
+   "pool": "drums.lanes.1.rotate",
+   "i": 0,
+   "of": 1,
+   "value": 4,
+   "why": ""
+  },
+  "drums.lanes.2.hits": {
+   "pool": "drums.lanes.2.hits",
+   "i": 0,
+   "of": 1,
+   "value": 1,
+   "why": ""
+  },
+  "drums.lanes.2.rotate": {
+   "pool": "drums.lanes.2.rotate",
+   "i": 0,
+   "of": 1,
+   "value": 12,
+   "why": ""
+  },
+  "drums.lanes.3.hits": {
+   "pool": "drums.lanes.3.hits",
+   "i": 0,
+   "of": 1,
+   "value": 8,
+   "why": ""
+  },
+  "drums.lanes.3.rotate": {
+   "pool": "drums.lanes.3.rotate",
+   "i": 0,
+   "of": 1,
+   "value": 0,
+   "why": ""
+  },
+  "drums.polyLen": {
+   "pool": "drums.polyLen",
+   "i": 0,
+   "of": 1,
+   "value": 12,
+   "why": ""
+  },
+  "stab.figure": {
+   "pool": "stab.figure",
+   "i": 0,
+   "of": 1,
+   "value": [
+    2,
+    6,
+    10,
+    14
+   ],
+   "why": "the same G minor triad on all four offbeat eighths. This is the figure the genre is built on: it never changes, and the delay and the filter are what move."
+  },
+  "bass.model": {
+   "pool": "bass.model",
+   "i": 0,
+   "of": 1,
+   "value": "sub",
+   "why": ""
+  },
+  "bass.law": {
+   "pool": "bass.law",
+   "i": 0,
+   "of": 1,
+   "value": null,
+   "why": ""
+  },
+  "pad.present": {
+   "pool": "pad.present",
+   "i": 0,
+   "of": 1,
+   "value": true,
+   "why": ""
+  },
+  "pad.voicing": {
+   "pool": "pad.voicing",
+   "i": 0,
+   "of": 1,
+   "value": "shell",
+   "why": ""
+  },
+  "lead.present": {
+   "pool": "lead.present",
+   "i": 0,
+   "of": 1,
+   "value": false,
+   "why": "silent in this piece — rhythm_reg 0 in the manifest. Said explicitly, because a channel that goes quiet with nothing explaining it is the one thing the instrument refuses to produce [G]."
+  },
+  "lead.motif": {
+   "pool": "lead.motif",
+   "i": 0,
+   "of": 1,
+   "value": null,
+   "why": ""
+  },
+  "engines.kick": {
+   "pool": "engines.kick",
+   "i": 0,
+   "of": 1,
+   "value": "909",
+   "why": ""
+  },
+  "engines.stab": {
+   "pool": "engines.stab",
+   "i": 0,
+   "of": 1,
+   "value": "dubstab",
+   "why": ""
+  },
+  "room.dlyDiv": {
+   "pool": "room.dlyDiv",
+   "i": 0,
+   "of": 1,
+   "value": 1,
+   "why": ""
+  }
+ },
+ "contract": {
+  "must": [
+   "a four-floor sparse pulse, or a displacement the piece DECLARED",
+   "the chord on the offbeat — never sharing the downbeat with the kick",
+   "the bass answering the chord rather than doubling it",
+   "the send as the arrangement: two modulators at least, on coprime bar counts",
+   "a noise floor under it — a patch with none sounds like a demo of an oscillator",
+   "percussion as punctuation: one hit, not a pattern"
+  ],
+  "avoid": [
+   "a busy melodic lead",
+   "a dry constant chord wall",
+   "tech-house edit density",
+   "swing on the kick or the bass — the anchor stays straight"
+  ],
+  "hard": {
+   "tempo": [
+    115,
+    128
+   ],
+   "kickTemplates": [
+    [
+     0,
+     4,
+     8,
+     12
+    ],
+    [
+     0,
+     8
+    ],
+    [
+     0,
+     5,
+     10
+    ]
+   ],
+   "stabNotOnStep": 0,
+   "percHitsMax": 2,
+   "leadOnsetsMax": 6,
+   "swingLanes": [
+    1,
+    3
+   ],
+   "chordDelayMin": 8,
+   "modsMin": 2,
+   "modsCoprime": true,
+   "cutoffChannels": [
+    6,
+    7
+   ],
+   "bedTrimMin": 0.2,
+   "budgetMin": 4
+  }
+ },
+ "poly": {
+  "on": false,
+  "len": 12
+ },
+ "field": {
+  "kick": [
+   0,
+   4,
+   8,
+   12
+  ],
+  "perc": [
+   4,
+   12,
+   0,
+   2,
+   4,
+   6,
+   8,
+   10,
+   12,
+   14
+  ]
+ },
+ "stab": {
+  "degrees": [
+   0,
+   2,
+   4
+  ]
+ },
+ "bass": {
+  "model": "sub",
+  "density": 0.125,
+  "homeBias": 0.25,
+  "octOdds": 0,
+  "lenOdds": 0,
+  "law": null
+ },
+ "pad": {
+  "voicing": "shell"
+ },
+ "lead": {
+  "motif": null,
+  "onsets": 2,
+  "velo": 70
+ }
+}

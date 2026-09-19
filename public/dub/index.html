@@ -1108,7 +1108,15 @@ const STYLE = {
     // So `hits` on 1 and 2 is 1 three times in four and NEVER above 2 — that
     // is the cheapest single thing keeping a drawn piece out of house.
     lanes: {
-      1: { hits:{pool:[1,1,1,2],d:D.DRUM,f:2}, rotate:{range:[0,15],q:1,d:D.DRUM,f:3},
+      // THE RIM'S POSITION IS A POOL AND NOT A UNIFORM OVER SIXTEEN, and the
+      // reason is measured: a uniform put [M]'s own rimshot on beat 2 at 3.2%
+      // of draws, which drags the whole centre to 1 in 2.8 million and makes
+      // `DEFAULT_SEED` impossible to pick. It is also the better music — a
+      // rimshot lands on a beat, on an offbeat eighth or a sixteenth late, and
+      // those are three things a listener can NAME, which is what step 2 of
+      // the listening script asks for. Beat 2 four times in fifteen.
+      1: { hits:{pool:[1,1,1,2],d:D.DRUM,f:2},
+           rotate:{pool:[4,4,4,4, 12,12,12, 2,6,10,14, 7,11,15, 3],d:D.DRUM,f:3},
            velo:{range:[58,78],q:1,d:D.DRUM,f:4},
            why:{fixed:"the rim as punctuation — one hit, placed, and then nothing"} },
       2: { hits:{pool:[1,1,1,2],d:D.DRUM,f:5}, rotate:{pool:[4,12,12,12,14],d:D.DRUM,f:6},
