@@ -729,7 +729,13 @@ const mutFp = (bar, opts) => L.fingerprint(mutAt(bar, opts), SEED);
 // or the slots MUST move these, which is the point of pinning them.
 const t3on = [], t3off = [];
 for (let b = 0; b < N; b++) { t3on.push(mutFp(b)); t3off.push(mutFp(b, { mutate: false })); }
-ok(new Set(t3off).size === 79 && new Set(t3on).size === 159,
+// MOVED ONCE, 2026-09-19, BY THE REBASE ONTO THE DRAWN MANIFEST, and the
+// reason is known rather than discovered: #38 fixed the chance slot key from
+// `take[e].step * 8 + e * 4 + k` to `e * 4 + k`, which drops a different note
+// of the same triad wherever the stab sits at chance 0.75. 79/159 became
+// 83/163 — BOTH HALVES MOVED BY THE SAME FOUR, which is what says the grain
+// itself is untouched by a change to the dice underneath it.
+ok(new Set(t3off).size === 83 && new Set(t3on).size === 163,
    'the honest pair: distinct bars in ' + N + ' WITHOUT the mutation and WITH it',
    `${new Set(t3off).size} without · ${new Set(t3on).size} with`);
 const offOn = [], onOn = [];
