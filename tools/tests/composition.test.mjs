@@ -707,6 +707,94 @@ ok(L.DRUM_PAT[2].join('') === '0000000000001000', 'the clap is still on beat 4')
 ok(L.DRUM_PAT[3].join('') === '1010101010101010', 'the hats are still eighths');
 ok(L.PIECE.levels[0] === 0.77 && L.MASTER_TRIM === 0.95, 'the faders and the master trim are where they were');
 
+
+/* -- 7. TIER 3 — THE PER-BAR MUTATION ------------------------------------
+   ADDED AS ONE CONTIGUOUS BLOCK AT THE END, 2026-09-19 (#52 / #47 §6), because
+   another agent is editing this file in parallel. Everything above is tier 1
+   and tier 2 and runs with `mutate: false`; this section is the only one that
+   turns the grain on, and it turns it on explicitly every time.
+
+   WHAT THIS IS FOR. The owner's complaint was "NOT ALWAYS THE SAME LOOP". The
+   loop detector above proves the ARRANGEMENT moves; it cannot prove the grain
+   does, because it was written before the grain existed. The honest pair is
+   the count with the layer and the count without it, from the same build —
+   the second is what says whether the drawn material carries the piece or
+   whether the grain is doing all the work. Both are pinned here. */
+group('tier 3 — the per-bar mutation');
+
+const mutAt = (bar, opts) => L.compositionAt(SEED, L.PIECE, M, bar, { auto: true, ...(opts || {}) });
+const mutFp = (bar, opts) => L.fingerprint(mutAt(bar, opts), SEED);
+
+// THE PAIR. Measured 2026-09-19 on this build; a deliberate change to the odds
+// or the slots MUST move these, which is the point of pinning them.
+const t3on = [], t3off = [];
+for (let b = 0; b < N; b++) { t3on.push(mutFp(b)); t3off.push(mutFp(b, { mutate: false })); }
+ok(new Set(t3off).size === 79 && new Set(t3on).size === 159,
+   'the honest pair: distinct bars in ' + N + ' WITHOUT the mutation and WITH it',
+   `${new Set(t3off).size} without · ${new Set(t3on).size} with`);
+const offOn = [], onOn = [];
+for (let b = 0; b < N; b++) {
+  offOn.push(L.fingerprint(L.compositionAt(SEED, L.PIECE, M, b, { mutate: false }), SEED));
+  onOn.push(L.fingerprint(L.compositionAt(SEED, L.PIECE, M, b), SEED));
+}
+// AND THE ONE THE OWNER ACTUALLY LOADS. `auto` is off by default, so this is
+// the page as it opens: one bar repeated 256 times before tier 3 existed.
+ok(new Set(offOn).size === 1 && new Set(onOn).size > 20,
+   'with auto OFF — the page as it opens — the arrangement still holds still and the GRAIN is what moves',
+   `${new Set(offOn).size} without · ${new Set(onOn).size} with`);
+
+// HASH-ADDRESSABLE, NOT A STREAM. This is the property the whole layer is
+// shaped by: bar 3584 must be answerable without playing the 3583 before it,
+// or `seek` stops being the same performance.
+let far = 900;
+while (far < 1200 && mutAt(far).mut.sig === '-') far++;
+const cold = mutAt(far).mut.sig;
+for (let b = 0; b < 4096; b++) mutAt(b);
+ok(cold === mutAt(far).mut.sig && cold !== '-',
+   'a mutation is a fact about (seed, bar): bar ' + (far + 1) + ' asked cold and asked after 4096 bars is the same bar',
+   `"${cold}"`);
+ok(L.compositionAt(SEED ^ 0x7777, L.PIECE, M, far, { auto: true }).mut.sig !== cold,
+   'and it is a fact about the SEED too — another seed has another performance');
+
+// THE CAP, AND §6.4 — WHAT MAY NEVER MUTATE. Over 40 seeds × 256 bars, because
+// one seed proves nothing about a rule.
+let over = 0, stabMoved = 0, badPitch = 0, badGhost = 0, badPull = 0, pulls = 0, supSeen = 0;
+const stabSteps = (L.PIECE.chords[6] || []).map(e => e.step).join(',');
+for (let s = 0; s < 40; s++) {
+  const sd = (0x11CE9E + s * 7919) | 0;
+  let lastPull = -99;
+  for (let b = 0; b < 256; b++) {
+    const m = L.compositionAt(sd, L.PIECE, M, b, { auto: true }).mut;
+    if (m.fired.length > m.cap) over++;
+    if (m.ghost[6] || m.dropped[6] || m.skip[6] !== undefined) stabMoved++;
+    if (m.bassOctave && m.bassOctave.index === 0) badPitch++;
+    if (m.skip[0] !== undefined) { pulls++; if (m.skip[0] !== 12) badPull++; if (b - lastPull < 8) badPull++; lastPull = b; }
+    for (const ch of [0, 3]) for (const g of (m.ghost[ch] || [])) if (L.DRUM_PAT[ch][g.step]) badGhost++;
+    if (m.suppressed.length) { supSeen++; if (!m.text) badGhost++; }
+  }
+}
+ok(over === 0, 'THE CAP HOLDS: never more than two mutations in one bar', `${over} breaches in 10240 bars`);
+ok(stabMoved === 0 && (L.PIECE.chords[6] || []).map(e => e.step).join(',') === stabSteps,
+   'THE STAB\'S STEPS ARE NEVER TOUCHED — the figure is the identity of the genre', `steps ${stabSteps}`);
+ok(badPitch === 0, 'the bass octave never takes the downbeat note — the anchor of the bar');
+ok(badGhost === 0, 'a ghost never lands on a step the lane already plays, and a suppression always carries its words');
+ok(badPull === 0 && pulls > 0,
+   'beat four is pulled only at a phrase end, only beat four, and never twice running', `${pulls} pulls in 10240 bars`);
+ok(supSeen > 0, 'a suppressed mutation is RECORDED, not dropped — the surface can say a ghost stood down',
+   `${supSeen} bars in 10240 carry one`);
+
+// A MUTATION WRITES OVER THE MATERIAL, NEVER INTO IT. The drawn patterns and
+// the takes must be bit-identical after a thousand bars of mutation.
+const matBefore = JSON.stringify([L.DRUM_PAT, L.PIECE.chords, L.PIECE.drums]);
+for (let b = 0; b < 1000; b++) mutAt(b);
+ok(JSON.stringify([L.DRUM_PAT, L.PIECE.chords, L.PIECE.drums]) === matBefore,
+   'TIER 1 IS UNTOUCHED after a thousand mutated bars — the layer writes over the bar, not into the piece');
+
+// THE DOOR IS REAL. `mutate: false` must produce the string the page produced
+// before tier 3 existed — no field, not an empty one.
+ok(mutFp(far, { mutate: false }).indexOf('t3:') === -1 && mutFp(far).indexOf('t3:') !== -1,
+   '`mutate: false` is a real door: the fingerprint of an unmutated bar is the string it always was');
+
 console.log(`\n${checks - failures}/${checks} checks passed`);
 if (PROVE_RED) {
   if (failures > 0) { console.log('\nAS REQUIRED: with the loop pinned back on, the suite is RED.'); process.exit(0); }
