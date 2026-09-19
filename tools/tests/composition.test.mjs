@@ -111,7 +111,18 @@ if (PROVE_RED) console.log('\n*** --prove-red: chance pinned to 1, move pinned t
 // so it passes `{ auto: true }` explicitly. A test that forgot to would be
 // asking the held-still instrument whether the schedule ran, and the answer
 // would be no — which is a hole this comment exists to keep shut.
-const AUTO = { auto: true };
+//
+// AND TIER 3 IS OFF UNLESS A TEST SAYS OTHERWISE, for the same kind of reason.
+// Everything from here to section 6 is asking about TIER 1 (the material) and
+// TIER 2 (the schedule): does the arrangement land where it says, does a held
+// value outrank it, does the ring come home. Tier 3 writes one or two small
+// things OVER every bar, so left on it would make every one of those counts
+// read 256 and prove nothing — §6.5 of the spec names that exact trap.
+// SECTION 7 IS TIER 3'S OWN, and it turns it back on. If you add an assertion
+// above section 7, it is about the arrangement and it wants NOMUT; if it is
+// about the grain it belongs in section 7.
+const NOMUT = { mutate: false };
+const AUTO = { auto: true, mutate: false };
 const fp = bar => L.fingerprint(L.compositionAt(SEED, L.PIECE, MOVE, bar, AUTO), SEED);
 
 /* -- 3. THE LOOP DETECTOR ------------------------------------------------- */
@@ -182,7 +193,7 @@ ok(other !== prints[200] || PROVE_RED, 'a different seed is a different composit
 /* -- 5. the verbs -------------------------------------------------------- */
 group('the verbs');
 const at = (bar, mv, opts) => L.compositionAt(SEED, L.PIECE, mv || MOVE, bar,
-  opts ? { auto: true, ...opts } : AUTO);
+  opts ? { auto: true, mutate: false, ...opts } : AUTO);
 
 // base state == today's page: chance 1, move 0, phrase 1 -> key 0 every bar
 const bare = { phrase: 8, section: 32, bars: 256, sections: [{ at: 0, event: null, why: 'reference' }] };
@@ -522,7 +533,7 @@ for (const b of OFF_BARS) {
 // The four things the schedule WOULD have done by those bars, named one at a
 // time — because "it equals the base" passes just as well if the base itself
 // quietly moved. These are the events, checked at bars past where each fires.
-const offAt = b => L.compositionAt(SEED, L.PIECE, M, b);
+const offAt = b => L.compositionAt(SEED, L.PIECE, M, b, NOMUT);
 ok(offAt(40).chance[6] === 1, 'the chance event at bar 33 did not land', 'ch6 chance still 1');
 ok(offAt(70).wet[6].delay === L.PIECE.wets[6].delay / 100,
    'the echo did not open at bar 65', `ch6 delay still ${offAt(70).wet[6].delay}`);
@@ -555,7 +566,12 @@ ok(!offMods.some(m => m.channel === 7 && m.verb === 'reverb'),
 // the schedule are gone, so the `m:` field cannot move either.
 const offPrints = [];
 for (let b = 0; b < N; b++) offPrints.push(L.fingerprint(offAt(b), SEED));
-ok(new Set(offPrints).size === 1, 'THE ARRANGEMENT HOLDS STILL: one distinct bar in ' + N + ' with auto off',
+// TIER 3 IS NOT THE ARRANGEMENT, and this pair is where that claim is kept
+// honest. `offAt` carries NOMUT, so what is counted here is the SCHEDULE: with
+// auto off it must still be one bar, exactly as the owner decided. Section 7
+// then counts the same 256 bars with the grain on, and it is a large number —
+// two different questions, two different numbers, neither hiding the other.
+ok(new Set(offPrints).size === 1, 'THE ARRANGEMENT HOLDS STILL: one distinct bar in ' + N + ' with auto off, tier 3 aside',
    `${new Set(offPrints).size} distinct fingerprint(s)`);
 ok(L.fingerprint(offAt(3583), SEED) === offPrints[0],
    'and bar 3584 — the far end of a two-hour set — is still the same bar');
@@ -663,7 +679,7 @@ ok(offHand.chance[3] === 0.7 && offHand.chance[6] === 1 && offHand.walk === 0,
    'with auto OFF a held value is the only thing that moves', 'ch3 chance 0.7, everything else base');
 const offHandPrints = [];
 for (let b = 0; b < 32; b++)
-  offHandPrints.push(L.fingerprint(L.compositionAt(SEED, L.PIECE, M, b, { holds: { chance: { 3: 0.7 } } }), SEED));
+  offHandPrints.push(L.fingerprint(L.compositionAt(SEED, L.PIECE, M, b, { mutate: false, holds: { chance: { 3: 0.7 } } }), SEED));
 ok(new Set(offHandPrints).size === 8,
    'and it VARIES — the hats thin and come round on the movement\'s phrase, with no schedule at all',
    `${new Set(offHandPrints).size} distinct bars in 32`);
@@ -690,6 +706,100 @@ ok(L.DRUM_PAT[1].join('') === '0000100000000000', 'the rimshot is still on beat 
 ok(L.DRUM_PAT[2].join('') === '0000000000001000', 'the clap is still on beat 4');
 ok(L.DRUM_PAT[3].join('') === '1010101010101010', 'the hats are still eighths');
 ok(L.PIECE.levels[0] === 0.77 && L.MASTER_TRIM === 0.95, 'the faders and the master trim are where they were');
+
+
+/* -- 7. TIER 3 — THE PER-BAR MUTATION ------------------------------------
+   ADDED AS ONE CONTIGUOUS BLOCK AT THE END, 2026-09-19 (#52 / #47 §6), because
+   another agent is editing this file in parallel. Everything above is tier 1
+   and tier 2 and runs with `mutate: false`; this section is the only one that
+   turns the grain on, and it turns it on explicitly every time.
+
+   WHAT THIS IS FOR. The owner's complaint was "NOT ALWAYS THE SAME LOOP". The
+   loop detector above proves the ARRANGEMENT moves; it cannot prove the grain
+   does, because it was written before the grain existed. The honest pair is
+   the count with the layer and the count without it, from the same build —
+   the second is what says whether the drawn material carries the piece or
+   whether the grain is doing all the work. Both are pinned here. */
+group('tier 3 — the per-bar mutation');
+
+const mutAt = (bar, opts) => L.compositionAt(SEED, L.PIECE, M, bar, { auto: true, ...(opts || {}) });
+const mutFp = (bar, opts) => L.fingerprint(mutAt(bar, opts), SEED);
+
+// THE PAIR. Measured 2026-09-19 on this build; a deliberate change to the odds
+// or the slots MUST move these, which is the point of pinning them.
+const t3on = [], t3off = [];
+for (let b = 0; b < N; b++) { t3on.push(mutFp(b)); t3off.push(mutFp(b, { mutate: false })); }
+// MOVED ONCE, 2026-09-19, BY THE REBASE ONTO THE DRAWN MANIFEST, and the
+// reason is known rather than discovered: #38 fixed the chance slot key from
+// `take[e].step * 8 + e * 4 + k` to `e * 4 + k`, which drops a different note
+// of the same triad wherever the stab sits at chance 0.75. 79/159 became
+// 83/163 — BOTH HALVES MOVED BY THE SAME FOUR, which is what says the grain
+// itself is untouched by a change to the dice underneath it.
+ok(new Set(t3off).size === 83 && new Set(t3on).size === 163,
+   'the honest pair: distinct bars in ' + N + ' WITHOUT the mutation and WITH it',
+   `${new Set(t3off).size} without · ${new Set(t3on).size} with`);
+const offOn = [], onOn = [];
+for (let b = 0; b < N; b++) {
+  offOn.push(L.fingerprint(L.compositionAt(SEED, L.PIECE, M, b, { mutate: false }), SEED));
+  onOn.push(L.fingerprint(L.compositionAt(SEED, L.PIECE, M, b), SEED));
+}
+// AND THE ONE THE OWNER ACTUALLY LOADS. `auto` is off by default, so this is
+// the page as it opens: one bar repeated 256 times before tier 3 existed.
+ok(new Set(offOn).size === 1 && new Set(onOn).size > 20,
+   'with auto OFF — the page as it opens — the arrangement still holds still and the GRAIN is what moves',
+   `${new Set(offOn).size} without · ${new Set(onOn).size} with`);
+
+// HASH-ADDRESSABLE, NOT A STREAM. This is the property the whole layer is
+// shaped by: bar 3584 must be answerable without playing the 3583 before it,
+// or `seek` stops being the same performance.
+let far = 900;
+while (far < 1200 && mutAt(far).mut.sig === '-') far++;
+const cold = mutAt(far).mut.sig;
+for (let b = 0; b < 4096; b++) mutAt(b);
+ok(cold === mutAt(far).mut.sig && cold !== '-',
+   'a mutation is a fact about (seed, bar): bar ' + (far + 1) + ' asked cold and asked after 4096 bars is the same bar',
+   `"${cold}"`);
+ok(L.compositionAt(SEED ^ 0x7777, L.PIECE, M, far, { auto: true }).mut.sig !== cold,
+   'and it is a fact about the SEED too — another seed has another performance');
+
+// THE CAP, AND §6.4 — WHAT MAY NEVER MUTATE. Over 40 seeds × 256 bars, because
+// one seed proves nothing about a rule.
+let over = 0, stabMoved = 0, badPitch = 0, badGhost = 0, badPull = 0, pulls = 0, supSeen = 0;
+const stabSteps = (L.PIECE.chords[6] || []).map(e => e.step).join(',');
+for (let s = 0; s < 40; s++) {
+  const sd = (0x11CE9E + s * 7919) | 0;
+  let lastPull = -99;
+  for (let b = 0; b < 256; b++) {
+    const m = L.compositionAt(sd, L.PIECE, M, b, { auto: true }).mut;
+    if (m.fired.length > m.cap) over++;
+    if (m.ghost[6] || m.dropped[6] || m.skip[6] !== undefined) stabMoved++;
+    if (m.bassOctave && m.bassOctave.index === 0) badPitch++;
+    if (m.skip[0] !== undefined) { pulls++; if (m.skip[0] !== 12) badPull++; if (b - lastPull < 8) badPull++; lastPull = b; }
+    for (const ch of [0, 3]) for (const g of (m.ghost[ch] || [])) if (L.DRUM_PAT[ch][g.step]) badGhost++;
+    if (m.suppressed.length) { supSeen++; if (!m.text) badGhost++; }
+  }
+}
+ok(over === 0, 'THE CAP HOLDS: never more than two mutations in one bar', `${over} breaches in 10240 bars`);
+ok(stabMoved === 0 && (L.PIECE.chords[6] || []).map(e => e.step).join(',') === stabSteps,
+   'THE STAB\'S STEPS ARE NEVER TOUCHED — the figure is the identity of the genre', `steps ${stabSteps}`);
+ok(badPitch === 0, 'the bass octave never takes the downbeat note — the anchor of the bar');
+ok(badGhost === 0, 'a ghost never lands on a step the lane already plays, and a suppression always carries its words');
+ok(badPull === 0 && pulls > 0,
+   'beat four is pulled only at a phrase end, only beat four, and never twice running', `${pulls} pulls in 10240 bars`);
+ok(supSeen > 0, 'a suppressed mutation is RECORDED, not dropped — the surface can say a ghost stood down',
+   `${supSeen} bars in 10240 carry one`);
+
+// A MUTATION WRITES OVER THE MATERIAL, NEVER INTO IT. The drawn patterns and
+// the takes must be bit-identical after a thousand bars of mutation.
+const matBefore = JSON.stringify([L.DRUM_PAT, L.PIECE.chords, L.PIECE.drums]);
+for (let b = 0; b < 1000; b++) mutAt(b);
+ok(JSON.stringify([L.DRUM_PAT, L.PIECE.chords, L.PIECE.drums]) === matBefore,
+   'TIER 1 IS UNTOUCHED after a thousand mutated bars — the layer writes over the bar, not into the piece');
+
+// THE DOOR IS REAL. `mutate: false` must produce the string the page produced
+// before tier 3 existed — no field, not an empty one.
+ok(mutFp(far, { mutate: false }).indexOf('t3:') === -1 && mutFp(far).indexOf('t3:') !== -1,
+   '`mutate: false` is a real door: the fingerprint of an unmutated bar is the string it always was');
 
 console.log(`\n${checks - failures}/${checks} checks passed`);
 if (PROVE_RED) {

@@ -1533,6 +1533,9 @@ function compositionAt(seed, piece, movement, bar, opts) {
   // did. A control that does nothing must look dead [G rule 2].
   if (out.gesture && heldValue(holds, "delay", out.gesture.ch) !== undefined)
     out.gesture.heldBack = true;
+  // TIER 3 — the per-bar mutation. Last, because it READS the resolved bar
+  // (what is present, what is silent) and writes over it for this bar only.
+  out.mut = opts.mutate === false ? MUT_NONE : mutationsAt(seed, piece, movement, out, auto);
   return out;
 }
 
@@ -2355,7 +2358,283 @@ function fingerprint(C, seed) {
   parts.push("m:" + C.mods.map(m => m.channel + m.verb[0] + m.depth + "/" + m.bars + m.shape).join("|"));
   parts.push("w:" + ALL_CHANNELS.map(ch => C.wet[ch].delay.toFixed(2) + "/" + C.wet[ch].reverb.toFixed(2)).join("|"));
   parts.push("p:" + ALL_CHANNELS.map(ch => C.present[ch].toFixed(2)).join("|"));
+  // TIER 3 IS PART OF WHAT FIRES. A ghost hat is a hit that happened, so a bar
+  // carrying one is not the same bar. It is recorded as a SIGNATURE and not
+  // folded into the lines above, so a counter can ask the honest pair: how
+  // many distinct bars with the mutation, and how many without it.
+  // A BAR IN WHICH NOTHING MUTATED IS THE BAR IT WAS, character for character:
+  // the field is only added when something fired, so the digest of the
+  // movement as it shipped is still the digest of the movement as it shipped.
+  if (C.mut && C.mut.sig !== "-") parts.push("t3:" + C.mut.sig);
   return parts.join(" ");
+}
+
+
+/* =========================================================================
+   TIER 3 — THE PER-BAR MUTATION                                    [#47 §6]
+   -------------------------------------------------------------------------
+   THREE TIERS, AND THE DIFFERENCE BETWEEN THEM IS THE WHOLE ANSWER to the
+   owner's "NOT ALWAYS THE SAME LOOP":
+
+     tier 1   the draw          changes only when the seed changes
+     tier 2   the arrangement   changes on section and phrase boundaries and
+                                COMES HOME — the ring wraps at movement.bars
+     tier 3   THIS ONE          one or two small things per bar, every bar,
+                                and it deliberately never comes home
+
+   HASH-ADDRESSABLE, NOT A STREAM, and the reason is already written above at
+   `hash4`: a stream needs to know how many calls came before it, which is
+   exactly the history this layer may not keep. A per-bar stream looks safe —
+   created and consumed inside one bar — but it is only safe while the NUMBER
+   of draws per bar is fixed, and under a drawn piece it is not: it depends on
+   how many lanes are present and how many bass onsets there are. So: ONE HASH
+   CALL PER SLOT, with the slot id as a dimension. Bar 3584's mutation is
+   answerable without playing the 3583 bars before it — which is the property
+   `seek` is built on — and a slot can be added later without moving any
+   existing one, because slots are NAMED and not ordered.
+
+   A MUTATION WRITES OVER THE MATERIAL FOR ONE BAR; IT NEVER WRITES INTO IT.
+   Nothing here touches DRUM_PAT, PIECE.chords, the key, the scale or the
+   tempo. §6.4's list of what may never move is enforced by construction:
+
+     - THE KICK'S MAIN ONSETS. Only M5's named `pull` may take one away, at a
+       phrase end, at most once in eight bars, never twice running.
+     - THE STAB'S STEPS. Never. Its velocity, yes. The figure is the identity
+       of the genre — "it never changes, and the delay and the filter are what
+       move" — and it is not a thing to be clever with. §6.3's M5 pool offered
+       "double the last stab"; THAT IS DROPPED HERE, because §6.4 grants an
+       exception to the kick and none to the stab, and the identity rule
+       outranks a four-item pool.
+     - PITCH. Only by the octave, and only on the bass. Root motion belongs to
+       the walk and to nothing else.
+     - LOUDNESS. Every mutation here is one event, one removed event, or one
+       SYMMETRIC velocity contour. If tier 3 could move the level by a dB the
+       compose-time trim would be a fiction, because that trim is computed at
+       draw time and cannot see this layer. Measured, not asserted: see
+       bin/browser/p52-mutation.mjs.
+
+   TIER 3 RUNS WITH `auto` OFF TOO, and that is deliberate. `auto` off means
+   "the arrangement holds still" — no section events, no enter, no leave — and
+   the modulators keep breathing under it because they are texture and not
+   autoplay. A ghost hat is texture by the same argument, and `auto` DEFAULTS
+   TO OFF: a tier 3 behind that switch would leave the default page playing
+   the frozen loop that this layer exists to end. `{ mutate: false }` turns it
+   off, and that door exists for the measurement — it is how the "with the
+   layer" and "without the layer" numbers are both taken from one build.
+   ========================================================================= */
+const MUT = 0x4D555441;                         // "MUTA"
+const MUT_CAP = 2;                              // §6.3, and it is a JUDGEMENT
+const mutRoll = (seed, bar, slot, k) => rand01(seed, MUT + slot, bar, k | 0);
+const mutOne = (seed, bar, slot, k, arr) =>
+  arr[Math.min(arr.length - 1, Math.floor(mutRoll(seed, bar, slot, k) * arr.length))];
+
+// The steps a lane does NOT use, at least `gap` steps away from any step it
+// does — read off the lane's own pattern, so a drawn pattern gets the right
+// answer without this function knowing anything about the piece.
+function mutFreeSteps(ch, gap) {
+  const pat = DRUM_PAT[ch], out = [];
+  if (!pat) return out;
+  for (let s = 0; s < 16; s++) {
+    if (pat[s]) continue;
+    let near = false;
+    for (let d = 1; d <= gap; d++)
+      if (pat[(s + d) % 16] || pat[(s - d + 16) % 16]) { near = true; break; }
+    if (!near) out.push(s);
+  }
+  return out;
+}
+
+// Is `bar` the first bar of a section? With `auto` off there are no sections
+// at all, so only bar 0 is a beginning.
+function mutSectionStart(movement, bar, auto) {
+  if (bar <= 0) return true;
+  if (!auto) return false;
+  const span = movement.bars || 0;
+  const b = span ? ((bar % span) + span) % span : bar;
+  const secs = movement.sections || [];
+  for (let i = 0; i < secs.length; i++) if (secs[i].at === b) return true;
+  return false;
+}
+
+const MUT_NONE = {
+  bar: -1, cap: MUT_CAP, fired: [], suppressed: [], ghost: {}, dropped: {},
+  skip: {}, bassOctave: null, hold: null, stabLean: 0, sig: "-", matSig: "-", text: ""
+};
+
+// TIER 3 DOES NOT ANSWER THE `auto` SWITCH, and if that is ever to change it
+// changes HERE and nowhere else. `auto` off means "the arrangement holds
+// still"; the grain is not the arrangement, the modulators already keep
+// breathing under it on exactly that argument, and `auto` DEFAULTS TO OFF —
+// so a tier 3 behind it would leave the default page playing the one bar this
+// layer exists to end. Set this true and the default page is frozen again.
+const MUT_NEEDS_AUTO = false;
+
+function mutationsAt(seed, piece, movement, C, auto) {
+  if (MUT_NEEDS_AUTO && !auto) return MUT_NONE;
+  const bar = C.bar;
+  const M = {
+    bar, cap: MUT_CAP, fired: [], suppressed: [], ghost: {}, dropped: {},
+    skip: {}, bassOctave: null, hold: null, stabLean: 0, sig: "", matSig: "", text: ""
+  };
+  // A lane that is not sounding this bar is not a lane to mutate. A ghost on
+  // a channel the arrangement has taken away would be the instrument putting
+  // material back that the schedule removed, which is the one thing tier 3 is
+  // not for.
+  const on = ch => C.present[ch] > 0 && !C.silent[ch];
+  const cand = [];
+  const sc = SCALE_STEPS[C.scale] || SCALE_STEPS[0];
+
+  /* M1 — A GHOST HAT, 12%. One extra onset on the hat lane at a step it does
+     not use, at a bit over half velocity. Never step 0: the downbeat is not
+     an ornament. */
+  const hatFree = mutFreeSteps(3, 0);
+  if (on(3) && hatFree.length && mutRoll(seed, bar, 1, 0) < 0.12) {
+    const st = mutOne(seed, bar, 1, 1, hatFree);
+    if (st !== 0) cand.push({
+      slot: 1, name: "ghost hat", sig: "1@" + st, material: true,
+      why: "an extra hat on the 16th at step " + (st + 1) + ", at 55% velocity",
+      apply: m => { (m.ghost[3] = m.ghost[3] || []).push({ step: st, velo: 0.55 }); }
+    });
+  }
+
+  /* M2 — A DROPPED HAT BAR, 6%. The lane sits out for one bar. Never two
+     running and never the first bar of a section — a hole at the moment a
+     section arrives reads as a fault, not as a hole.
+     "Never two running" is asked of the RAW ROLL of the bar before, not of
+     what that bar actually did: the raw roll is one hash and needs no
+     recursion, and standing down after a suppressed drop costs a 6% event
+     0.4% of the time. */
+  const m2raw = b => b > 0 && mutRoll(seed, b, 2, 0) < 0.06;
+  if (on(3) && m2raw(bar) && !m2raw(bar - 1) && !mutSectionStart(movement, bar, auto)
+      && !cand.some(c => c.slot === 1))
+    cand.push({
+      slot: 2, name: "hats out", sig: "2", material: true,
+      why: "the hat lane sits out this one bar",
+      apply: m => { m.dropped[3] = true; }
+    });
+
+  /* M3 — A BASS OCTAVE JUMP, 12%. One bass note in the bar goes up one
+     octave, counted IN DEGREES so it stays in the scale exactly as the walk
+     does. Never the downbeat note — the bar's first bass note is the anchor
+     the whole thing is hung from. This is the ONLY pitch a mutation may
+     touch, and it is an octave, which is the one interval that cannot change
+     the harmony. */
+  const take5 = piece.chords && piece.chords[5];
+  if (on(5) && take5 && take5.length && mutRoll(seed, bar, 3, 0) < 0.12) {
+    const idx = [];
+    for (let e = 0; e < take5.length; e++) if (take5[e].step !== 0) idx.push(e);
+    if (idx.length) {
+      const e = mutOne(seed, bar, 3, 1, idx);
+      cand.push({
+        slot: 3, name: "bass octave", sig: "3#" + e, material: true,
+        why: "the bass note at step " + (take5[e].step + 1) + " jumps an octave",
+        apply: m => { m.bassOctave = { index: e, degrees: sc.length }; }
+      });
+    }
+  }
+
+  /* M4 — A STAB VELOCITY LEAN, 20%. A contour of ±8 velocity units across the
+     bar's stab hits, one way or the other. VELOCITY ONLY — the steps are the
+     figure and the figure does not move. The contour is SYMMETRIC about the
+     written velocity on purpose: it leans the bar without making it louder,
+     which is what keeps §6.4's 1 dB clause true. */
+  if (on(6) && mutRoll(seed, bar, 4, 0) < 0.20) {
+    const dir = mutRoll(seed, bar, 4, 1) < 0.5 ? -1 : 1;
+    cand.push({
+      slot: 4, name: "stab lean", sig: "4" + (dir < 0 ? "-" : "+"), material: false,
+      why: dir < 0 ? "the stabs lean back across the bar" : "the stabs lean forward across the bar",
+      apply: m => { m.stabLean = 8 * dir; }
+    });
+  }
+
+  /* M5 — A TURNAROUND, 25% of phrase-end bars. The last bar of an eight-bar
+     phrase is where a record breathes. Three of them, and the pool is three
+     and not the spec's four for the reason given at the top of this block.
+     It stands down if a section boundary is at the NEXT bar: a turnaround
+     into a section change is two announcements of the same thing. */
+  const phraseEnd = (bar % 8) === 7;
+  const turnPool = [];
+  if (on(0)) turnPool.push("pull");
+  if (on(3)) turnPool.push("stutter");
+  if (on(5) && take5 && take5.length) turnPool.push("hold");
+  let kind = null;
+  if (phraseEnd && turnPool.length && mutRoll(seed, bar, 5, 0) < 0.25
+      && !mutSectionStart(movement, bar + 1, auto)) {
+    kind = mutOne(seed, bar, 5, 1, turnPool);
+    // NEVER TWO PULLS RUNNING. The previous phrase end is eight bars back, and
+    // like M2's rule this asks the raw roll rather than replaying that bar.
+    if (kind === "pull" && bar >= 8 && mutRoll(seed, bar - 8, 5, 0) < 0.25
+        && mutOne(seed, bar - 8, 5, 1, turnPool) === "pull")
+      kind = turnPool.length > 1 ? turnPool[1] : null;
+  }
+  {
+    if (kind === "pull") cand.push({
+      slot: 5, name: "turnaround: beat four pulled", sig: "5p", material: true,
+      why: "the kick leaves beat four at the end of the phrase",
+      apply: m => { m.skip[0] = 12; }
+    });
+    else if (kind === "stutter") cand.push({
+      slot: 5, name: "turnaround: hat stutter", sig: "5s", material: true,
+      why: "the hats stutter over the bar line",
+      apply: m => {
+        const g = (m.ghost[3] = m.ghost[3] || []);
+        for (const st of [13, 15]) if (!DRUM_PAT[3] || !DRUM_PAT[3][st]) g.push({ step: st, velo: 0.5 });
+      }
+    });
+    else if (kind === "hold") cand.push({
+      slot: 5, name: "turnaround: bass held over", sig: "5h", material: true,
+      why: "the last bass note is held across the bar line",
+      apply: m => { m.hold = { index: take5.length - 1, mult: 1.6 }; }
+    });
+  }
+
+  /* M6 — A KICK GHOST, 10%, ON A LONGER CYCLE THAN THE KICK'S OWN. Straight
+     out of the genre note: "four-on-the-floor ... with ghost notes at lowered
+     velocity ON A LONGER LOOP THAN THE MAIN PATTERN." So the roll is asked of
+     `bar % K` and not of `bar`: the ghost has a period of K bars under a kick
+     whose period is one, which is the oldest trick in machine music and the
+     reason this slot is not just "another random hit".
+
+     §6.3's bound reads "never within 2 steps of a main hit". Taken as "closer
+     than 2" it is UNSATISFIABLE on four-on-the-floor — every one of the 16
+     steps is within 2 of a kick — so it is read as AT LEAST 2 STEPS AWAY,
+     which leaves the offbeat eighths, which is where a dub kick ghost lives
+     anyway. `mutFreeSteps(0, 1)` is that rule, read off the pattern. */
+  const K = [3, 5, 7][Math.min(2, Math.floor(rand01(seed, MUT + 6, 0, 9) * 3))];
+  const kickFree = mutFreeSteps(0, 1);
+  const kp = ((bar % K) + K) % K;
+  if (on(0) && kickFree.length && mutRoll(seed, kp, 6, 0) < 0.10) {
+    const st = mutOne(seed, kp, 6, 1, kickFree);
+    cand.push({
+      slot: 6, name: "kick ghost", sig: "6@" + st, material: true,
+      why: "a quiet kick at step " + (st + 1) + ", on a " + K + "-bar loop under the four",
+      apply: m => { (m.ghost[0] = m.ghost[0] || []).push({ step: st, velo: 0.45 }); }
+    });
+  }
+
+  /* M7 is the lead's quote transform. THE LEAD DOES NOT EXIST YET — channel 4
+     is empty in this piece and says so — so the slot is named and skipped
+     rather than half-built. */
+
+  /* THE CAP. At most two may fire; the lowest slot numbers win. The rest are
+     RECORDED AS SUPPRESSED rather than dropped, so the surface can say "a
+     ghost was suppressed, two things were already happening" instead of
+     looking dead — a control that did nothing must never look like one that
+     did. Two is a judgement and not a measurement: it is the first thing to
+     move at the ear. */
+  cand.sort((a, b) => a.slot - b.slot);
+  for (let i = 0; i < cand.length; i++) {
+    const c = cand[i];
+    if (i < MUT_CAP) { c.apply(M); M.fired.push({ slot: c.slot, name: c.name, sig: c.sig, why: c.why, material: c.material }); }
+    else M.suppressed.push({ slot: c.slot, name: c.name, why: "two things were already happening" });
+  }
+  M.sig = M.fired.length ? M.fired.map(f => f.sig).join(",") : "-";
+  const mat = M.fired.filter(f => f.material);
+  M.matSig = mat.length ? mat.map(f => f.sig).join(",") : "-";
+  M.text = M.fired.map(f => f.why).join(" · ")
+    + (M.suppressed.length ? (M.fired.length ? " · " : "")
+       + M.suppressed.map(s => s.name + " suppressed, two things were already happening").join(" · ") : "");
+  return M;
 }
 
 /* ==== COMPOSITION LAYER END ==== */
@@ -3671,6 +3950,42 @@ function createEngine(ctx, opts) {
   // start and come out sample-identical to bar 200 reached the long way.
   const voiceSeed = (ch, absStep, k) => hash4(cfg.seed, ch + 1, absStep, 0x101 + (k | 0));
 
+  /* --- SWING IS AGAINST THE CHANNEL'S OWN PULSE, NOT ALWAYS THE 16th (#52)
+     Until 2026-09-19 this was `(s % 2 ? 1 : 0)` — odd 16ths only — and NOT ONE
+     DRUM HIT IN THIS PIECE LANDS ON AN ODD 16th: the kick is 0/4/8/12, the rim
+     is 4, the clap is 12 and the hats are the eight evens. So `SWING` has been
+     in the manifest, on the surface and in the tests, and has never moved a
+     single hit. A green test over silence.
+
+     Two things were wrong and both are the same mistake — reading "a step" as
+     "a 16th" when the source means THE CHANNEL'S OWN STEP:
+
+       WHICH steps are late. A lane on eighths swings its ODD EIGHTHS, which is
+       what a swung hat has always meant: steps 2, 6, 10, 14. A lane on 16ths
+       swings its odd 16ths, unchanged.
+       HOW LATE. [D] "`swingAmount` is a fraction of a step added to the offset
+       and is per pattern, so each channel gets its own — swung hats over a
+       straight kick is the whole secret and it costs one number." A fraction
+       of the CHANNEL'S step. At 125 BPM the manifest's 0.08 on the hats is
+       0.08 of an eighth = 19 ms, a shuffle you can hear; read against the 16th
+       it was 9.6 ms, which is a flam. The number is [M]'s and is not touched.
+
+     A lane whose only hit is ON a beat still does not swing, and that is
+     correct rather than a leftover: swing displaces the upbeats. The rim's one
+     hit is beat 2, so SWING[1] does nothing HERE — it will do something the
+     moment a drawn rim lands off the beat.
+
+     A GRID OF 16 IS THE DEFAULT, so a channel missing from the table swings
+     its 16ths rather than not at all. --- */
+  const SWING_GRID = { 0: 16, 1: 16, 2: 16, 3: 8, 4: 16, 5: 16, 6: 8, 7: 8 };
+  function swingOf(ch, s, stepDur) {
+    const amt = SWING[ch] || 0;
+    if (!amt) return 0;
+    const g = SWING_GRID[ch] || 16;
+    const late = g === 8 ? (s % 4 === 2) : (s % 2 === 1);
+    return late ? amt * stepDur * (16 / g) : 0;
+  }
+
   function scheduleStep(absStep, when, stepDur) {
     const s = ((absStep % 16) + 16) % 16;
     const bar = Math.floor(absStep / 16);
@@ -3684,6 +3999,11 @@ function createEngine(ctx, opts) {
     applyMods(C, barPos, when);
 
     const rnd = mulberry32((absStep * 2654435761) >>> 0);   // per-step, reproducible
+    // TIER 3, resolved once for the bar by the composition layer and READ here.
+    // The engine decides nothing about it: the same object is what the surface
+    // prints and what the fingerprint counts, so there is one answer to "what
+    // happened in bar N" and not three.
+    const mu = C.mut || MUT_NONE;
 
     // the drums
     for (const ch of [0, 1, 2, 3]) {
@@ -3695,19 +4015,31 @@ function createEngine(ctx, opts) {
       if (!audible(ch) && !(ch === 0 && rumbleAudible())) continue;
       if (C.present[ch] <= 0) continue;          // it left; the table says when
       const pat = DRUM_PAT[ch];
-      if (!pat[s]) continue;
-      // CHANCE — how often a step of that channel actually fires. The pattern
-      // is still the pattern: nothing is regenerated, the hit is let through
-      // or it is not. The KEY is what makes that answer repeat on the
-      // channel's own phrase instead of scattering.
-      if (!stepFires(cfg.seed, ch, C.key[ch], s, C.chance[ch])) continue;
+      /* TIER 3 WRITES OVER THIS BAR AND NEVER INTO THE MATERIAL. `pat` is the
+         drawn pattern and is untouched; these three reads decide what happens
+         to it for one bar. A ghost is an ADDED onset at a step the lane does
+         not use, so it never collides with a written hit and never goes
+         through CHANCE — it is not part of the pattern to be thinned. */
+      const gl = mu.ghost[ch];
+      let gh = 0;
+      if (gl) for (let i = 0; i < gl.length; i++) if (gl[i].step === s) gh = gl[i].velo;
+      if (mu.dropped[ch]) continue;                  // M2 — the lane sits out
+      if (!pat[s] && !gh) continue;
+      if (pat[s]) {
+        if (mu.skip[ch] === s) continue;             // M5 — beat four, pulled
+        // CHANCE — how often a step of that channel actually fires. The pattern
+        // is still the pattern: nothing is regenerated, the hit is let through
+        // or it is not. The KEY is what makes that answer repeat on the
+        // channel's own phrase instead of scattering.
+        if (!stepFires(cfg.seed, ch, C.key[ch], s, C.chance[ch])) continue;
+      }
       const d = PIECE.drums[ch];
       // [D] swing is a shape and humanisation is a coin toss; they are
       // different things and both are per channel.
-      const sw = (SWING[ch] || 0) * (s % 2 ? 1 : 0) * stepDur;
+      const sw = swingOf(ch, s, stepDur);
       const hm = (HUMAN_TIME[ch] || 0) * (rnd() * 2 - 1) * stepDur;
       const hv = (HUMAN_VELO[ch] || 0) * (rnd() * 2 - 1);
-      const v = clamp((d.velo + hv) / 127, 0, 1);
+      const v = clamp((d.velo * (gh || 1) + hv) / 127, 0, 1);
       const t = when + sw + hm;
       const out = A.chan[ch].in;
       const sd = voiceSeed(ch, absStep, 0);
@@ -3736,22 +4068,38 @@ function createEngine(ctx, opts) {
         // bar." Used deliberately it is one of the better things available;
         // used by accident it sounds like the chords are broken. It is
         // deliberate, and this comment is where that is said.
+        /* TIER 3 ON THE TONAL LANES, and it reaches exactly three things:
+           ONE bass note by ONE OCTAVE (M3), the stab's VELOCITY as a contour
+           (M4), and the length of the last bass note (M5's hold). Never a
+           step, never a pitch that is not an octave, never the stab's figure
+           — §6.4, and the figure is the identity of the genre. The octave is
+           added to the WALK's degree count rather than to the MIDI number, so
+           it stays in the scale by the same road everything else does. */
+        const oct = (ch === 5 && mu.bassOctave && mu.bassOctave.index === e) ? mu.bassOctave.degrees : 0;
         const notes = [];
         for (let k = 0; k < ev.notes.length; k++) {
           if (!stepFires(cfg.seed, ch, C.key[ch], e * 4 + k, C.chance[ch])) continue;
           // THE CHORD WALKER — scale degrees, never semitones, so the walk
           // stays diatonic and a return to zero returns to exactly the key
           // [M] dialled and not near it.
-          notes.push(transposeDegrees(ev.notes[k], C.walk, C.root, C.scale));
+          notes.push(transposeDegrees(ev.notes[k], C.walk + oct, C.root, C.scale));
         }
         if (!notes.length) continue;
-        const v = ev.velo / 127;
-        const dur = ev.duration * stepDur;
+        // A SYMMETRIC contour: the bar leans, it does not get louder.
+        const lean = (ch === 6 && mu.stabLean && take.length > 1)
+          ? mu.stabLean * (2 * e / (take.length - 1) - 1) : 0;
+        const v = clamp(ev.velo + lean, 1, 127) / 127;
+        const dur = ev.duration * stepDur
+          * ((ch === 5 && mu.hold && mu.hold.index === e) ? mu.hold.mult : 1);
         const out = A.chan[ch].in;
         const sd = voiceSeed(ch, absStep, e);
-        if (ch === 5) voiceSub(when, notes[0], dur, v, out, sd);
-        else if (ch === 6) voiceStab(when, notes, dur, v, out, sd);
-        else voicePad(when, notes, dur, v, out, sd);
+        // [D] swing and humanisation are per channel and the TONAL lanes were
+        // never given either — the round's Shuffle piece swings the stab and
+        // this engine could not. Same treatment, same two lines (#52).
+        const tsw = swingOf(ch, s, stepDur) + (HUMAN_TIME[ch] || 0) * (rnd() * 2 - 1) * stepDur;
+        if (ch === 5) voiceSub(when + tsw, notes[0], dur, v, out, sd);
+        else if (ch === 6) voiceStab(when + tsw, notes, dur, v, out, sd);
+        else voicePad(when + tsw, notes, dur, v, out, sd);
       }
     }
   }
