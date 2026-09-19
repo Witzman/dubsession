@@ -88,9 +88,44 @@ const exported = [
   // yet spent.
   'STYLE', 'CONTRACT', 'D', 'RESERVED', 'PATHS', 'DEFAULT_SEED',
   'draw', 'repair', 'quiz', 'fieldAt', 'drawSet', 'clone', 'rebuildDerived',
+  // #47 — the drawn rhythm and the drawn melody. `usePiece` is the ONE door
+  // that rebinds the module's `PIECE` and rebuilds everything derived from it;
+  // a test that set `PIECE` some other way would be testing a piece the
+  // pattern table has never seen.
+  'usePiece', 'writeBass', 'lanePat', 'laneStep', 'laneLen',
+  'DEG_T', 'DEG_T5', 'degTableFor', 'SCALE_STEPS', 'countHits',
 ];
 const L = new Function(`${region}\n; return { ${exported.join(', ')} };`)();
 ok(typeof L.compositionAt === 'function', 'the region evaluates and exports the layer');
+
+/* -- 2b. THE CONTROL: THE LITERAL PIECE, AS DATA -------------------------
+   Until #47 the manifest was pinned so narrow that every seed drew the same
+   piece, and this whole suite could ask its questions of `PIECE` directly.
+   #47 widened the pools, so the page's own piece is now A piece and not THE
+   piece — and a suite written against whatever `DEFAULT_SEED` happens to draw
+   measures nothing, because the number moves whenever a pool does.
+
+   So the control is the shipped piece FROZEN AS DATA: `221-dub-basic` exactly
+   as the pinned draw produced it at `341b9cb`, round-tripped through JSON to
+   prove it is data and nothing else. Everything from here to the end of the
+   verbs runs against it, which is what keeps `bac4694aec2d6432` and every
+   other measured figure in this file a real regression test rather than a
+   restatement of today's dice.
+
+   IT IS INSTALLED THROUGH `usePiece` AND NOT ASSIGNED. `DRUM_PAT` and the
+   modulator slots are derived from the module binding, and a test that set the
+   piece some other way would be asking a pattern table that had never seen it.
+
+   WHAT THIS DELIBERATELY IS NOT: a seed hunted until it reproduces the piece.
+   The centre is reachable in the drum block at roughly one seed in a million
+   (the three velocity ranges alone are about 1 in 9000 of it), and the bass,
+   stab, pad and lead blocks multiply that away entirely. A seed search would
+   be a lottery ticket presented as a fixture. The piece survives as DATA.
+   ------------------------------------------------------------------------ */
+const SHIPPED = JSON.parse(readFileSync(join(ROOT, 'tools', 'tests', 'fixtures', '221-dub-basic.json'), 'utf8'));
+const P = L.usePiece(SHIPPED);
+ok(P === SHIPPED && L.lanePat(P.drums[0]).join('') === '1000100010001000',
+   'the control piece is installed and the derived tables followed it');
 
 const SEED = 0x11CE9E;
 const M = L.MOVEMENT;
@@ -123,7 +158,7 @@ if (PROVE_RED) console.log('\n*** --prove-red: chance pinned to 1, move pinned t
 // about the grain it belongs in section 7.
 const NOMUT = { mutate: false };
 const AUTO = { auto: true, mutate: false };
-const fp = bar => L.fingerprint(L.compositionAt(SEED, L.PIECE, MOVE, bar, AUTO), SEED);
+const fp = bar => L.fingerprint(L.compositionAt(SEED, P, MOVE, bar, AUTO), SEED);
 
 /* -- 3. THE LOOP DETECTOR ------------------------------------------------- */
 group('the loop detector — the material actually differs');
@@ -187,12 +222,12 @@ ok(mismatch === -1, 'asked out of order, every bar answers the same',
 for (let i = 0; i < 50; i++) fp(3000 + i);
 ok(fp(200) === prints[200], 'bar 200 is unchanged by having been asked for bar 3049');
 
-const other = L.fingerprint(L.compositionAt(SEED ^ 0x7777, L.PIECE, MOVE, 200, AUTO), SEED ^ 0x7777);
+const other = L.fingerprint(L.compositionAt(SEED ^ 0x7777, P, MOVE, 200, AUTO), SEED ^ 0x7777);
 ok(other !== prints[200] || PROVE_RED, 'a different seed is a different composition');
 
 /* -- 5. the verbs -------------------------------------------------------- */
 group('the verbs');
-const at = (bar, mv, opts) => L.compositionAt(SEED, L.PIECE, mv || MOVE, bar,
+const at = (bar, mv, opts) => L.compositionAt(SEED, P, mv || MOVE, bar,
   opts ? { auto: true, mutate: false, ...opts } : AUTO);
 
 // base state == today's page: chance 1, move 0, phrase 1 -> key 0 every bar
@@ -362,13 +397,13 @@ ok(L.MOD_SLOTS['mod.6.delay'].why.startsWith('the stab\'s echo')
    'and carries the composer\'s own sentence, from the manifest or from the section');
 // A DEPTH OF 0 IS AN UNBIND AND CAN NEVER MAKE A SLOT: a row for it would be a
 // control over a modulator that does not exist.
-const slotsOff = L.modSlotsOf(L.PIECE, { phrase: 8, section: 32, bars: 256, sections: [
+const slotsOff = L.modSlotsOf(P, { phrase: 8, section: 32, bars: 256, sections: [
   { at: 0, event: ['mod', 1, 'reverb', 0, 8, 'tri'], why: 'an unbind, not a binding' }] });
 ok(!slotsOff['mod.1.reverb'] && Object.keys(slotsOff).length === 3,
    'an unbind event makes no slot', Object.keys(slotsOff).join(' '));
 // THE FIRST DECLARATION NAMES THE SLOT. A movement that rebinds one of the
 // manifest's modulators deeper must not rewrite the row's name or its reason.
-const slotsRebind = L.modSlotsOf(L.PIECE, { phrase: 8, section: 32, bars: 256, sections: [
+const slotsRebind = L.modSlotsOf(P, { phrase: 8, section: 32, bars: 256, sections: [
   { at: 64, event: ['mod', 6, 'delay', 80, 8, 'ramp'], why: 'the same slot, deeper' }] });
 ok(slotsRebind['mod.6.delay'].depth === 34 && slotsRebind['mod.6.delay'].bars === 3,
    'a later event on a slot the manifest already declared does not rewrite it',
@@ -513,9 +548,9 @@ ok(L.seedFromQuery('') === L.seedFromQuery('?nothing=1'), 'and with no seed ther
 group('the ring is a switch, and it is OFF by default');
 
 const OFF_BARS = [0, 33, 129, 224, 3583];
-const base = L.baseComposition(L.PIECE, M.phrase);
+const base = L.baseComposition(P, M.phrase);
 for (const b of OFF_BARS) {
-  const c = L.compositionAt(SEED, L.PIECE, M, b);
+  const c = L.compositionAt(SEED, P, M, b);
   const sameAsBase = L.ALL_CHANNELS.every(ch =>
     c.chance[ch] === base.chance[ch] &&
     c.move[ch] === base.move[ch] &&
@@ -524,7 +559,7 @@ for (const b of OFF_BARS) {
     c.wet[ch].delay === base.wet[ch].delay &&
     c.wet[ch].reverb === base.wet[ch].reverb);
   ok(sameAsBase && c.walk === 0 && c.walkCfg.bars === 0 && c.gesture === null
-     && c.mods.length === L.PIECE.mods.length && c.auto === false,
+     && c.mods.length === P.mods.length && c.auto === false,
      `bar ${b + 1} with auto off is the BASE STATE, and nothing else`,
      `chance ${c.chance[6]} · move ${c.move[0]} · phrase ${c.phrase[3]} · walk ${c.walk}`
      + ` · ${c.mods.length} modulators · wet6 ${c.wet[6].delay}`);
@@ -533,12 +568,12 @@ for (const b of OFF_BARS) {
 // The four things the schedule WOULD have done by those bars, named one at a
 // time — because "it equals the base" passes just as well if the base itself
 // quietly moved. These are the events, checked at bars past where each fires.
-const offAt = b => L.compositionAt(SEED, L.PIECE, M, b, NOMUT);
+const offAt = b => L.compositionAt(SEED, P, M, b, NOMUT);
 ok(offAt(40).chance[6] === 1, 'the chance event at bar 33 did not land', 'ch6 chance still 1');
-ok(offAt(70).wet[6].delay === L.PIECE.wets[6].delay / 100,
+ok(offAt(70).wet[6].delay === P.wets[6].delay / 100,
    'the echo did not open at bar 65', `ch6 delay still ${offAt(70).wet[6].delay}`);
 ok(offAt(160).walk === 0, 'the walk bound at bar 129 is not running', 'walk 0 degrees');
-ok(offAt(24).gesture === null && offAt(24).wet[2].delay === L.PIECE.wets[2].delay / 100,
+ok(offAt(24).gesture === null && offAt(24).wet[2].delay === P.wets[2].delay / 100,
    'and the one-shot throw at bar 25 did not fire either — a gesture is part of the SCHEDULE',
    `ch2 delay ${offAt(24).wet[2].delay}, not 0.9`);
 
@@ -551,8 +586,8 @@ const offMods = offAt(129).mods;
 // It was an index on the piece and a bar count on a `mod` EVENT; 5 and 7 are
 // valid as both, so nothing complained and the two readings differed by a
 // factor of two and a half.
-ok(offMods.length === 3 && offMods.every((m, i) => m.channel === L.PIECE.mods[i].channel
-     && m.verb === L.PIECE.mods[i].verb && m.bars === L.PIECE.mods[i].bars),
+ok(offMods.length === 3 && offMods.every((m, i) => m.channel === P.mods[i].channel
+     && m.verb === P.mods[i].verb && m.bars === P.mods[i].bars),
    'the manifest\'s three modulators keep breathing with the ring off',
    offMods.map(m => m.channel + ':' + m.verb + '/' + m.bars + 'b').join(' '));
 ok(!offMods.some(m => m.channel === 7 && m.verb === 'reverb'),
@@ -614,8 +649,8 @@ group('the hand outranks the schedule');
 // the frozen loop pinned back on, and this group is asking about the hand
 // rather than about the loop detector. A group that went red for somebody
 // else's reason would be noise in the one run that is supposed to be red.
-const ran = bar => L.compositionAt(SEED, L.PIECE, M, bar, { auto: true });
-const held = h => bar => L.compositionAt(SEED, L.PIECE, M, bar, { auto: true, holds: h });
+const ran = bar => L.compositionAt(SEED, P, M, bar, { auto: true });
+const held = h => bar => L.compositionAt(SEED, P, M, bar, { auto: true, holds: h });
 
 // The event: chance(6, 0.75) at bar 32, which lands at bar 35 because the
 // stab is on a 5-bar phrase and structure lands on the channel's own wrap.
@@ -669,43 +704,125 @@ ok(held({})(35).chance[6] === 0.75 && held({ chance: {} })(35).chance[6] === 0.7
 // HOLDS ARE AN INPUT, NOT STATE THE LAYER ACCUMULATES. Ask 300 bars with a
 // hand on it and then ask without one: the layer must not have kept anything.
 for (let b = 0; b < 300; b++) handChance(b);
-ok(ran(35).chance[6] === 0.75 && L.compositionAt(SEED, L.PIECE, M, 35).chance[6] === 1,
+ok(ran(35).chance[6] === 0.75 && L.compositionAt(SEED, P, M, 35).chance[6] === 1,
    'the layer keeps nothing: the same bar asked again, without holds, is the schedule\'s again');
 
 // THE HAND IS THE WHOLE INSTRUMENT WITH THE RING OFF. Held is not frozen:
 // this is the case the owner actually plays.
-const offHand = L.compositionAt(SEED, L.PIECE, M, 8, { holds: { chance: { 3: 0.7 } } });
+const offHand = L.compositionAt(SEED, P, M, 8, { holds: { chance: { 3: 0.7 } } });
 ok(offHand.chance[3] === 0.7 && offHand.chance[6] === 1 && offHand.walk === 0,
    'with auto OFF a held value is the only thing that moves', 'ch3 chance 0.7, everything else base');
 const offHandPrints = [];
 for (let b = 0; b < 32; b++)
-  offHandPrints.push(L.fingerprint(L.compositionAt(SEED, L.PIECE, M, b, { mutate: false, holds: { chance: { 3: 0.7 } } }), SEED));
+  offHandPrints.push(L.fingerprint(L.compositionAt(SEED, P, M, b, { mutate: false, holds: { chance: { 3: 0.7 } } }), SEED));
 ok(new Set(offHandPrints).size === 8,
    'and it VARIES — the hats thin and come round on the movement\'s phrase, with no schedule at all',
    `${new Set(offHandPrints).size} distinct bars in 32`);
 
 // a held phrase changes the channel's own cycle, with nothing else running
-const offPhrase = b => L.compositionAt(SEED, L.PIECE, M, b, { holds: { phrase: { 6: 3 } } });
+const offPhrase = b => L.compositionAt(SEED, P, M, b, { holds: { phrase: { 6: 3 } } });
 ok([0, 1, 2, 3, 4, 5].map(b => offPhrase(b).key[6]).join(',') === '0,1,2,0,1,2',
    'a held PHRASE is the channel\'s own cycle, auto off', '0,1,2,0,1,2');
 
 // THE HAND GOES THROUGH THE SAME CLAMPS THE VERBS DO. A surface is a claim;
 // this is the layer refusing to take its word for it.
-const wild = L.compositionAt(SEED, L.PIECE, M, 8,
+const wild = L.compositionAt(SEED, P, M, 8,
   { holds: { phrase: { 6: 12 }, chance: { 6: 5 }, delay: { 6: 9 }, move: { 6: -1 } } });
 ok(wild.phrase[6] === 8 && wild.chance[6] === 1 && wild.wet[6].delay === 2 && wild.move[6] === 0,
    'a held value out of range is clamped exactly as the verb clamps it',
    `phrase ${wild.phrase[6]} · chance ${wild.chance[6]} · delay ${wild.wet[6].delay} · move ${wild.move[6]}`);
-ok(L.compositionAt(SEED, L.PIECE, M, 8, { holds: { move: { 0: L.LOCK } } }).move[0] === L.LOCK,
+ok(L.compositionAt(SEED, P, M, 8, { holds: { move: { 0: L.LOCK } } }).move[0] === L.LOCK,
    'and LOCK is a word the hand may hold, not a number it may not');
 
-/* -- 6. the grid did not move -------------------------------------------- */
-group('the manifest is untouched');
-ok(L.DRUM_PAT[0].join('') === '1000100010001000', 'the kick is still four on the floor');
-ok(L.DRUM_PAT[1].join('') === '0000100000000000', 'the rimshot is still on beat 2');
-ok(L.DRUM_PAT[2].join('') === '0000000000001000', 'the clap is still on beat 4');
-ok(L.DRUM_PAT[3].join('') === '1010101010101010', 'the hats are still eighths');
-ok(L.PIECE.levels[0] === 0.77 && L.MASTER_TRIM === 0.95, 'the faders and the master trim are where they were');
+/* -- 6. the control is still the control ---------------------------------
+   These four were "the manifest is untouched" while the manifest WAS the
+   piece. They now say something narrower and still worth saying: the frozen
+   piece is the one that shipped, and `lanePat` turns it back into the same
+   four lanes. If a future edit to the pattern rule changes what a stored lane
+   means, this is where it goes red — and it goes red with no dice in it.
+   ------------------------------------------------------------------------ */
+group('the control piece is 221-dub-basic, bar for bar');
+const lane = ch => L.lanePat(P.drums[ch]).join('');
+ok(lane(0) === '1000100010001000', 'the kick is still four on the floor');
+ok(lane(1) === '0000100000000000', 'the rimshot is still on beat 2');
+ok(lane(2) === '0000000000001000', 'the clap is still on beat 4');
+ok(lane(3) === '1010101010101010', 'the hats are still eighths');
+ok(P.levels[0] === 0.77 && L.MASTER_TRIM === 0.95, 'the faders and the master trim are where they were');
+
+/* -- 7. THE DRAW IS WIDE, AND EVERY SEED IS STILL IN GENRE ----------------
+   #50's proof criterion, and the one thing the pinned manifest could not be
+   asked: now that a seed draws a different piece, do ALL of them conform?
+
+   Three questions, and they are different questions:
+
+   1. ZERO CONTRACT VIOLATIONS over N seeds, asked by `quiz`, which is a
+      SEPARATE implementation from `repair`. A repair that silently no-ops
+      passes its own check and cannot pass an independent one.
+   2. ZERO REPAIRS over N seeds. A repair firing in production is a bug in the
+      POOLS, not a rescue of the piece (#38 §5.2) — the fence is there for the
+      pool nobody has written yet, and a fence that fires routinely is a pool
+      that reaches out of genre.
+   3. COVERAGE: every entry of every pool that is drawn at all is drawn at
+      least once. A pool entry nothing reaches is a piece of the style that no
+      listener will ever hear, which is the quiet way a "wide" manifest turns
+      out to be narrow.
+
+   The seeds are the low 24 bits of a multiplicative walk rather than 0..N-1,
+   because consecutive integers are exactly the input `rand01` is least likely
+   to correlate on and therefore the easiest case, not the honest one.
+   ------------------------------------------------------------------------ */
+group('the draw is wide, and every seed is still in genre');
+
+const DRAWS = 2000;
+const seedOf = i => ((i * 2654435761) >>> 8) & 0xFFFFFF;
+const cover = {};          // path -> Set of pool index drawn
+const poolOf = {};         // path -> pool length, as the draw reported it
+let repaired = 0, quizFails = 0;
+const firstRepair = [], firstQuiz = [];
+const lanes = [];          // the four drum lanes of each piece, as one string
+for (let i = 0; i < DRAWS; i++) {
+  const sd = seedOf(i);
+  const pc = L.draw(sd);
+  if (pc.violations.length) { repaired++; if (firstRepair.length < 3) firstRepair.push(sd.toString(16) + ':' + pc.violations.map(v => v.fence).join('+')); }
+  const q = L.quiz(pc, L.CONTRACT);
+  if (q.length) { quizFails++; if (firstQuiz.length < 3) firstQuiz.push(sd.toString(16) + ':' + q.map(v => v.fence).join('+')); }
+  for (const path of Object.keys(pc.drawn)) {
+    const rec = pc.drawn[path];
+    if (rec.of === undefined) continue;                 // a range, not a pool
+    (cover[path] = cover[path] || new Set()).add(rec.i);
+    poolOf[path] = rec.of;
+  }
+  lanes.push([0, 1, 2, 3].map(ch => pc.empty[ch] ? '-' : L.lanePat(pc.drums[ch]).join('')).join('|'));
+}
+
+ok(quizFails === 0, `${DRAWS} drawn pieces and the quiz finds no contract violation`,
+   quizFails ? `${quizFails} failed, e.g. ${firstQuiz.join(' ')}` : `${DRAWS} clean`);
+ok(repaired === 0, 'and no repair fired — the fences are a guard, not a rescue',
+   repaired ? `${repaired} pieces repaired, e.g. ${firstRepair.join(' ')}` : 'no piece needed one');
+
+const thin = Object.keys(cover).filter(k => cover[k].size < poolOf[k]);
+ok(thin.length === 0, 'every entry of every pool the draw reaches is reached',
+   thin.length ? thin.map(k => `${k} ${cover[k].size}/${poolOf[k]}`).join(', ')
+               : `${Object.keys(cover).length} pools, all entries drawn`);
+
+/* THE ONE THAT CATCHES "THEY ALL SOUND THE SAME", which is the recorded
+   verdict of the parent's own round one. It is deliberately about the DRUMS
+   and not about the fingerprint: two pieces can differ in a pad octave and be
+   the same track to a dancer. Kick and kit are what a listener names first. */
+const distinctLanes = new Set(lanes).size;
+const commonest = (() => { const c = {}; let m = 0; for (const l of lanes) m = Math.max(m, c[l] = (c[l] || 0) + 1); return m; })();
+ok(distinctLanes >= DRAWS / 10, 'and the drawn kits are not one kit with a coat of paint',
+   `${distinctLanes} distinct kits in ${DRAWS} draws`);
+ok(commonest <= DRAWS / 4, 'no single kit is the piece the manifest really draws',
+   `the commonest kit is ${commonest} of ${DRAWS} (${(100 * commonest / DRAWS).toFixed(1)}%)`);
+
+// THE PAGE'S OWN PIECE IS ONE OF THEM AND GETS NO EXEMPTION.
+const dflt = L.draw(L.DEFAULT_SEED);
+ok(L.quiz(dflt, L.CONTRACT).length === 0 && dflt.violations.length === 0,
+   'the piece the page lands on is drawn under the same rules as the rest');
+
+// and the control goes back, so nothing after this reads a drawn piece.
+L.usePiece(SHIPPED);
 
 
 /* -- 7. TIER 3 — THE PER-BAR MUTATION ------------------------------------
@@ -722,7 +839,7 @@ ok(L.PIECE.levels[0] === 0.77 && L.MASTER_TRIM === 0.95, 'the faders and the mas
    whether the grain is doing all the work. Both are pinned here. */
 group('tier 3 — the per-bar mutation');
 
-const mutAt = (bar, opts) => L.compositionAt(SEED, L.PIECE, M, bar, { auto: true, ...(opts || {}) });
+const mutAt = (bar, opts) => L.compositionAt(SEED, P, M, bar, { auto: true, ...(opts || {}) });
 const mutFp = (bar, opts) => L.fingerprint(mutAt(bar, opts), SEED);
 
 // THE PAIR. Measured 2026-09-19 on this build; a deliberate change to the odds
@@ -740,8 +857,8 @@ ok(new Set(t3off).size === 83 && new Set(t3on).size === 163,
    `${new Set(t3off).size} without · ${new Set(t3on).size} with`);
 const offOn = [], onOn = [];
 for (let b = 0; b < N; b++) {
-  offOn.push(L.fingerprint(L.compositionAt(SEED, L.PIECE, M, b, { mutate: false }), SEED));
-  onOn.push(L.fingerprint(L.compositionAt(SEED, L.PIECE, M, b), SEED));
+  offOn.push(L.fingerprint(L.compositionAt(SEED, P, M, b, { mutate: false }), SEED));
+  onOn.push(L.fingerprint(L.compositionAt(SEED, P, M, b), SEED));
 }
 // AND THE ONE THE OWNER ACTUALLY LOADS. `auto` is off by default, so this is
 // the page as it opens: one bar repeated 256 times before tier 3 existed.
@@ -759,28 +876,35 @@ for (let b = 0; b < 4096; b++) mutAt(b);
 ok(cold === mutAt(far).mut.sig && cold !== '-',
    'a mutation is a fact about (seed, bar): bar ' + (far + 1) + ' asked cold and asked after 4096 bars is the same bar',
    `"${cold}"`);
-ok(L.compositionAt(SEED ^ 0x7777, L.PIECE, M, far, { auto: true }).mut.sig !== cold,
+ok(L.compositionAt(SEED ^ 0x7777, P, M, far, { auto: true }).mut.sig !== cold,
    'and it is a fact about the SEED too — another seed has another performance');
 
 // THE CAP, AND §6.4 — WHAT MAY NEVER MUTATE. Over 40 seeds × 256 bars, because
 // one seed proves nothing about a rule.
 let over = 0, stabMoved = 0, badPitch = 0, badGhost = 0, badPull = 0, pulls = 0, supSeen = 0;
-const stabSteps = (L.PIECE.chords[6] || []).map(e => e.step).join(',');
+const stabSteps = (P.chords[6] || []).map(e => e.step).join(',');
 for (let s = 0; s < 40; s++) {
   const sd = (0x11CE9E + s * 7919) | 0;
   let lastPull = -99;
   for (let b = 0; b < 256; b++) {
-    const m = L.compositionAt(sd, L.PIECE, M, b, { auto: true }).mut;
+    const m = L.compositionAt(sd, P, M, b, { auto: true }).mut;
     if (m.fired.length > m.cap) over++;
     if (m.ghost[6] || m.dropped[6] || m.skip[6] !== undefined) stabMoved++;
     if (m.bassOctave && m.bassOctave.index === 0) badPitch++;
     if (m.skip[0] !== undefined) { pulls++; if (m.skip[0] !== 12) badPull++; if (b - lastPull < 8) badPull++; lastPull = b; }
-    for (const ch of [0, 3]) for (const g of (m.ghost[ch] || [])) if (L.DRUM_PAT[ch][g.step]) badGhost++;
+    // NOT `L.DRUM_PAT`: that export is the table as it stood when the region
+    // was evaluated, and `usePiece` REBINDS it, so it would be a different
+    // piece's lanes. And a ghost step is a BAR step while a lane may be 12 or
+    // 14 long, so the collision question is `laneStep`'s, not `[g.step]`'s.
+    for (const ch of [0, 3]) {
+      const pat = L.lanePat(P.drums[ch]);
+      for (const g of (m.ghost[ch] || [])) if (pat[L.laneStep(pat, b * 16 + g.step)]) badGhost++;
+    }
     if (m.suppressed.length) { supSeen++; if (!m.text) badGhost++; }
   }
 }
 ok(over === 0, 'THE CAP HOLDS: never more than two mutations in one bar', `${over} breaches in 10240 bars`);
-ok(stabMoved === 0 && (L.PIECE.chords[6] || []).map(e => e.step).join(',') === stabSteps,
+ok(stabMoved === 0 && (P.chords[6] || []).map(e => e.step).join(',') === stabSteps,
    'THE STAB\'S STEPS ARE NEVER TOUCHED — the figure is the identity of the genre', `steps ${stabSteps}`);
 ok(badPitch === 0, 'the bass octave never takes the downbeat note — the anchor of the bar');
 ok(badGhost === 0, 'a ghost never lands on a step the lane already plays, and a suppression always carries its words');
@@ -791,9 +915,10 @@ ok(supSeen > 0, 'a suppressed mutation is RECORDED, not dropped — the surface 
 
 // A MUTATION WRITES OVER THE MATERIAL, NEVER INTO IT. The drawn patterns and
 // the takes must be bit-identical after a thousand bars of mutation.
-const matBefore = JSON.stringify([L.DRUM_PAT, L.PIECE.chords, L.PIECE.drums]);
+const lanesNow = () => [0, 1, 2, 3].map(ch => P.drums[ch] && L.lanePat(P.drums[ch]).join(''));
+const matBefore = JSON.stringify([lanesNow(), P.chords, P.drums]);
 for (let b = 0; b < 1000; b++) mutAt(b);
-ok(JSON.stringify([L.DRUM_PAT, L.PIECE.chords, L.PIECE.drums]) === matBefore,
+ok(JSON.stringify([lanesNow(), P.chords, P.drums]) === matBefore,
    'TIER 1 IS UNTOUCHED after a thousand mutated bars — the layer writes over the bar, not into the piece');
 
 // THE DOOR IS REAL. `mutate: false` must produce the string the page produced
