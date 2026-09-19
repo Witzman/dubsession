@@ -576,7 +576,17 @@ const RESERVED = [
   // D.MOD f1..f8 — §3's per-modulator pools (channel, verb, depth, bars,
   // shape, phase0, polarity, spare). `mods.table` is fixed until they open.
   [D.MOD, 1], [D.MOD, 2], [D.MOD, 3], [D.MOD, 4],
-  [D.MOD, 5], [D.MOD, 6], [D.MOD, 7], [D.MOD, 8]
+  [D.MOD, 5], [D.MOD, 6], [D.MOD, 7], [D.MOD, 8],
+  // D.NOTE f40..f43 — THE BASS WRITER'S OWN COORDINATES (#47). They are spent
+  // by `writeBass` and they belong to no `STYLE` field, because the writer
+  // draws PER CANDIDATE STEP and a schema entry is per piece. They are listed
+  // here for exactly the reason the modulators' are: a later commit that took
+  // D.NOTE f40 for a declared field would collide silently, because two fields
+  // on one coordinate simply always agree.
+  [D.NOTE, 40],   // does this step carry an onset
+  [D.NOTE, 41],   // does this onset go home, or walk
+  [D.NOTE, 42],   // which branch of the transition table it takes
+  [D.NOTE, 43]    // does it jump an octave, and is it short rather than legato
 ];
 
 // The seed the page draws when the query carries none. It was `PIECE.file`'s
@@ -621,63 +631,192 @@ const STYLE = {
   // A KICK IS A TEMPLATE, NOT A EUCLID: the pool is step arrays, so [0,5,10]
   // is expressible and `euclid(16, hits)` no longer has to be able to say it.
   drums: {
-    kick:     { pool:[ {v:[0,4,8,12], why:"four on the floor, hard and flat"} ],
-                d:D.DRUM, f:0 },                             // PINNED to 1 of §3's 8. §14 step 4
-    kickVelo: { range:[110,110], q:1, d:D.DRUM, f:1 },
+    // WIDE (#47). Ten entries, SEVEN OF THEM FOUR ON THE FLOOR, because that
+    // is the ratio the parent's own round shipped: one Broken and one Halftime
+    // in twenty. [D] on the broken cut — displacing more than the fourth beat
+    // "stops being a variation and starts being a different genre".
+    kick:     { pool:[ {v:[0,4,8,12], why:"four on the floor, hard and flat"},
+                       {v:[0,4,8,12], why:"four on the floor, hard and flat"},
+                       {v:[0,4,8,12], why:"four on the floor, hard and flat"},
+                       {v:[0,4,8,12], why:"four on the floor, hard and flat"},
+                       {v:[0,4,8,12], why:"four on the floor, hard and flat"},
+                       {v:[0,4,8,12], why:"four on the floor, hard and flat"},
+                       {v:[0,4,8,12], why:"four on the floor, hard and flat"},
+                       {v:[0,4,8,14], why:"four on the floor with the fourth beat pushed "
+                        + "one sixteenth late — the floor leans instead of marching"},
+                       {v:[0,5,10],   why:"a BROKEN kick: three hits across sixteen steps and "
+                        + "none of them on beat 2 or beat 4. No euclid can say this, which is "
+                        + "why the kick is a template"},
+                       {v:[0,8],      why:"HALFTIME: two kicks a bar, and everything else keeps "
+                        + "its own speed over the top"} ],
+                d:D.DRUM, f:0 },
+    kickVelo: { range:[104,116], q:1, d:D.DRUM, f:1 },
+    // WHICH LANES THE KIT HAS, AS ONE DRAW AND NOT THREE.
+    // L-LANES wants at least two of the four lanes sounding. Three independent
+    // presence draws reach "none of them" once in 128 seeds, and a fence that
+    // fires once in 128 is a bug in the pool, not a rescue (§5.2). One pool of
+    // lane SETS cannot reach it at all: every entry below is non-empty, and the
+    // kick is always present, so two lanes is the floor BY CONSTRUCTION.
+    present:  { pool:[ {v:[1,2,3], why:"the whole kit — rim, clap and hats"},
+                       {v:[1,2,3], why:"the whole kit — rim, clap and hats"},
+                       {v:[1,2,3], why:"the whole kit — rim, clap and hats"},
+                       {v:[1,2,3], why:"the whole kit — rim, clap and hats"},
+                       {v:[1,2,3], why:"the whole kit — rim, clap and hats"},
+                       {v:[1,2,3], why:"the whole kit — rim, clap and hats"},
+                       {v:[1,2,3], why:"the whole kit — rim, clap and hats"},
+                       {v:[1,2,3], why:"the whole kit — rim, clap and hats"},
+                       {v:[2,3],   why:"no rim in this track — the punctuation is left to the clap"},
+                       {v:[2,3],   why:"no rim in this track — the punctuation is left to the clap"},
+                       {v:[2,3],   why:"no rim in this track — the punctuation is left to the clap"},
+                       {v:[1,3],   why:"no clap in this track — the rim answers the kick alone"},
+                       {v:[1,3],   why:"no clap in this track — the rim answers the kick alone"},
+                       {v:[1,2],   why:"NO HATS: the top of the kit is gone and the room is "
+                        + "what fills it"},
+                       {v:[3],     why:"hats and nothing else over the kick — the sparse kit"},
+                       {v:[2],     why:"one clap and a room, and that is the whole kit"} ],
+                d:D.DRUM, f:13 },
+    // [D] "One hit, not a pattern. One rimshot a bar. One clap on beat 4,
+    // drenched. The percussion is punctuation; repeating it makes it house."
+    // So `hits` on 1 and 2 is 1 three times in four and NEVER above 2 — that
+    // is the cheapest single thing keeping a drawn piece out of house.
     lanes: {
-      1: { hits:{pool:[1],d:D.DRUM,f:2}, rotate:{pool:[4],d:D.DRUM,f:3},
-           velo:{range:[68,68],q:1,d:D.DRUM,f:4},
-           why:{fixed:"one rimshot on beat 2, and nothing else"} },
-      2: { hits:{pool:[1],d:D.DRUM,f:5}, rotate:{pool:[12],d:D.DRUM,f:6},
-           velo:{range:[72,72],q:1,d:D.DRUM,f:7},
-           why:{fixed:"a single clap on beat 4, drenched"} },
-      3: { hits:{pool:[8],d:D.DRUM,f:8}, rotate:{pool:[0],d:D.DRUM,f:9},
-           velo:{range:[58,58],q:1,d:D.DRUM,f:10},
-           why:{fixed:"eighth-note hats, quiet, under everything"} }
+      1: { hits:{pool:[1,1,1,2],d:D.DRUM,f:2}, rotate:{range:[0,15],q:1,d:D.DRUM,f:3},
+           velo:{range:[58,78],q:1,d:D.DRUM,f:4},
+           why:{fixed:"the rim as punctuation — one hit, placed, and then nothing"} },
+      2: { hits:{pool:[1,1,1,2],d:D.DRUM,f:5}, rotate:{pool:[4,12,12,12,14],d:D.DRUM,f:6},
+           velo:{range:[62,84],q:1,d:D.DRUM,f:7},
+           why:{fixed:"a clap, drenched — 12 is beat 4, 4 is the backbeat reading, "
+                + "14 is the pushed clap"} },
+      // [D] "Hats sit behind the bass, not on it. Rolling rotates the
+      // eighth-note hats one sixteenth late for exactly this." One in four
+      // sits late, and that is the parent's Rolling piece as a draw.
+      3: { hits:{pool:[4,6,7,8,8,8,9,10,12],d:D.DRUM,f:8}, rotate:{pool:[0,0,0,1],d:D.DRUM,f:9},
+           velo:{range:[46,68],q:1,d:D.DRUM,f:10},
+           why:{fixed:"the hats, under everything, and they are the lane that may be busy"} }
     },
-    poly:     { range:[0,0], d:D.DRUM, f:11 },               // PINNED. §3: [0,1]
-    polyOdds: { fixed:0 },                                   // PINNED. §3: 0.20. §14 step 4
-    polyLen:  { pool:[12], d:D.DRUM, f:12 }
+    // THE HAT LANE'S OWN LENGTH — [D] "different loop lengths at once, and they
+    // are not polyrhythm… this is the cheapest way to get long form out of
+    // short material". A 12-step hat lane against a 16-step bar comes home
+    // every three bars. `poly < polyOdds` is the switch; the source's own
+    // per-style probability for dub techno is 0.20.
+    poly:     { range:[0,1], d:D.DRUM, f:11 },
+    polyOdds: { range:[0.20,0.20], d:D.DRUM, f:14 },
+    polyLen:  { pool:[12,12,14,10], d:D.DRUM, f:12 }
   },
 
   /* --- THE CHORD. #47 owns the figures; the FENCE is this spec's. ------- */
   stab: {
-    figure:   { pool:[ {v:[2,6,10,14], why:"the same G minor triad on all four offbeat eighths. "
-                        + "This is the figure the genre is built on: it never changes, and the "
-                        + "delay and the filter are what move."} ],
-                d:D.NOTE, f:0 },                             // PINNED to 1 of §3's 7. §14 step 4
-    velo:     { range:[92,92], q:1, d:D.NOTE, f:1 },
-    duration: { range:[1.6,1.6], d:D.NOTE, f:2 },
-    degrees:  { fixed:[0,2,4] },                             // a scale-degree triad — OWED to #47
-    notes:    { fixed:[55,58,62] }                           // [M]'s literal G minor triad. #47
-                                                             // replaces this with `degrees` read
-                                                             // through the drawn root and mode.
+    // WIDE (#47). Eight entries, THREE OF THEM THE OFFBEAT-EIGHTH FIGURE, so
+    // the centre of the drawn space is the centre of the genre. [D]: "where
+    // the chord sits is the single biggest identifier."
+    //
+    // MEASURED, not asserted: [2,6,10,14] is exactly rotated(euclid(16,4), 2) —
+    // the stab's identity and a four-floor kick are the same euclid two steps
+    // apart. Nothing depends on that; it is simply true and worth knowing.
+    figure:   { pool:[ {v:[2,6,10,14], why:"the chord on all four offbeat eighths. This is the "
+                        + "figure the genre is built on: it never changes, and the delay and "
+                        + "the filter are what move"},
+                       {v:[2,6,10,14], why:"the chord on all four offbeat eighths. This is the "
+                        + "figure the genre is built on: it never changes, and the delay and "
+                        + "the filter are what move"},
+                       {v:[2,6,10,14], why:"the chord on all four offbeat eighths. This is the "
+                        + "figure the genre is built on: it never changes, and the delay and "
+                        + "the filter are what move"},
+                       {v:[2,10],  why:"the chord twice a bar, on the offbeat — half the figure "
+                        + "and twice the room"},
+                       {v:[6,14],   why:"the chord on the second and fourth offbeats — it answers "
+                        + "the bar rather than driving it"},
+                       {v:[7,15],   why:"the chord a sixteenth before each half — it leans into "
+                        + "the beat that follows"},
+                       {v:[2,7,11], why:"three chords, unevenly spaced — the figure limps and "
+                        + "the echo straightens it"},
+                       {v:[4,12],   why:"the SKANK: the chord onto beats 2 and 4, the reggae "
+                        + "ancestor of the whole genre"} ],
+                d:D.NOTE, f:0 },
+    velo:     { range:[84,100], q:1, d:D.NOTE, f:1 },
+    duration: { range:[1.2,2.4], d:D.NOTE, f:2 },
+    // THE VOICING IS A RECIPE OVER SCALE DEGREES, NOT A NOTE LIST. `notes` is
+    // gone: the literal [55,58,62] was G minor and only G minor, and the
+    // moment #49 opens the root and the scale a literal is the wrong key.
+    //
+    //   triad  d, d+2, d+4     — verified: base 28 in G natural minor is
+    //                            55, 58, 62, which is [M]'s own chord exactly
+    //   ninth  d+1, d+2, d+4   — the root dropped and left to the bass, the
+    //                            second voiced at the bottom. Verified: 57,
+    //                            58, 62 in G minor; 56, 58, 62 in Phrygian,
+    //                            where the mode makes it a FLAT ninth without
+    //                            a second table.
+    //
+    // [E] states the ninth as a LAW. It is a pool here and the reason is
+    // evidence: all twenty of the parent's pieces play the plain triad, so a
+    // law would put the record the genre is named after outside the space.
+    // 1 in 3 is the weight; if the ear says the ninth is the better default,
+    // move the weight and leave the recipe alone.
+    voicing:  { pool:["triad","triad","ninth"], d:D.NOTE, f:19 },
+    // The degree the chord is built on and the octave it is built in are NOT
+    // drawn: four non-overlapping register bands (sub · pad · stab · lead) is
+    // a `must` clause, and an octave draw is the fastest way to lose one.
+    octave:   { fixed:4 },
+    degrees:  { fixed:{ triad:[0,2,4], ninth:[1,2,4] } }
   },
 
   /* --- THE BASS. #47 owns ALL of this. The shape is what is fixed here. - */
   bass: {
+    // WIDE (#47). `take` is gone — the two literal notes are now one point
+    // inside a drawn walk, and they are still reachable: [M]'s 31 and 41 are
+    // scale degrees 0 and 6 over the same root, and degree 6 is in T[0], so
+    // 221-dub-basic's whole bassline is a legal two-step walk under the
+    // source's own transition table. The literal was never an exception.
+    //
+    // `model` STAYS PINNED and it is owed: there is one sub voice in the
+    // engine, so a drawn "moog" would be a word on the surface with nothing
+    // behind it — a control that does nothing, which rule G2 refuses. #48.
     model:    { pool:["sub"], d:D.NOTE, f:3 },
-    density:  { range:[0.125,0.125], d:D.NOTE, f:4 },        // 2 onsets of 16. §3: [0.10,0.45]
-    homeBias: { range:[0.25,0.25], d:D.NOTE, f:5 },
-    octOdds:  { range:[0,0], d:D.NOTE, f:6 },
-    lenOdds:  { range:[0,0], d:D.NOTE, f:7 },
-    law:      { pool:[null], d:D.NOTE, f:8 },
-    velo:     { range:[112,112], q:1, d:D.NOTE, f:9 },
-    duration: { range:[7,7], d:D.NOTE, f:10 },
-    // [M] why: "G1 then F1 — root, then the flat seventh under the second half
-    // of the bar." THE NUMBERS SAY G1 (31) then F2 (41): 41 is ten semitones
-    // above 31, the flat seventh, an octave higher than the prose reads. The
-    // numbers are taken, not the prose — the manifest's note lists are what the
-    // rig played. #47 replaces this literal with the walk.
-    take:     { fixed:[ {step:0, notes:[31]}, {step:8, notes:[41]} ] }
+    // THE DENSITY AXIS, AND IT IS THE PARENT'S OWN. 0.10 with the weighting
+    // below is about one answer a bar over the downbeat — Sparse and Basic.
+    // 0.45 is five or six — Rolling, "a continuous sixteenth sub; the low end
+    // is a motor, not punctuation". Drawing it is how four of the parent's
+    // twenty files stop being files.
+    density:  { range:[0.10,0.45], d:D.NOTE, f:4 },
+    homeBias: { range:[0.30,0.45], d:D.NOTE, f:5 },
+    octOdds:  { range:[0.04,0.12], d:D.NOTE, f:6 },
+    lenOdds:  { range:[0,0.35], d:D.NOTE, f:7 },             // odds a note is SHORT, not legato
+    // A LAW OUTRANKS THE WALK. Four in eight draw no law and walk; two draw
+    // the parent's Octave figure; two pedal the root and never leave it.
+    law:      { pool:[ null, null, null, null,
+                       {v:"octave", why:"the bass alternates the root and the root an octave up "
+                        + "on every free eighth — the electro figure"},
+                       {v:"octave", why:"the bass alternates the root and the root an octave up "
+                        + "on every free eighth — the electro figure"},
+                       {v:"pedal",  why:"one note, stated and held: the low end is a pedal and "
+                        + "the harmony happens above it"},
+                       {v:"pedal",  why:"one note, stated and held: the low end is a pedal and "
+                        + "the harmony happens above it"} ],
+                d:D.NOTE, f:8 },
+    velo:     { range:[104,118], q:1, d:D.NOTE, f:9 },
+    // THE CEILING ON A LEGATO NOTE, in sixteenths. A held sub IS the genre
+    // where a short one is a bassline, so the writer holds each note until
+    // just before the next onset and clips it here.
+    duration: { range:[7,8], d:D.NOTE, f:10 },
+    // NOT DRAWN, AND SAID RATHER THAN ASSUMED: the sub's octave is the bottom
+    // of the four register bands. Octave 3 would put the bass root at MIDI 43,
+    // which is the pad's bottom note — two layers in one register is on the
+    // `avoid` list. The register variation the genre actually uses is the
+    // per-note octave jump above, not a transposed instrument.
+    octave:   { fixed:2 }
   },
 
   /* --- THE PAD and THE LEAD. #47 owns the values. ----------------------- */
-  pad:  { present:{pool:[true],d:D.NOTE,f:11}, hold:{range:[15,15],d:D.NOTE,f:12},
-          voicing:{pool:["shell"],d:D.NOTE,f:13}, velo:{range:[56,56],q:1,d:D.NOTE,f:14},
-          step:{fixed:0},
-          notes:{fixed:[43,46,50]} },                        // [M] "G minor held under it,
-                                                             // fifteen of sixteen steps."
+  // THE PAD IS DRAWN AS A REGISTER LAW AND A DURATION, not as notes: what a
+  // pad is in this genre is a sustained layer filling the space between the
+  // noticeable sounds. One octave below the stab, on the same recipe, and
+  // L-PAD (in `draw`) asserts the clearance rather than hoping for it.
+  pad:  { present:{pool:[true,true,true,false],d:D.NOTE,f:11},
+          hold:{range:[13,15.5],d:D.NOTE,f:12},
+          voicing:{pool:["shell","shell","ninth"],d:D.NOTE,f:13},
+          velo:{range:[50,62],q:1,d:D.NOTE,f:14},
+          step:{fixed:0}, octave:{fixed:3},
+          degrees:{fixed:{ shell:[0,2,4], ninth:[1,2,4] }} },
   // CHANNEL 4 IS ABSENT AND IT SAYS SO IN [M]'S OWN WORDS. §1.2 generates a
   // sentence for a drawn absence; here the pool entry carries the composer's,
   // because it is the one the surface has always printed and it is better.
@@ -821,7 +960,12 @@ const CONTRACT = {
   ],
   hard: {
     tempo:         [115, 128],
-    kickTemplates: [[0,4,8,12],[0,8],[0,5,10]],   // nothing else is a kick here
+    // NOTHING ELSE IS A KICK HERE. [0,4,8,14] joined the three when #47 widened
+    // the pool: it is the displaced-fourth departure and `drums.kick` declares
+    // it by name, so the fence has to know about it or F1 repairs a legal draw
+    // back to the centre and calls it a violation.
+    kickTemplates: [[0,4,8,12],[0,8],[0,5,10],[0,4,8,14]],
+    drumLanesMin:  2,                             // the kick plus at least one more
     stabNotOnStep: 0,                             // no chord figure may open on the downbeat
     percHitsMax:   2,                             // channels 1 and 2
     leadOnsetsMax: 6,
@@ -1547,7 +1691,8 @@ function countHits(ch) {
 function countFirings(seed, ch, key, p) {
   let n = 0;
   if (DRUM_PAT[ch]) {
-    for (let st = 0; st < 16; st++) if (DRUM_PAT[ch][st] && stepFires(seed, ch, key, st, p)) n++;
+    const pat = DRUM_PAT[ch];
+    for (let st = 0; st < pat.length; st++) if (pat[st] && stepFires(seed, ch, key, st, p)) n++;
     return n;
   }
   const take = PIECE.chords[ch];
@@ -1851,8 +1996,127 @@ function DrawError(seed, left) {
   return e;
 }
 
-const stepsOf = d => d.steps ? d.steps.slice()
-  : rotated(euclid(16, d.hits), d.rotate).reduce((a, x, s) => (x ? a.concat([s]) : a), []);
+// THE LANE'S OWN LENGTH. A kick is a template; a euclid lane is `hits` over
+// `len`, and `len` is 16 for every lane but a hat lane that drew polymeter.
+const laneLen = d => d.len || 16;
+const lcm16 = n => { const g = (a, b) => b ? g(b, a % b) : a; return 16 * n / g(16, n); };
+const lanePat = d => {
+  if (d.steps) {
+    const a = new Array(16).fill(0);
+    for (const st of d.steps) a[((st % 16) + 16) % 16] = 1;
+    return a;
+  }
+  const n = laneLen(d);
+  return rotated(euclid(n, Math.min(d.hits, n)), d.rotate);
+};
+const stepsOf = d => lanePat(d).reduce((a, x, st) => (x ? a.concat([st]) : a), []);
+
+/* --- THE TRANSITION TABLE, over scale DEGREES, 0-indexed into the mode.
+   [E] :3230-3300. Duplicates ARE the weighting; there is no weight table,
+   which is the same convention `pool` uses above. Read musically: the tonic
+   goes to the fourth, the sixth or the flat seventh, everything drains back
+   to the tonic, and the second and the third are passing notes.
+
+   PENTATONIC NEEDS ITS OWN, AND THAT IS MEASURED RATHER THAN ARGUED.
+   `SCALE_STEPS[5]` is FIVE entries and `fromDegree` takes the degree modulo
+   the scale length, so under PENT the seven-note table's degrees 5 and 6
+   silently become the octave and the ninth: fromDegree(5, 31, PENT) is 43 and
+   fromDegree(6, 31, PENT) is 46. Not wrong — a different piece of music than
+   the table means. Two tables, one branch, and no scale is dropped. --- */
+const DEG_T  = { 0:[0,0,0,3,5,6], 1:[0,2], 2:[0,3,3], 3:[0,0,5,3,2],
+                 4:[0,5], 5:[0,3,6,5], 6:[5,0,3] };
+const DEG_T5 = { 0:[0,0,2,3,4], 1:[0,2], 2:[0,4,3], 3:[0,2,4], 4:[0,3,0] };
+const degTableFor = sc => (sc.length === 5 ? DEG_T5 : DEG_T);
+
+/* -------------------------------------------------------------------------
+   THE BASS WRITER (#47). One bar of onsets over scale degrees, drawn from the
+   holes the rest of the piece leaves.
+
+   THE LAWS, IN THE ORDER THEY RUN, AND EACH SAYS WHAT READS IT:
+
+   L2  THE DOWNBEAT. Step 0 always carries an onset at degree 0. Dub's low end
+       is the anchor; a bass that never states the root does not sound like the
+       key it is in.
+   L3  ANSWER, DO NOT DOUBLE. No bass onset on a step the stab takes. [D]:
+       "the bass answers the chord rather than doubling it… when the chord
+       moves onto the backbeat, the bass moves to the offbeats, so the two
+       interlock." THIS IS A DELIBERATE INVERSION OF [E], where the CHORD steps
+       aside — except that [E] exempts patterns that are identities rather than
+       conversations, and dub techno's chord figure is on that list. Same
+       conversation, opposite speaker. Enforced by EXCLUDING the stab's steps
+       from the candidate set, not by sliding afterwards: repair F3 sliding a
+       note is a fence firing, and a fence that fires is a bug in the pool.
+   L4  THE CEILING. No note above the bass root plus twelve. The stab's bottom
+       is 55 and the bass root is 31; twelve semitones is the clearance that
+       keeps them two instruments. An octave jump that would break it is
+       dropped, never transposed down into something else.
+   L5  AT LEAST ONE ONSET. L2 guarantees it, so L5 is an assertion and not a
+       repair — `quiz` is where it lives.
+
+   L1 OF THE SPEC — "no bass onset on a step the kick occupies" — IS NOT
+   IMPLEMENTED AS A FENCE, AND THIS IS THE ONE PLACE THIS FILE DEPARTS FROM ITS
+   OWN DESIGN. The evidence: 221-dub-basic's bass is steps 0 and 8 and its kick
+   is [0,4,8,12], so BOTH of its onsets are on kick steps. A fence that makes
+   the record the genre is named after illegal is a wrong fence. It survives as
+   a WEIGHT: a kick step other than 0 or 8 is drawn at 0.45, the "and" of the
+   beat at 1.5 (that is where a dub bass answers), the half bar at 1.3, and
+   everything else at 0.7.
+   ------------------------------------------------------------------------- */
+function writeBass(seed, cfg) {
+  const sc = cfg.sc, n = sc.length, T = degTableFor(sc);
+  const base = n * cfg.octave;                       // degree of the bass root
+  const root = cfg.root, ceiling = fromDegree(base, root, sc) + 12;
+  const taken = cfg.stabSteps, kick = cfg.kickSteps;
+  const R = (f, i) => rand01(seed, D.NOTE, f, i);
+
+  // 1. WHICH STEPS CARRY AN ONSET.
+  const onsets = [0];                                                    // L2
+  if (cfg.law === "octave") {
+    // [D] Octave, 125: "bass alternates root / root+12 on every eighth, the
+    // electro figure". Every free eighth, and the stab's eighths are not free.
+    for (let st = 2; st < 16; st += 2) if (taken.indexOf(st) === -1) onsets.push(st);
+  } else {
+    for (let st = 1; st < 16; st++) {
+      if (taken.indexOf(st) !== -1) continue;                            // L3
+      const w = st % 4 === 2 ? 1.5 : st === 8 ? 1.3
+              : kick.indexOf(st) !== -1 ? 0.45 : 0.7;
+      if (R(40, st) < cfg.density * w) onsets.push(st);
+    }
+  }
+
+  // 2. WHAT EACH ONE PLAYS. A walk over the table, or a law that outranks it.
+  const out = [];
+  let deg = 0;
+  for (let i = 0; i < onsets.length; i++) {
+    const st = onsets[i];
+    let d = 0;
+    if (cfg.law === "pedal") d = 0;
+    else if (cfg.law === "octave") d = (i % 2) ? n : 0;                  // root, root+12
+    else if (st === 0) d = 0;                                            // L2
+    else if (R(41, st) < cfg.homeBias) d = 0;
+    else { const row = T[((deg % n) + n) % n] || [0]; d = row[Math.floor(R(42, st) * row.length)]; }
+    deg = d;
+    let midi = fromDegree(base + d, root, sc);
+    const jump = cfg.law !== "octave" && st !== 0 && R(43, st) < cfg.octOdds;
+    if (jump && fromDegree(base + d + n, root, sc) <= ceiling) midi = fromDegree(base + d + n, root, sc);
+    if (midi > ceiling) midi = fromDegree(base + d, root, sc);           // L4
+    out.push({ step: st, notes: [midi], velo: cfg.velo, duration: 1 });
+  }
+
+  // 3. HOW LONG EACH ONE IS. A HELD SUB IS THE GENRE WHERE A SHORT ONE IS A
+  // BASSLINE — [E] writes one or two sixteenths and that is the wrong reading
+  // here: [M] holds each note SEVEN steps. So legato is "until just before the
+  // next onset", clipped by the drawn ceiling, and `lenOdds` is how often a
+  // note is short instead.
+  for (let i = 0; i < out.length; i++) {
+    const nextAt = i + 1 < out.length ? out[i + 1].step : out[0].step + 16;
+    const gap = nextAt - out[i].step - 1;
+    out[i].duration = (R(43, 0x100 + out[i].step) < cfg.lenOdds)
+      ? (R(43, 0x200 + out[i].step) < 0.5 ? 1 : 2)
+      : Math.max(1, Math.min(cfg.maxLen, gap));
+  }
+  return out;
+}
 
 function draw(seed) {
   seed = seed | 0;
@@ -1890,12 +2154,15 @@ function draw(seed) {
   };
 
   /* --- 2. THE KICK, then 3. the three euclid lanes --------------------- */
+  const sc = SCALE_STEPS[piece.globals.scale] || SCALE_STEPS[0];
   const DR = STYLE.drums;
   piece.drums[0] = {
     steps: pull(DR.kick, "drums.kick"),
     velo:  pull(DR.kickVelo, "drums.kickVelo"),
     why:   (drawn["drums.kick"] && drawn["drums.kick"].why) || ""
   };
+  const laneSet = pull(DR.present, "drums.present");
+  const laneWhy = (drawn["drums.present"] && drawn["drums.present"].why) || "";
   for (const ch of [1, 2, 3]) {
     const lane = DR.lanes[ch];
     piece.drums[ch] = {
@@ -1904,27 +2171,55 @@ function draw(seed) {
       velo:   pull(lane.velo,   "drums.lanes." + ch + ".velo"),
       why:    pull(lane.why,    "drums.lanes." + ch + ".why")
     };
+    // A LANE THE KIT DOES NOT HAVE IS STILL DRAWN AND THEN EMPTIED. Skipping
+    // the three pulls would make the NUMBER of draws depend on the lane set,
+    // and every field after it would move with the set — which is the exact
+    // failure `rand01` is addressed rather than streamed to avoid.
+    if (laneSet.indexOf(ch) === -1) { piece.drums[ch].hits = 0; piece.empty[ch] = laneWhy; }
   }
-  piece.poly = { on: pull(DR.poly, "drums.poly") < pull(DR.polyOdds, "drums.polyOdds"),
-                 len: pull(DR.polyLen, "drums.polyLen") };
+  // THE HAT LANE'S OWN LENGTH. Drawn for every piece so the coordinates are
+  // spent either way; applied only where the lane exists and the roll came up.
+  const polyRoll = pull(DR.poly, "drums.poly") < pull(DR.polyOdds, "drums.polyOdds");
+  const polyLen  = pull(DR.polyLen, "drums.polyLen");
+  piece.poly = { on: polyRoll && !piece.empty[3], len: polyLen };
+  if (piece.poly.on) {
+    piece.drums[3].len = polyLen;
+    piece.drums[3].why = "the hats run on their own " + polyLen + "-step loop against the bar, "
+      + "so the kit comes home every " + (lcm16(polyLen) / 16) + " bars and not every one";
+  }
 
   /* --- 4. PUBLISH THE FIELD. The parts are written knowing about each
      other through one published structure rather than by reaching into one
      another; it costs one array and it is what makes "the bass answers the
      chord" a mechanism instead of a hope. --- */
   const field = { kick: stepsOf(piece.drums[0]), perc: [] };
-  for (const ch of [1, 2, 3]) field.perc = field.perc.concat(stepsOf(piece.drums[ch]));
+  for (const ch of [1, 2, 3]) if (!piece.empty[ch])
+    field.perc = field.perc.concat(stepsOf(piece.drums[ch]));
   piece.field = field;
 
-  /* --- 5. THE STAB, read against the field ----------------------------- */
+  /* --- 5. THE STAB, read against the field -----------------------------
+     THE NOTES ARE BUILT FROM DEGREES THROUGH THE DRAWN ROOT AND MODE, so the
+     figure transposes to any key and any of the six scales with no second
+     table. Verified: base 28 (octave 4 of a seven-note mode), root 7, natural
+     minor gives 55, 58, 62 — [M]'s own chord, to the note. --- */
   const S = STYLE.stab;
   const figure = pull(S.figure, "stab.figure");
   const stabVelo = pull(S.velo, "stab.velo");
   const stabDur = pull(S.duration, "stab.duration");
-  piece.stab = { degrees: pull(S.degrees, "stab.degrees") };
-  const stabNotes = pull(S.notes, "stab.notes");
-  piece.chords[6] = figure.map(s => ({ step: s, notes: stabNotes.slice(),
-                                       velo: stabVelo, duration: stabDur }));
+  let stabVoicing = pull(S.voicing, "stab.voicing");
+  const stabOct = pull(S.octave, "stab.octave");
+  // THE NINTH IS ILLEGAL IN MAJOR AND IN PENTATONIC, and it falls back rather
+  // than being repaired: in major d+1 is not the device [E] means, and in a
+  // five-note scale it is a different interval entirely. Falling back here
+  // keeps `repair` for things the pools can still reach.
+  if (stabVoicing === "ninth" && (piece.globals.scale === 1 || sc.length === 5))
+    stabVoicing = "triad";
+  const stabDeg = pull(S.degrees, "stab.degrees")[stabVoicing];
+  const stabBase = sc.length * stabOct;
+  const stabNotes = stabDeg.map(d => fromDegree(stabBase + d, piece.globals.root, sc));
+  piece.stab = { voicing: stabVoicing, degrees: stabDeg, base: stabBase, notes: stabNotes.slice() };
+  piece.chords[6] = figure.map(st => ({ step: st, notes: stabNotes.slice(),
+                                        velo: stabVelo, duration: stabDur }));
 
   /* --- 6. THE BASS, gated off the holes the field leaves --------------- */
   const B = STYLE.bass;
@@ -1934,21 +2229,44 @@ function draw(seed) {
     homeBias: pull(B.homeBias, "bass.homeBias"),
     octOdds:  pull(B.octOdds,  "bass.octOdds"),
     lenOdds:  pull(B.lenOdds,  "bass.lenOdds"),
-    law:      pull(B.law,      "bass.law")
+    law:      pull(B.law,      "bass.law"),
+    octave:   pull(B.octave,   "bass.octave")
   };
-  const bassVelo = pull(B.velo, "bass.velo"), bassDur = pull(B.duration, "bass.duration");
-  piece.chords[5] = pull(B.take, "bass.take").map(e => ({
-    step: e.step, notes: e.notes.slice(), velo: bassVelo, duration: bassDur }));
+  piece.bass.why = (drawn["bass.law"] && drawn["bass.law"].why)
+                || "the bass walks the mode and leans home";
+  const bassVelo = pull(B.velo, "bass.velo"), bassMaxLen = pull(B.duration, "bass.duration");
+  piece.chords[5] = writeBass(seed, {
+    sc: sc, root: piece.globals.root, octave: piece.bass.octave,
+    density: piece.bass.density, homeBias: piece.bass.homeBias,
+    octOdds: piece.bass.octOdds, lenOdds: piece.bass.lenOdds, law: piece.bass.law,
+    velo: bassVelo, maxLen: bassMaxLen,
+    stabSteps: piece.chords[6].map(e => e.step), kickSteps: field.kick
+  });
 
   /* --- 7. THE PAD and THE LEAD ----------------------------------------- */
   const P = STYLE.pad, LD = STYLE.lead;
   const padOn = pull(P.present, "pad.present");
   const padHold = pull(P.hold, "pad.hold");
-  piece.pad = { voicing: pull(P.voicing, "pad.voicing") };
+  let padVoicing = pull(P.voicing, "pad.voicing");
+  if (padVoicing === "ninth" && (piece.globals.scale === 1 || sc.length === 5)) padVoicing = "shell";
   const padVelo = pull(P.velo, "pad.velo"), padStep = pull(P.step, "pad.step");
-  const padNotes = pull(P.notes, "pad.notes");
-  if (padOn) piece.chords[7] = [{ step: padStep, notes: padNotes, velo: padVelo, duration: padHold }];
-  else piece.empty[7] = "no material — the draw left the pad out of this piece";
+  const padOct = pull(P.octave, "pad.octave");
+  const padDeg = pull(P.degrees, "pad.degrees")[padVoicing];
+  // L-PAD — THE PAD'S TOP MUST SIT AT LEAST THREE SEMITONES BELOW THE STAB'S
+  // BOTTOM, and it is checked, not assumed. Verified on [M]'s own piece: pad
+  // top 50, stab bottom 55, five semitones. The loop drops the pad an octave
+  // until it clears; it cannot run more than twice from `octave: 3`.
+  let padBase = sc.length * padOct, padNotes = null;
+  for (let guard = 0; guard < 4; guard++) {
+    padNotes = padDeg.map(d => fromDegree(padBase + d, piece.globals.root, sc));
+    if (Math.max.apply(null, padNotes) <= Math.min.apply(null, stabNotes) - 3) break;
+    padBase -= sc.length;
+  }
+  piece.pad = { voicing: padVoicing, degrees: padDeg, base: padBase, notes: padNotes.slice() };
+  if (padOn) piece.chords[7] = [{ step: padStep, notes: padNotes.slice(),
+                                  velo: padVelo, duration: padHold }];
+  else piece.empty[7] = "no material — no pad in this track, and the room is the only thing "
+                      + "holding the space between the chords";
 
   const leadOn = pull(LD.present, "lead.present");
   const leadOnsets = pull(LD.onsets, "lead.onsets");
@@ -1961,7 +2279,7 @@ function draw(seed) {
   // CHANNEL SAYS WHY. A drawn absence with no sentence is a channel that is
   // silent with nothing explaining it, which is the one thing this instrument
   // refuses to produce.
-  for (const ch of [1, 2, 3]) if (piece.drums[ch].hits <= 0)
+  for (const ch of [1, 2, 3]) if (piece.drums[ch].hits <= 0 && !piece.empty[ch])
     piece.empty[ch] = "no material — the draw gave this lane no hits";
 
   /* --- 8. THE VOICES and THE ENGINES ----------------------------------- */
@@ -2160,6 +2478,17 @@ function repair(piece) {
     piece.tempo = clamp(piece.tempo, H.tempo[0], H.tempo[1]);
   }
 
+  // F13 — THE KIT HAS THE KICK AND AT LEAST ONE MORE LANE (L-LANES). The lane
+  // SET is drawn as one pool and every entry is non-empty, so this cannot fire
+  // from the pool; it exists because F4 can empty a lane by clamping it and
+  // because a later widening might make the set a per-lane draw again.
+  const kitLanes = [1, 2, 3].filter(ch => !piece.empty[ch] && piece.drums[ch].hits > 0);
+  if (kitLanes.length < (H.drumLanesMin - 1)) {
+    V("F13", "the kit was left with the kick alone");
+    piece.drums[3].hits = 8; piece.drums[3].rotate = 0; delete piece.empty[3];
+    piece.drums[3].why = "the hats were restored — a kick on its own is not a kit";
+  }
+
   // F12 — at least four voices sounding, and the kick and the stab always
   // among them: the kick and the stab ARE the style.
   for (const ch of (piece.budget.never || [])) if (piece.empty[ch]) {
@@ -2204,6 +2533,26 @@ function quiz(piece, contract) {
       fail("F4", "channel " + ch + " is a pattern, not punctuation");
   if (piece.chords[4] && piece.chords[4].length > H.leadOnsetsMax)
     fail("F5", "the lead is busy");
+  // L5 — a bass with no onset at all is a bar of silence with no sentence
+  // attached, which is the one thing `compositionAt` refuses to produce. The
+  // writer guarantees the downbeat, so this asserts and never repairs.
+  if (!bass.length) fail("L5", "the bass has no onset in the bar");
+  if (bass.length && bass[0].step !== 0) fail("L2", "the bass does not state the root on the downbeat");
+  // L4 — the ceiling that keeps the sub and the chord two instruments.
+  const bassSc = SCALE_STEPS[piece.globals.scale] || SCALE_STEPS[0];
+  const bassRoot = fromDegree(bassSc.length * (piece.bass ? piece.bass.octave : 2),
+                              piece.globals.root, bassSc);
+  if (bass.some(e => e.notes.some(m => m > bassRoot + 12)))
+    fail("L4", "a bass note is more than an octave above the bass root");
+  // L-PAD — the pad's top three semitones clear of the chord's bottom.
+  const padEv = (piece.chords[7] || [])[0];
+  if (padEv && stab.length && Math.max.apply(null, padEv.notes)
+      > Math.min.apply(null, stab[0].notes) - 3)
+    fail("L-PAD", "the pad and the chord are one layer");
+  // L-LANES — the kick and at least one more lane.
+  if ([1, 2, 3].filter(ch => !piece.empty[ch] && piece.drums[ch].hits > 0).length
+      < H.drumLanesMin - 1)
+    fail("F13", "the kit is a kick on its own");
   const moved = (piece.mods || []).some(m => m.channel === 6 && m.verb === "delay" && m.depth > 0);
   if (piece.wets[6] && !piece.globals.dry && !moved && piece.wets[6].delay < H.chordDelayMin)
     fail("F6", "a dry constant chord wall");
@@ -2299,15 +2648,28 @@ let DRUM_PAT = {};
    and the modulator rows). */
 function rebuildDerived() {
   DRUM_PAT = {};
-  for (const ch of Object.keys(PIECE.drums)) {
-    const d = PIECE.drums[ch];
-    DRUM_PAT[ch] = d.steps
-      ? (() => { const a = new Array(16).fill(0); for (const s of d.steps) a[((s % 16) + 16) % 16] = 1; return a; })()
-      : rotated(euclid(16, d.hits), d.rotate);
-  }
+  for (const ch of Object.keys(PIECE.drums)) DRUM_PAT[ch] = lanePat(PIECE.drums[ch]);
   MOD_SLOTS = modSlotsOf(PIECE, MOVEMENT);
   MOD_SLOT_KEYS = Object.keys(MOD_SLOTS);
 }
+
+/* A LANE IS NOT ALWAYS SIXTEEN STEPS LONG. `DRUM_PAT[ch]` carries the lane's
+   OWN cycle, so every reader has to index it by the absolute step and not by
+   the step within the bar — a 12-step hat lane read modulo 16 is a lane
+   silently playing something nobody wrote. One function, and the five places
+   that used to write `pat[s]` call it.
+
+   THE SLOT THE CHANCE HASH TAKES IS THE LANE-LOCAL ONE for the same reason:
+   two different steps of a 12-lane must not collide on one hash input. */
+const laneStep = (pat, absStep) => pat.length === 16
+  ? ((absStep % 16) + 16) % 16
+  : ((absStep % pat.length) + pat.length) % pat.length;
+
+/* THE PIECE IS REBOUND HERE AND NOWHERE ELSE. The surface's `setPiece` and the
+   test harness both go through it, so there is one place that knows the module
+   binding and everything derived from it move together. */
+function usePiece(p) { PIECE = p; rebuildDerived(); return PIECE; }
+
 rebuildDerived();
 
 /* =========================================================================
@@ -2331,8 +2693,10 @@ function fingerprint(C, seed) {
     const pat = DRUM_PAT[ch];
     if (!pat) { parts.push(ch + ":-"); continue; }
     let line = "";
-    for (let s = 0; s < 16; s++)
-      line += (pat[s] && stepFires(seed, ch, C.key[ch], s, C.chance[ch])) ? "x" : ".";
+    for (let s = 0; s < 16; s++) {
+      const ls = laneStep(pat, C.bar * 16 + s);
+      line += (pat[ls] && stepFires(seed, ch, C.key[ch], ls, C.chance[ch])) ? "x" : ".";
+    }
     parts.push(ch + ":" + line);
   }
   for (const ch of TONAL) {
@@ -3695,12 +4059,13 @@ function createEngine(ctx, opts) {
       if (!audible(ch) && !(ch === 0 && rumbleAudible())) continue;
       if (C.present[ch] <= 0) continue;          // it left; the table says when
       const pat = DRUM_PAT[ch];
-      if (!pat[s]) continue;
+      const ls = laneStep(pat, absStep);
+      if (!pat[ls]) continue;
       // CHANCE — how often a step of that channel actually fires. The pattern
       // is still the pattern: nothing is regenerated, the hit is let through
       // or it is not. The KEY is what makes that answer repeat on the
       // channel's own phrase instead of scattering.
-      if (!stepFires(cfg.seed, ch, C.key[ch], s, C.chance[ch])) continue;
+      if (!stepFires(cfg.seed, ch, C.key[ch], ls, C.chance[ch])) continue;
       const d = PIECE.drums[ch];
       // [D] swing is a shape and humanisation is a coin toss; they are
       // different things and both are per channel.
@@ -3954,9 +4319,9 @@ let surfaceBuilt = false;
 
 function setPiece(seed) {
   const before = PIECE;
-  try { PIECE = draw(seed); }
+  try { usePiece(draw(seed)); }
   catch (e) {
-    PIECE = draw(DEFAULT_SEED);
+    usePiece(draw(DEFAULT_SEED));
     PIECE.drawFailed = { seed: seed, why: e.message };
   }
   rebuild(before);
@@ -4190,7 +4555,16 @@ function patternText(ch) {
     return DRUM_PAT[0].map(x => x ? "\u2500" : ".").join("");   // the kick's steps, smeared
   }
   if (PIECE.empty[ch]) return "empty";
-  if (DRUM_PAT[ch]) return DRUM_PAT[ch].map(x => x ? "x" : ".").join("");
+  // A LANE ON ITS OWN CYCLE PRINTS THE SIXTEEN STEPS THAT ARE ACTUALLY ABOUT
+  // TO PLAY, not the lane's twelve. A grid that shows a different number of
+  // characters on one row is a row nobody can read against the others, and the
+  // engine is playing the bar, not the lane.
+  if (DRUM_PAT[ch]) {
+    const pat = DRUM_PAT[ch], base = previewBar() * 16;
+    let out = "";
+    for (let s = 0; s < 16; s++) out += pat[laneStep(pat, base + s)] ? "x" : ".";
+    return out;
+  }
   const take = PIECE.chords[ch];
   if (take) {
     const line = new Array(16).fill(".");
