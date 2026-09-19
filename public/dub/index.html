@@ -5,14 +5,42 @@
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>dubsession</title>
 <style>
+  /* OXIDE AND LACQUER. The palette this instrument was wearing was the Endless
+     Set's shifted a hair — #0b0d10 against #0b0d0e, #5eead4 against #7fd6c4 —
+     and nobody chose it: the sound was rebuilt from that renderer and the skin
+     came along with it. This one is chosen, and the argument is the genre's own
+     object. Dub techno is unlabelled plates in card sleeves and a grease pencil
+     on the run-out; the sound is built out of tape, and tape is IRON OXIDE.
+     Nothing in that object is teal and nothing in it glows.
+
+     THE PLATE IS WARM-BLACK, NOT BLUE-BLACK: R 14, G 12, B 11, against the
+     reference's B > G > R. Reversing the channel order is the one change that
+     is measurably not-theirs on every channel at once.
+
+     TWO HUES, ONE LADDER, AND THAT IS THE WHOLE COLOUR BUDGET. The machine's
+     output is this page's normal state and needs no colour at all. Exactly two
+     things do: what YOU did, and what is ABOUT TO HAPPEN.
+
+       --hot  is THE HAND.  Every pin, every latch, every held value. A number
+              the machine resolved is --ink. Nothing else on the page gets it.
+       --time is TIME.      The playhead, a `wait` edge, a modulation span, a
+              cycle seam, the lead's countdown.
+
+     `--warn` is retired as a name, and splitting its two jobs is a FIX: it
+     painted both the `wait` state (time) and nine reason lines (words), which
+     is why the old surface read anxious. A reason line is --dim text now, and
+     the accent is spent only on time. */
   :root {
-    --bg: #0b0d0e; --panel: #131718; --line: #222829;
-    --ink: #cdd3d2; --dim: #6b7574; --hot: #7fd6c4; --warn: #d6a97f;
-    /* DEAD HAS TO READ DEAD. `--inert` is dimmer than `--dim` and dimmer than
-       an empty live cell's edge, because the first version of this palette had
-       it the other way round somewhere else and a control that cannot apply
-       was the brightest thing in its row. */
-    --inert: #414a4a;
+    --bg: #0e0c0b; --panel: #17140f; --line: #2b2621;
+    --ink: #d9d2c6; --dim: #7a726a; --hot: #f2efe9; --time: #c2592e;
+    /* DEAD HAS TO READ DEAD, and the rule is about INK, not luminance.
+       `--inert` (#4a443c) is brighter than `--line` (#2b2621), which looks
+       like it breaks the old rule and does not: it is dimmer than any live
+       TEXT, and a dead edge is drawn DOTTED, which puts the difference in the
+       edge's shape as well as its value. The first version of this palette had
+       `--inert` lighter than `--dim`, and a control that could not apply was
+       the brightest thing in its row. */
+    --inert: #4a443c;
   }
   * { box-sizing: border-box; }
   body {
@@ -62,7 +90,7 @@
   #steps { display: flex; gap: 3px; margin-bottom: 8px; }
   #steps i { flex: 1; height: 5px; background: var(--line); }
   #steps i.on { background: var(--hot); }
-  #steps i.beat { background: #2e3839; }
+  #steps i.beat { background: #3a332c; }   /* the ruler is structure, and structure went warm with the plate */
   #steps i.on.beat { background: var(--hot); }
   fieldset { border: 1px solid var(--line); padding: 12px 14px; margin: 0 0 14px; }
   legend { color: var(--dim); padding: 0 6px; }
@@ -171,13 +199,13 @@
   /* ASKED FOR, NOT LANDED YET — dashed, and the value carries an arrow. A 1px
      dash does not survive a small cell on its own, so it gets a faint fill
      too. The wait is the feature: a hold lands on the next bar. */
-  .vc.is-wait { border-color: var(--warn); border-style: dashed; background: rgba(214,169,127,.08); }
-  .vc.is-wait .vv { color: var(--warn); }
+  .vc.is-wait { border-color: var(--time); border-style: dashed; background: rgba(194,89,46,.08); }
+  .vc.is-wait .vv { color: var(--time); }   /* a value that lands LATER is time, not alarm */
   /* CANNOT APPLY HERE — dotted, dimmer than everything, reading nothing. */
   .vc.is-dead { border-color: var(--inert); border-style: dotted; }
   .vc.is-dead .vl, .vc.is-dead .vv { color: var(--inert); }
   .vc.is-dead .vs { accent-color: var(--inert); opacity: .3; pointer-events: none; }
-  .cwhy { color: var(--warn); min-height: 1.4em; font-size: 12px; }
+  .cwhy { color: var(--dim); min-height: 1.4em; font-size: 12px; }   /* words, not time */
   /* A MODULATOR ROW AND ITS REASON LINE. The line is RESERVED — min-height,
      like `.cwhy` — so a row going dead changes ink and never layout. The dead
      look is `.vc.is-dead`'s, not a fifth one: dotted edge, `--inert` ink, a
@@ -194,7 +222,7 @@
   .mwhy:empty::before { content: "\00a0"; }
   /* a channel that is silent, or sounding but unable to vary, is marked where
      its name is as well as on its reason line: one colour, one meaning */
-  .chan.silent .g-id, .chan.silent .g-pat, .chan.frozen .g-id { color: var(--warn); }
+  .chan.silent .g-id, .chan.silent .g-pat, .chan.frozen .g-id { color: var(--dim); }
   .rel { padding: 2px 6px !important; font-size: 11px; background: transparent; }
   .cwhy:empty::before { content: "\00a0"; }
   .note { color: var(--dim); margin-top: 10px; }
@@ -295,7 +323,8 @@
     .mx { padding: 5px 9px; }
     .rel { padding: 5px 8px !important; }
   }
-  #status { color: var(--warn); min-height: 1.5em; margin: 8px 0 0; }
+  /* THE ONE LINE THAT MUST BE READ, so it is ink and not an accent. */
+  #status { color: var(--ink); min-height: 1.5em; margin: 8px 0 0; }
   #perf { color: var(--dim); font-size: 12px; margin-top: 10px; }
   a { color: var(--hot); }
 </style>
