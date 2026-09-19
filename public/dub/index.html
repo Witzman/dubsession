@@ -540,88 +540,303 @@
 /* ==== COMPOSITION LAYER START ==== */
 
 /* ---------------------------------------------------------------------------
-   1. THE PIECE — [M], transcribed from the manifest entry, field for field
+   1. THE STYLE — the shape of the space, not a point in it.
+
+   THIS WAS `const PIECE`, [M] TRANSCRIBED FIELD FOR FIELD. It is now the
+   SPACE that piece is drawn from, and `draw(seed)` (section 4b-ter) picks the
+   point.
+
+   EVERY POOL BELOW IS PINNED TO EXACTLY ONE ENTRY AND EVERY RANGE IS
+   DEGENERATE, SO EVERY SEED DRAWS 221-dub-basic. That is §14 step 2 and it is
+   deliberate: the plumbing — the `let PIECE` rebinding, `rebuild()`, the slot
+   table, the chance slot key — ships and is proved while the page sounds
+   identical, which is the only time it is cheap to prove. §14 step 4 is what
+   widens the drums and the stab; every entry that is narrower than §3 declares
+   says so on its own line.
+
+   A MANIFEST ENTRY IS AN OBJECT WITH EXACTLY ONE OF FOUR KEYS (§1):
+     { range:[lo,hi] }        CONTINUOUS — uniform on [lo,hi)
+     { range:[lo,hi], q:n }   QUANTISED  — uniform over the inclusive steps
+     { pool:[a,b,b] }         ONE OF     — repetition IS the weight
+     { fixed:v }              DECLARED AND NOT DRAWN
+   plus `snap:"bar"|"section"` on a discrete field that may not flip mid-phrase.
+
+   `d` and `f` ARE THE COORDINATE (§4.2) AND THEY LIVE ON THE ENTRY, not in a
+   comment beside it. The spec asked for a comment; a comment cannot be
+   checked, and the one thing this allocation exists to prevent — two parallel
+   agents taking the same (D,F) — is silent when it happens, because two fields
+   sharing a coordinate simply always agree. On the entry, check 5 catches it.
    --------------------------------------------------------------------------- */
-const PIECE = {
-  file: "221-dub-basic",
-  tempo: 125,                                   // [M] tempo
-  // [M] globals. root 7 = G, scale 0 = natural minor. master 22 is the
-  // parent's own main-fader index and does not cross to this engine.
-  globals: { root: 7, scale: 0, revsize: 30, revtype: 3, dlytime: 1, dlyfbk: 42 },
+const D = { FRAME:0x4652, DRUM:0x4452, NOTE:0x4E54, VOX:0x5658,
+            SPACE:0x5350, MOD:0x4D44, FORM:0x464D, MORPH:0x4D50 };
 
-  // [M] drums — hits/rotate/velo per channel, euclidean on a 16-step bar.
+// Reserved coordinates: allocated, not yet spent. They are in check 5's
+// uniqueness set so a later commit cannot quietly take one.
+const RESERVED = [
+  // D.MOD f1..f8 — §3's per-modulator pools (channel, verb, depth, bars,
+  // shape, phase0, polarity, spare). `mods.table` is fixed until they open.
+  [D.MOD, 1], [D.MOD, 2], [D.MOD, 3], [D.MOD, 4],
+  [D.MOD, 5], [D.MOD, 6], [D.MOD, 7], [D.MOD, 8]
+];
+
+// The seed the page draws when the query carries none. It was `PIECE.file`'s
+// job to name the piece; the seed is the identity now.
+const DEFAULT_SEED = 0x11CE9E;
+
+const STYLE = {
+  id: "dub-techno",
+  why: "one style, one genre, and the difference is entirely in the draw.",
+
+  /* --- THE FRAME. #49 owns these values. ------------------------------- */
+  // [M] tempo 125, globals.root 7 = G, globals.scale 0 = natural minor.
+  // [M]'s `master` 22 is the parent's own main-fader index and does not cross
+  // to this engine; it is not declared here at all.
+  frame: {
+    tempo:     { range:[125,125], d:D.FRAME, f:0 },          // PINNED. §3: [116,128]. §14 step 4+
+    root:      { range:[7,7], q:1, snap:"section", d:D.FRAME, f:1 },   // PINNED. §3: [0,11]
+    scale:     { pool:[0], snap:"section", d:D.FRAME, f:2 }, // PINNED. §3: MIN×5 DOR×2 PHR HMIN PENT
+    // [D] the genre pack's groove row for dub: swing .08 on the rim and the
+    // hat and nothing else. ONE DRAWN SCALAR × A FIXED PER-CHANNEL SHARE (S3);
+    // the kick, the sub and the pad are `hard` at zero. NOT WIRED YET —
+    // #52 says swing is inert today (no drum hit lands on an odd 16th) and S3
+    // puts #52 before any swing value is drawn, so `SWING` below is still the
+    // constant. Declared here so the coordinate is spent and the shape is set.
+    swing:     { range:[0.08,0.08], d:D.FRAME, f:3 },
+    swingShare:{ fixed:{ 0:0, 1:1, 2:0, 3:1, 4:0, 5:0, 6:0, 7:0 } },
+    humanTime: { range:[0.02,0.02], d:D.FRAME, f:4 },
+    humanTimeShare:{ fixed:{ 1:1, 3:1.5, 4:1.5 } },          // → .02 .03 .03, [M]'s row
+    humanVelo: { range:[5,5], q:1, d:D.FRAME, f:5 },
+    humanVeloShare:{ fixed:{ 1:1, 3:1.6, 4:1.6 } },          // → 5 8 8, [M]'s row
+    // S1: the grammars are `rolling`, `static`, `sparse`. `progression` is a
+    // harmonic device on the chord channel, not a grammar.
+    grammar:   { pool:["rolling"], snap:"section", d:D.FRAME, f:6 },   // PINNED. #49
+    // S2: section lengths are drawn PER SECTION, not once per piece.
+    // `MOVEMENT` still owns these three; #49 wires them.
+    phrase:    { pool:[8], d:D.FRAME, f:7 },
+    section:   { pool:[32], d:D.FRAME, f:8 },
+    bars:      { pool:[256], d:D.FRAME, f:9 }
+  },
+
+  /* --- THE DRUMS. #47 owns the note values; the SHAPE is this spec's. --- */
+  // A KICK IS A TEMPLATE, NOT A EUCLID: the pool is step arrays, so [0,5,10]
+  // is expressible and `euclid(16, hits)` no longer has to be able to say it.
   drums: {
-    0: { hits: 4, rotate: 0,  velo: 110, why: "four on the floor, hard and flat" },
-    1: { hits: 1, rotate: 4,  velo: 68,  why: "one rimshot on beat 2, and nothing else" },
-    2: { hits: 1, rotate: 12, velo: 72,  why: "a single clap on beat 4, drenched" },
-    3: { hits: 8, rotate: 0,  velo: 58,  why: "eighth-note hats, quiet, under everything" }
+    kick:     { pool:[ {v:[0,4,8,12], why:"four on the floor, hard and flat"} ],
+                d:D.DRUM, f:0 },                             // PINNED to 1 of §3's 8. §14 step 4
+    kickVelo: { range:[110,110], q:1, d:D.DRUM, f:1 },
+    lanes: {
+      1: { hits:{pool:[1],d:D.DRUM,f:2}, rotate:{pool:[4],d:D.DRUM,f:3},
+           velo:{range:[68,68],q:1,d:D.DRUM,f:4},
+           why:{fixed:"one rimshot on beat 2, and nothing else"} },
+      2: { hits:{pool:[1],d:D.DRUM,f:5}, rotate:{pool:[12],d:D.DRUM,f:6},
+           velo:{range:[72,72],q:1,d:D.DRUM,f:7},
+           why:{fixed:"a single clap on beat 4, drenched"} },
+      3: { hits:{pool:[8],d:D.DRUM,f:8}, rotate:{pool:[0],d:D.DRUM,f:9},
+           velo:{range:[58,58],q:1,d:D.DRUM,f:10},
+           why:{fixed:"eighth-note hats, quiet, under everything"} }
+    },
+    poly:     { range:[0,0], d:D.DRUM, f:11 },               // PINNED. §3: [0,1]
+    polyOdds: { fixed:0 },                                   // PINNED. §3: 0.20. §14 step 4
+    polyLen:  { pool:[12], d:D.DRUM, f:12 }
   },
 
-  // [M] chords — the literal takes. `step` is a 16th of the bar, `duration`
-  // is in steps, `notes` are MIDI numbers.
-  chords: {
-    5: [ { step: 0, notes: [31], velo: 112, duration: 7.0 },
-         { step: 8, notes: [41], velo: 112, duration: 7.0 } ],
-         // [M] why: "G1 then F1 — root, then the flat seventh under the second
-         // half of the bar." The NUMBERS say G1 (31) then F2 (41): 41 is ten
-         // semitones above 31, the flat seventh, an octave higher than the
-         // prose reads. The numbers are taken, not the prose — the manifest's
-         // note lists are what the rig played.
-    6: [ { step: 2,  notes: [55, 58, 62], velo: 92, duration: 1.6 },
-         { step: 6,  notes: [55, 58, 62], velo: 92, duration: 1.6 },
-         { step: 10, notes: [55, 58, 62], velo: 92, duration: 1.6 },
-         { step: 14, notes: [55, 58, 62], velo: 92, duration: 1.6 } ],
-         // [M] "the same G minor triad on all four offbeat eighths. This is the
-         // figure the genre is built on: it never changes, and the delay and
-         // the filter are what move."
-    7: [ { step: 0, notes: [43, 46, 50], velo: 56, duration: 15.0 } ]
-         // [M] "G minor held under it, fifteen of sixteen steps."
+  /* --- THE CHORD. #47 owns the figures; the FENCE is this spec's. ------- */
+  stab: {
+    figure:   { pool:[ {v:[2,6,10,14], why:"the same G minor triad on all four offbeat eighths. "
+                        + "This is the figure the genre is built on: it never changes, and the "
+                        + "delay and the filter are what move."} ],
+                d:D.NOTE, f:0 },                             // PINNED to 1 of §3's 7. §14 step 4
+    velo:     { range:[92,92], q:1, d:D.NOTE, f:1 },
+    duration: { range:[1.6,1.6], d:D.NOTE, f:2 },
+    degrees:  { fixed:[0,2,4] },                             // a scale-degree triad — OWED to #47
+    notes:    { fixed:[55,58,62] }                           // [M]'s literal G minor triad. #47
+                                                             // replaces this with `degrees` read
+                                                             // through the drawn root and mode.
   },
 
-  // [M] voices — channel 4 is EMPTY and says so. Its `why` is the reason this
-  // file draws it rather than leaving it out.
-  empty: {
-    4: "silent in this piece — rhythm_reg 0 in the manifest. Said explicitly, "
-     + "because a channel that goes quiet with nothing explaining it is the "
-     + "one thing the instrument refuses to produce [G]."
+  /* --- THE BASS. #47 owns ALL of this. The shape is what is fixed here. - */
+  bass: {
+    model:    { pool:["sub"], d:D.NOTE, f:3 },
+    density:  { range:[0.125,0.125], d:D.NOTE, f:4 },        // 2 onsets of 16. §3: [0.10,0.45]
+    homeBias: { range:[0.25,0.25], d:D.NOTE, f:5 },
+    octOdds:  { range:[0,0], d:D.NOTE, f:6 },
+    lenOdds:  { range:[0,0], d:D.NOTE, f:7 },
+    law:      { pool:[null], d:D.NOTE, f:8 },
+    velo:     { range:[112,112], q:1, d:D.NOTE, f:9 },
+    duration: { range:[7,7], d:D.NOTE, f:10 },
+    // [M] why: "G1 then F1 — root, then the flat seventh under the second half
+    // of the bar." THE NUMBERS SAY G1 (31) then F2 (41): 41 is ten semitones
+    // above 31, the flat seventh, an octave higher than the prose reads. The
+    // numbers are taken, not the prose — the manifest's note lists are what the
+    // rig played. #47 replaces this literal with the walk.
+    take:     { fixed:[ {step:0, notes:[31]}, {step:8, notes:[41]} ] }
   },
 
-  // [M] wets — per channel, 0..100, into the delay and the reverb.
+  /* --- THE PAD and THE LEAD. #47 owns the values. ----------------------- */
+  pad:  { present:{pool:[true],d:D.NOTE,f:11}, hold:{range:[15,15],d:D.NOTE,f:12},
+          voicing:{pool:["shell"],d:D.NOTE,f:13}, velo:{range:[56,56],q:1,d:D.NOTE,f:14},
+          step:{fixed:0},
+          notes:{fixed:[43,46,50]} },                        // [M] "G minor held under it,
+                                                             // fifteen of sixteen steps."
+  // CHANNEL 4 IS ABSENT AND IT SAYS SO IN [M]'S OWN WORDS. §1.2 generates a
+  // sentence for a drawn absence; here the pool entry carries the composer's,
+  // because it is the one the surface has always printed and it is better.
+  lead: { present:{pool:[ {v:false, why:"silent in this piece — rhythm_reg 0 in the manifest. "
+                           + "Said explicitly, because a channel that goes quiet with nothing "
+                           + "explaining it is the one thing the instrument refuses to produce [G]."} ],
+                   d:D.NOTE, f:15},
+          onsets:{range:[2,2],q:1,d:D.NOTE,f:16}, motif:{pool:[null],d:D.NOTE,f:17},
+          velo:{range:[70,70],q:1,d:D.NOTE,f:18} },
+
+  /* --- THE SPACE. THIS SPEC OWNS THIS BLOCK. --------------------------- */
+  // [D] "in dub the send IS the arrangement", so a fixed send is a fixed
+  // arrangement. Units are [M]'s own 0..100, unchanged, because two readers
+  // already divide by 100.
   wets: {
-    1: { delay: 0,  reverb: 6  },
-    2: { delay: 18, reverb: 30 },
-    3: { delay: 30, reverb: 34 },
-    4: { delay: 0,  reverb: 8  },
-    5: { delay: 0,  reverb: 0  },
-    6: { delay: 0,  reverb: 6  },
-    7: { delay: 44, reverb: 36 }
+    1: { delay:{range:[0,0],d:D.SPACE,f:0},   reverb:{range:[6,6],d:D.SPACE,f:1} },
+    2: { delay:{range:[18,18],d:D.SPACE,f:2}, reverb:{range:[30,30],d:D.SPACE,f:3} },
+    3: { delay:{range:[30,30],d:D.SPACE,f:4}, reverb:{range:[34,34],d:D.SPACE,f:5} },
+    4: { delay:{range:[0,0],d:D.SPACE,f:6},   reverb:{range:[8,8],d:D.SPACE,f:7} },
+    5: { delay:{range:[0,0],d:D.SPACE,f:8},   reverb:{range:[0,0],d:D.SPACE,f:9} },
+    6: { delay:{range:[0,0],d:D.SPACE,f:10},  reverb:{range:[6,6],d:D.SPACE,f:11} },
+    7: { delay:{range:[44,44],d:D.SPACE,f:12},reverb:{range:[36,36],d:D.SPACE,f:13} }
+  },
+  room: {
+    // [M] globals.revsize 30 and revtype 3 ARE NOT DECLARED HERE AND MUST NOT
+    // BE DRAWN (§0.5): they address TAP Reverberator's forty-three modes, and
+    // those do not cross. The room this engine has is a length in seconds.
+    seconds: { range:[4.5,4.5], d:D.SPACE, f:14 },           // PINNED. §3: [2.2,5.6]
+    // [M] globals.dlytime is an index into the parent's delay divisions [D]:
+    // `1/16 · 1/8 · 3/16 · 1/4 · 3/8 · 1/2`. Index 1 is 1/8 — half a beat.
+    dlyDiv:  { pool:[1], d:D.SPACE, f:15 },                  // PINNED. §3: [2,2,2,1,1,3,4]
+    dlyFbk:  { range:[42,42], d:D.SPACE, f:16 },             // percent, /100 at the engine
+    rumble:  { range:[0.70,0.70], d:D.SPACE, f:17 },         // [E] :1015 — their fader ships at 70
+    pump:    { range:[0,0], d:D.SPACE, f:18 },               // measured, not assumed; see the control
+    bedTrim: { range:[1,1], d:D.SPACE, f:19 }                // 1 is BED_LEVEL as measured
   },
 
-  // [M] levels — "THE EIGHT CHANNEL FADERS ARE 019'S, moved only where a
-  // channel changes role — every ratio the owner tuned by ear on 2026-09-02".
-  // These are the ratios that made twenty pieces comparable, so they are kept
-  // exactly. Channel "16" is the parent's measured MAIN fader; see MASTER_TRIM
-  // below for why it does not cross to this engine.
-  levels: { 0: 0.77, 1: 0.7065, 2: 0.7826, 3: 0.67, 4: 0.2065, 5: 0.337, 6: 0.3261, 7: 0.2826 },
-  mainFaderOnTheRig: 0.2178,
+  /* --- THE MODULATORS. THIS SPEC OWNS THIS BLOCK. ---------------------- */
+  // [D] "the echo over three bars and the room over eight, so the two are
+  // never both loud." 3 and 8 are COPRIME and that is the whole point.
+  //
+  // `bars` IS A BAR COUNT, NOT AN INDEX (§3.2). [M]'s `rate` was an index into
+  // MOD_RATES while a `mod` EVENT's fifth element was already a bar count; 5
+  // and 7 are valid as both, so nothing complained and the two readings differ
+  // by a factor of two and a half. The index is gone.
+  //
+  // PINNED AS A TABLE, not drawn. §3 draws channel/verb/depth/bars/shape/
+  // phase0 per modulator, and no pool formulation reproduces [M]'s three
+  // (two on channel 6, one on channel 3) while being a real draw. Opening it
+  // is #38's own follow-on and is NOT §14 step 4; D.MOD f1..f8 are RESERVED
+  // above so nothing else can take them meanwhile.
+  mods: {
+    count: { range:[3,3], q:1, d:D.MOD, f:0 },
+    table: { fixed:[
+      { channel:6, verb:"delay",  depth:34, bars:3, shape:"tri", phase0:0.15,
+        why:"the stab's echo swells and recedes over three bars" },
+      { channel:6, verb:"reverb", depth:26, bars:8, shape:"tri", phase0:0.65,
+        why:"and its room opens over eight, out of phase with the echo" },
+      { channel:3, verb:"level",  depth:28, bars:4, shape:"tri", phase0:0.8,
+        why:"the hats breathe over four bars" } ] }
+  },
 
-  // [M] mods — `rate` is an index into MOD_RATES [G].
-  mods: [
-    { channel: 6, verb: "delay",  depth: 34, rate: 4, shape: "tri", phase0: 0.15,
-      why: "the stab's echo swells and recedes over three bars" },
-    { channel: 6, verb: "reverb", depth: 26, rate: 1, shape: "tri", phase0: 0.65,
-      why: "and its room opens over eight, out of phase with the echo" },
-    { channel: 3, verb: "level",  depth: 28, rate: 3, shape: "tri", phase0: 0.8,
-      why: "the hats breathe over four bars" }
-  ]
+  /* --- THE VOICES. #48 owns every number here. ------------------------- */
+  // One entry per key of VOICE_PARAMS; all nine are multiplier trims with
+  // def 1, so a range around 1 is the whole schema. PINNED at 1 — the page
+  // ships with every trim at 1 — and NOT WIRED: the sliders still start at
+  // `VOICE_PARAMS[k].def`. #48 wires them and widens them together, so that
+  // the first commit in which a voice trim is drawn is also the first in which
+  // it is heard, rather than one silent commit and one loud one.
+  voices: {
+    "voice.kick.tune":  { range:[1,1], d:D.VOX, f:0 },
+    "voice.kick.decay": { range:[1,1], d:D.VOX, f:1 },
+    "voice.kick.click": { range:[1,1], d:D.VOX, f:2 },
+    "voice.clap.tone":  { range:[1,1], d:D.VOX, f:3 },
+    "voice.rim.tune":   { range:[1,1], d:D.VOX, f:4 },
+    "voice.sub.tone":   { range:[1,1], d:D.VOX, f:5 },
+    "voice.hats.tone":  { range:[1,1], d:D.VOX, f:6 },
+    "voice.stab.reso":  { range:[1,1], d:D.VOX, f:7 },
+    "voice.pad.tone":   { range:[1,1], d:D.VOX, f:8 }
+  },
+  // #48's two alternative voices. A pool of NAMES; the renderer switches on it.
+  engines: {
+    kick: { pool:["909"], d:D.VOX, f:9 },                    // PINNED. §3: 909×3 + hum
+    stab: { pool:["dubstab"], d:D.VOX, f:10 }                // PINNED. §3: dubstab×3 + rhodes
+  },
+
+  /* --- THE LEVELS. FIXED, AND NOT UP FOR DISCUSSION. ------------------- */
+  // [M] "THE EIGHT CHANNEL FADERS ARE 019'S, moved only where a channel
+  // changes role — every ratio the owner tuned by ear on 2026-09-02". These
+  // are the ratios that made twenty pieces comparable, so they are kept
+  // exactly and they are NOT DRAWN. [M]'s own main fader (0.2178) is not here:
+  // it was measured on the rig against LV2 engines whose levels are not this
+  // engine's, and MASTER_TRIM below says why copying it is the exact mistake
+  // the parent lost a day to.
+  levels: {
+    fixed: { 0:0.77, 1:0.7065, 2:0.7826, 3:0.67, 4:null,
+             5:0.337, 6:0.3261, 7:0.2826 },
+    // §7: CHANNEL 4'S LEVEL IS OWED. `INPUT_GAIN[4]` and this fader must be
+    // MEASURED the way the other seven were — rendered alone, no fader, at the
+    // deck sum, four bars — and set by ear once. Not drawn, not guessed.
+    // `draw` THROWS if channel 4 has material while `fixed[4]` is still null.
+    // While the lead is absent the fader still has to start somewhere and the
+    // surface prints the number, so [M]'s own 0.2065 stands in and says so.
+    owed4: { fixed:0.2065 }
+  },
+
+  /* --- THE RESTRAINT. THIS SPEC OWNS THIS BLOCK. ----------------------- */
+  // [E] — the NUMBER removed is fixed, WHICH are removed is drawn. That is how
+  // a sparse piece stays sparse without sparseness being one fixed choice.
+  // S4: the budget decides at draw time WHICH CHANNELS THE PIECE HAS AT ALL;
+  // a grammar's lane mask only moves channels that already exist, so a silent
+  // channel has exactly one explanation.
+  budget: {
+    voices:     { range:[7,7], q:1, d:D.FORM, f:0 },         // PINNED. §3: [4,8]
+    strippable: { fixed:[1,2,4,7] },                         // rim, clap, lead, pad
+    never:      { fixed:[0,6] }                              // the kick and the stab ARE the style
+  }
 };
 
-// [G] "Rates are locked to the bar." `PIECE.mods.rate` is an INDEX into
-// MOD_RATES, which lives in the composition layer (section 4b) together with
-// MOD_RATE_BARS, the extended set sprint 2 added. 3 and 8 are COPRIME, which
-// is the whole point: [D] "the echo over three bars and the room over eight,
-// so the two are never both loud." Sprint 2 takes that argument seriously —
-// see MOD_RATE_BARS.
+/* ---------------------------------------------------------------------------
+   THE CONTRACT — `must` and `avoid` are PROSE and the surface prints them.
+   `hard` is MACHINE-ENFORCED: it narrows the pools before the dice, and
+   `repair` (section 4b-ter) catches what the dice can still reach afterwards.
+   Those are two different mechanisms and confusing them is how a fence becomes
+   a decoration.
+   --------------------------------------------------------------------------- */
+const CONTRACT = {
+  must: [
+    "a four-floor sparse pulse, or a displacement the piece DECLARED",
+    "the chord on the offbeat — never sharing the downbeat with the kick",
+    "the bass answering the chord rather than doubling it",
+    "the send as the arrangement: two modulators at least, on coprime bar counts",
+    "a noise floor under it — a patch with none sounds like a demo of an oscillator",
+    "percussion as punctuation: one hit, not a pattern"
+  ],
+  avoid: [
+    "a busy melodic lead",
+    "a dry constant chord wall",
+    "tech-house edit density",
+    "swing on the kick or the bass — the anchor stays straight"
+  ],
+  hard: {
+    tempo:         [115, 128],
+    kickTemplates: [[0,4,8,12],[0,8],[0,5,10]],   // nothing else is a kick here
+    stabNotOnStep: 0,                             // no chord figure may open on the downbeat
+    percHitsMax:   2,                             // channels 1 and 2
+    leadOnsetsMax: 6,
+    swingLanes:    [1, 3],                        // and ONLY these
+    chordDelayMin: 8,                             // of 100, unless `dry` is declared
+    modsMin:       2,
+    modsCoprime:   true,
+    // VERIFIED IN THE CODE, not taken from a brief: `cutoffMod` is read on
+    // channel 6 and on channel 7 and nowhere else. `cutoffMod[5]` is written
+    // and read by nobody — a control that does nothing, which rule G2 refuses.
+    cutoffChannels:[6, 7],
+    bedTrimMin:    0.2,
+    budgetMin:     4
+  }
+};
 
 // [M] globals.dlytime is an index into the parent's delay divisions [D]:
 // `1/16 · 1/8 · 3/16 · 1/4 · 3/8 · 1/2`. Index 1 is 1/8 — half a beat.
@@ -978,7 +1193,7 @@ function baseComposition(piece, defaultPhrase) {
     walk: { bars: 0, span: 0 },
     mods: piece.mods.map(m => ({
       channel: m.channel, verb: m.verb, depth: m.depth,
-      bars: MOD_RATES[m.rate], shape: m.shape, phase0: m.phase0, boundAt: 0,
+      bars: modBars(m.bars), shape: m.shape, phase0: m.phase0, boundAt: 0,
       why: m.why
     })),
     root: piece.globals.root, scale: piece.globals.scale
@@ -1339,7 +1554,7 @@ function countFirings(seed, ch, key, p) {
   if (!take) return 1;                        // nothing to be silent about
   for (let e = 0; e < take.length; e++)
     for (let k = 0; k < take[e].notes.length; k++)
-      if (stepFires(seed, ch, key, take[e].step * 8 + e * 4 + k, p)) n++;
+      if (stepFires(seed, ch, key, e * 4 + k, p)) n++;
   return n;
 }
 
@@ -1540,6 +1755,493 @@ const MOVEMENT = {
 };
 
 /* =========================================================================
+   4b-ter. THE DRAW — `draw(seed)` turns the STYLE into one piece.
+
+   PURE. A function of the seed and nothing else: no clock, no surface, no
+   module state written or read. Called twice with the same seed it returns two
+   objects that are deep-equal and NOT the same object.
+
+   IT IS ADDRESSED, NOT STREAMED. `rand01(seed, D, F, I)` — the hash above —
+   and never `mulberry32`. A stream needs to know how many calls came before
+   it, and that is the history this layer is not allowed to keep; it is also
+   why three agents can add fields to `STYLE` in parallel, in any order, and no
+   existing field changes value, provided each takes coordinates nobody else
+   has. `mulberry32` stays where it is, doing per-event humanisation inside the
+   engine.
+
+   THROWS only if the contract cannot be satisfied by `repair` — and because
+   `draw` runs at load, a throw would be a blank page, so `setPiece` catches it
+   and says so on the surface rather than the page lying about which piece it
+   is playing.
+   ========================================================================= */
+
+const clone = v => (v === null || typeof v !== "object") ? v
+               : Array.isArray(v) ? v.map(clone)
+               : Object.keys(v).reduce((o, k) => (o[k] = clone(v[k]), o), {});
+
+// A QUANTISED RANGE IS UNIFORM OVER ITS INCLUSIVE STEPS. `Math.round` of a
+// uniform is NOT: with {range:[4,8], q:1} it gives 4 and 8 half the weight of
+// 5, 6 and 7, because the end buckets are half as wide — and the two ends of
+// every quantised axis are the SPARSE end and the DENSE end, exactly the draws
+// the round was built to reach.
+function drawRange(seed, d, f, i, spec) {
+  const u = rand01(seed, d, f, i), lo = spec.range[0], hi = spec.range[1];
+  if (!spec.q) return lo + u * (hi - lo);
+  const n = Math.round((hi - lo) / spec.q) + 1;
+  return lo + Math.min(n - 1, Math.floor(u * n)) * spec.q;
+}
+
+// `rand01` is in [0, 4294967295/4294967296]: it can return exactly 0 and can
+// never return 1, so this index needs no guard.
+//
+// EVERY OBJECT OR ARRAY DRAWN FROM A POOL IS DEEP-CLONED BEFORE IT ENTERS THE
+// PIECE. Not an optimisation: `repair` MUTATES the piece, and without the
+// clone the first repair would rewrite the entry inside `STYLE` and poison
+// every later draw in the page's life.
+function drawPool(seed, d, f, i, spec, path, into) {
+  const k = Math.floor(rand01(seed, d, f, i) * spec.pool.length);
+  const e = spec.pool[k];
+  const v = (e && typeof e === "object" && !Array.isArray(e) && "v" in e) ? e.v : e;
+  if (into && path) into[path] = { pool: path, i: k, of: spec.pool.length,
+                                   value: clone(v), why: (e && e.why) || "" };
+  return clone(v);
+}
+
+// n DISTINCT entries: a deterministic Fisher-Yates on a copy, then take n.
+// The voice budget is what uses it — the NUMBER removed is fixed, WHICH are
+// removed is drawn.
+function drawSet(seed, d, f, pool, n) {
+  const a = pool.slice();
+  for (let j = a.length - 1; j > 0; j--) {
+    const r = Math.floor(rand01(seed, d, f, 0x100 + j) * (j + 1));
+    const t = a[j]; a[j] = a[r]; a[r] = t;
+  }
+  return a.slice(0, Math.max(0, n)).map(clone);
+}
+
+function drawField(seed, spec, path, i, into) {
+  if ("fixed" in spec) return clone(spec.fixed);
+  if (spec.range) return drawRange(seed, spec.d, spec.f, i || 0, spec);
+  return drawPool(seed, spec.d, spec.f, i || 0, spec, path, into);
+}
+
+/* --- THE FIELD PATH. Every leaf of `STYLE` has one, and it is the key into
+   three tables: the provenance record, the coordinate allocation, and #28's
+   morph switch order. A PATH IS NEVER REUSED FOR A DIFFERENT MEANING AND
+   NEVER RENAMED IN PLACE — renaming one silently re-seeds the field it names
+   and every piece changes. A field whose meaning changes gets a new path.
+   Derived, in declaration order, never written by hand. --- */
+function flattenStyle(node, prefix, out) {
+  for (const k of Object.keys(node)) {
+    const v = node[k];
+    if (v === null || typeof v !== "object" || Array.isArray(v)) continue;
+    const path = prefix ? prefix + "." + k : k;
+    if ("range" in v || "pool" in v || "fixed" in v) out.push(path);
+    else flattenStyle(v, path, out);
+  }
+  return out;
+}
+const PATHS = flattenStyle(STYLE, "", []);
+const fieldAt = path => path.split(".").reduce((o, k) => o[k], STYLE);
+
+function DrawError(seed, left) {
+  const e = new Error("seed " + seed + " could not be repaired into a dub techno piece ("
+                    + left.map(x => x.fence).join(", ") + ")");
+  e.seed = seed; e.left = left;
+  return e;
+}
+
+const stepsOf = d => d.steps ? d.steps.slice()
+  : rotated(euclid(16, d.hits), d.rotate).reduce((a, x, s) => (x ? a.concat([s]) : a), []);
+
+function draw(seed) {
+  seed = seed | 0;
+  const drawn = {};
+  const pull = (spec, path, i) => drawField(seed, spec, path, i, drawn);
+
+  /* --- 1. THE FRAME ---------------------------------------------------- */
+  const F = STYLE.frame;
+  const frame = {
+    grammar: pull(F.grammar, "frame.grammar"),
+    phrase:  pull(F.phrase,  "frame.phrase"),
+    section: pull(F.section, "frame.section"),
+    bars:    pull(F.bars,    "frame.bars"),
+    swing:   pull(F.swing,   "frame.swing"),
+    swingShare: pull(F.swingShare, "frame.swingShare"),
+    humanTime: pull(F.humanTime, "frame.humanTime"),
+    humanTimeShare: pull(F.humanTimeShare, "frame.humanTimeShare"),
+    humanVelo: pull(F.humanVelo, "frame.humanVelo"),
+    humanVeloShare: pull(F.humanVeloShare, "frame.humanVeloShare")
+  };
+  const piece = {
+    file: "drawn/0x" + (seed >>> 0).toString(16).toUpperCase(),
+    seed: seed,
+    tempo: pull(F.tempo, "frame.tempo"),
+    globals: {
+      root:  pull(F.root,  "frame.root"),
+      scale: pull(F.scale, "frame.scale")
+    },
+    frame: frame,
+    drums: {}, chords: {}, empty: {}, wets: {}, levels: {}, mods: [],
+    voices: {}, engines: {}, budget: {},
+    violations: [],
+    drawn: drawn,
+    contract: CONTRACT
+  };
+
+  /* --- 2. THE KICK, then 3. the three euclid lanes --------------------- */
+  const DR = STYLE.drums;
+  piece.drums[0] = {
+    steps: pull(DR.kick, "drums.kick"),
+    velo:  pull(DR.kickVelo, "drums.kickVelo"),
+    why:   (drawn["drums.kick"] && drawn["drums.kick"].why) || ""
+  };
+  for (const ch of [1, 2, 3]) {
+    const lane = DR.lanes[ch];
+    piece.drums[ch] = {
+      hits:   pull(lane.hits,   "drums.lanes." + ch + ".hits"),
+      rotate: pull(lane.rotate, "drums.lanes." + ch + ".rotate"),
+      velo:   pull(lane.velo,   "drums.lanes." + ch + ".velo"),
+      why:    pull(lane.why,    "drums.lanes." + ch + ".why")
+    };
+  }
+  piece.poly = { on: pull(DR.poly, "drums.poly") < pull(DR.polyOdds, "drums.polyOdds"),
+                 len: pull(DR.polyLen, "drums.polyLen") };
+
+  /* --- 4. PUBLISH THE FIELD. The parts are written knowing about each
+     other through one published structure rather than by reaching into one
+     another; it costs one array and it is what makes "the bass answers the
+     chord" a mechanism instead of a hope. --- */
+  const field = { kick: stepsOf(piece.drums[0]), perc: [] };
+  for (const ch of [1, 2, 3]) field.perc = field.perc.concat(stepsOf(piece.drums[ch]));
+  piece.field = field;
+
+  /* --- 5. THE STAB, read against the field ----------------------------- */
+  const S = STYLE.stab;
+  const figure = pull(S.figure, "stab.figure");
+  const stabVelo = pull(S.velo, "stab.velo");
+  const stabDur = pull(S.duration, "stab.duration");
+  piece.stab = { degrees: pull(S.degrees, "stab.degrees") };
+  const stabNotes = pull(S.notes, "stab.notes");
+  piece.chords[6] = figure.map(s => ({ step: s, notes: stabNotes.slice(),
+                                       velo: stabVelo, duration: stabDur }));
+
+  /* --- 6. THE BASS, gated off the holes the field leaves --------------- */
+  const B = STYLE.bass;
+  piece.bass = {
+    model:    pull(B.model,    "bass.model"),
+    density:  pull(B.density,  "bass.density"),
+    homeBias: pull(B.homeBias, "bass.homeBias"),
+    octOdds:  pull(B.octOdds,  "bass.octOdds"),
+    lenOdds:  pull(B.lenOdds,  "bass.lenOdds"),
+    law:      pull(B.law,      "bass.law")
+  };
+  const bassVelo = pull(B.velo, "bass.velo"), bassDur = pull(B.duration, "bass.duration");
+  piece.chords[5] = pull(B.take, "bass.take").map(e => ({
+    step: e.step, notes: e.notes.slice(), velo: bassVelo, duration: bassDur }));
+
+  /* --- 7. THE PAD and THE LEAD ----------------------------------------- */
+  const P = STYLE.pad, LD = STYLE.lead;
+  const padOn = pull(P.present, "pad.present");
+  const padHold = pull(P.hold, "pad.hold");
+  piece.pad = { voicing: pull(P.voicing, "pad.voicing") };
+  const padVelo = pull(P.velo, "pad.velo"), padStep = pull(P.step, "pad.step");
+  const padNotes = pull(P.notes, "pad.notes");
+  if (padOn) piece.chords[7] = [{ step: padStep, notes: padNotes, velo: padVelo, duration: padHold }];
+  else piece.empty[7] = "no material — the draw left the pad out of this piece";
+
+  const leadOn = pull(LD.present, "lead.present");
+  const leadOnsets = pull(LD.onsets, "lead.onsets");
+  const leadVelo = pull(LD.velo, "lead.velo");
+  piece.lead = { motif: pull(LD.motif, "lead.motif"), onsets: leadOnsets, velo: leadVelo };
+  if (leadOn) piece.chords[4] = [];                 // #47 fills it; the shape is here
+  else piece.empty[4] = (drawn["lead.present"] && drawn["lead.present"].why)
+                        || "no material — the draw left the lead out of this piece";
+  // A LANE WITH NO HITS IS ALREADY THE ENGINE'S OWN "not playing", AND THE
+  // CHANNEL SAYS WHY. A drawn absence with no sentence is a channel that is
+  // silent with nothing explaining it, which is the one thing this instrument
+  // refuses to produce.
+  for (const ch of [1, 2, 3]) if (piece.drums[ch].hits <= 0)
+    piece.empty[ch] = "no material — the draw gave this lane no hits";
+
+  /* --- 8. THE VOICES and THE ENGINES ----------------------------------- */
+  for (const k of Object.keys(STYLE.voices))
+    piece.voices[k] = pull(STYLE.voices[k], "voices." + k);
+  piece.engines.kick = pull(STYLE.engines.kick, "engines.kick");
+  piece.engines.stab = pull(STYLE.engines.stab, "engines.stab");
+
+  /* --- 9. THE SPACE ----------------------------------------------------- */
+  for (const ch of Object.keys(STYLE.wets)) piece.wets[ch] = {
+    delay:  pull(STYLE.wets[ch].delay,  "wets." + ch + ".delay"),
+    reverb: pull(STYLE.wets[ch].reverb, "wets." + ch + ".reverb") };
+  const RM = STYLE.room;
+  piece.globals.dlytime    = pull(RM.dlyDiv,  "room.dlyDiv");
+  piece.globals.dlyfbk     = pull(RM.dlyFbk,  "room.dlyFbk");
+  piece.globals.revSeconds = pull(RM.seconds, "room.seconds");
+  piece.globals.rumble     = pull(RM.rumble,  "room.rumble");
+  piece.globals.pump       = pull(RM.pump,    "room.pump");
+  piece.globals.bedTrim    = pull(RM.bedTrim, "room.bedTrim");
+
+  /* --- 10. THE MODULATORS ----------------------------------------------- */
+  const modCount = pull(STYLE.mods.count, "mods.count");
+  piece.mods = pull(STYLE.mods.table, "mods.table").slice(0, modCount);
+
+  /* --- 11. PRESENCE AND THE VOICE BUDGET --------------------------------
+     S4: THE BUDGET DECIDES WHICH CHANNELS THE PIECE HAS AT ALL. A grammar's
+     lane mask only moves channels that already exist, so a silent channel has
+     exactly one explanation and the surface never has to guess between two. */
+  const BU = STYLE.budget;
+  piece.budget = {
+    voices:     pull(BU.voices,     "budget.voices"),
+    strippable: pull(BU.strippable, "budget.strippable"),
+    never:      pull(BU.never,      "budget.never")
+  };
+  const sounding = () => ALL_CHANNELS.filter(ch => !piece.empty[ch]);
+  if (sounding().length > piece.budget.voices) {
+    const candidates = piece.budget.strippable
+      .filter(ch => piece.budget.never.indexOf(ch) === -1 && !piece.empty[ch]);
+    const order = drawSet(seed, D.FORM, 1, candidates, candidates.length);
+    for (const ch of order) {
+      if (sounding().length <= piece.budget.voices) break;
+      piece.empty[ch] = "no material — the voice budget is " + piece.budget.voices
+                      + " and this piece spends them elsewhere";
+      delete piece.chords[ch];
+    }
+  }
+
+  /* --- 12. THE LEVELS. §7: CHANNEL 4 IS OWED. -------------------------- */
+  const lv = clone(STYLE.levels.fixed);
+  for (const ch of ALL_CHANNELS) {
+    if (lv[ch] !== null && lv[ch] !== undefined) { piece.levels[ch] = lv[ch]; continue; }
+    if (!piece.empty[ch])
+      throw new Error("channel " + ch + " has material and no MEASURED level. §7: its "
+        + "INPUT_GAIN and its fader are rendered alone at the deck sum and set by ear "
+        + "once — not drawn and not guessed. Owed by #47/#48.");
+    piece.levels[ch] = clone(STYLE.levels.owed4.fixed);
+  }
+
+  /* --- 13. REPAIR, then THE QUIZ. Repair is a seatbelt whose use is a
+     reportable incident: a violation that fires in production is a bug in the
+     POOLS, not a rescue of the piece, and §9.3 asserts the list is empty
+     across every one of 2000 seeds. --- */
+  repair(piece);
+  const left = quiz(piece, CONTRACT);
+  if (left.length) throw DrawError(seed, left);
+  return piece;
+}
+
+/* -------------------------------------------------------------------------
+   REPAIR, NOT RE-DRAW, AND THE REASON IS STRUCTURAL. "Draw again with a
+   different index until it passes" makes the number of draws depend on what
+   was found, which is precisely the property `hash4` was chosen to avoid. A
+   repair is total, bounded, and a pure function of the drawn piece, so
+   `draw(seed)` stays a pure function of the seed and a seek to bar 3000 still
+   agrees with a replay.
+
+   ORDERED F1..F12 ON PURPOSE: F2 puts the chord off the downbeat before F3
+   asks the bass to answer it. #28 calls this on every morph flip — a hybrid of
+   two legal pieces is not automatically legal.
+   ------------------------------------------------------------------------- */
+function repair(piece) {
+  const H = CONTRACT.hard;
+  const V = (fence, what) => piece.violations.push({ fence: fence, why: what });
+  const same = (a, b) => a.length === b.length && a.every((x, i) => x === b[i]);
+
+  // F1 — the kick is a declared template, or it is four on the floor.
+  const k = piece.drums[0];
+  if (k && k.steps && !H.kickTemplates.some(t => same(t, k.steps))) {
+    V("F1", "kick template " + k.steps.join(",") + " is not one of the declared three");
+    k.steps = H.kickTemplates[0].slice();
+  }
+
+  // F2 — no stab onset on the downbeat. [D]: where the chord sits is the
+  // single biggest identifier of the genre.
+  const stab = piece.chords[6];
+  if (stab && stab.length && stab.some(e => e.step === H.stabNotOnStep)) {
+    V("F2", "a chord figure opened on step " + H.stabNotOnStep);
+    for (const e of stab) e.step = (e.step + 2) % 16;
+  }
+
+  // F3 — at least one bass onset on a step the stab does not take, and no
+  // bass onset sharing a step with one. [D]: the bass ANSWERS the chord.
+  const bass = piece.chords[5];
+  if (bass && stab) {
+    const taken = stab.map(e => e.step);
+    for (const e of bass) {
+      if (taken.indexOf(e.step) === -1) continue;
+      V("F3", "a bass onset shared step " + e.step + " with the chord");
+      for (let off = 1; off < 16; off++) {
+        const s = (e.step + off) % 16;
+        if (taken.indexOf(s) === -1 && !bass.some(o => o !== e && o.step === s)) { e.step = s; break; }
+      }
+    }
+  }
+
+  // F4 — percussion is punctuation: one hit, not a pattern.
+  for (const ch of [1, 2]) {
+    const d = piece.drums[ch];
+    if (d && d.hits > H.percHitsMax) {
+      V("F4", "channel " + ch + " carried " + d.hits + " hits");
+      d.hits = H.percHitsMax;
+    }
+  }
+
+  // F5 — no busy melodic lead.
+  if (piece.chords[4] && piece.chords[4].length > H.leadOnsetsMax) {
+    V("F5", "the lead carried " + piece.chords[4].length + " onsets");
+    piece.chords[4] = piece.chords[4]
+      .slice().sort((a, b) => b.velo - a.velo).slice(0, H.leadOnsetsMax)
+      .sort((a, b) => a.step - b.step);
+  }
+
+  // F6 — no dry constant chord wall.
+  //
+  // CORRECTION TO THE SPEC'S OWN FENCE, AND IT IS MEASURED RATHER THAN
+  // ARGUED: 221-dub-basic ships `wets[6].delay = 0`, so the fence as the spec
+  // wrote it ("delay >= 8 unless `dry` was drawn") makes the piece the genre
+  // is named after a permanent violation. It is not a dry chord wall: a
+  // `delay` modulator is bound to channel 6 at depth 34, so the stab's echo
+  // send swells and recedes over three bars from a base of zero. [D] treats
+  // the send as the arrangement, and a send the arrangement is moving is the
+  // opposite of the thing this fence exists to refuse. So the modulator
+  // satisfies it, and `dry` remains the declaration for a piece with neither.
+  const chordMoved = piece.mods.some(m => m.channel === 6 && m.verb === "delay" && m.depth > 0);
+  if (piece.wets[6] && !piece.globals.dry && !chordMoved
+      && piece.wets[6].delay < H.chordDelayMin) {
+    V("F6", "the chord channel was dry and nothing was moving it");
+    piece.wets[6].delay = H.chordDelayMin;
+  }
+
+  // F7 — swing only on the lanes the genre swings. [D]: the anchor stays
+  // straight, which is what makes the swing audible.
+  const sh = piece.frame && piece.frame.swingShare;
+  if (sh) for (const ch of ALL_CHANNELS)
+    if (sh[ch] && H.swingLanes.indexOf(ch) === -1) {
+      V("F7", "swing reached channel " + ch);
+      sh[ch] = 0;
+    }
+
+  // F8 — the send IS the arrangement: at least two modulators, at least two of
+  // them on coprime bar counts, deliberately never both loud.
+  const gcd = (a, b) => b ? gcd(b, a % b) : a;
+  if (piece.mods.length >= H.modsMin) {
+    const pair = piece.mods.some((m, i) => piece.mods.some((n, j) =>
+      j > i && gcd(Math.round(m.bars), Math.round(n.bars)) === 1));
+    if (H.modsCoprime && !pair) {
+      V("F8", "no two modulators were on coprime bar counts");
+      const pool = MOD_RATE_BARS.filter(b => b >= 1 && Math.round(b) === b);
+      const base = Math.round(piece.mods[0].bars);
+      const fix = pool.find(b => gcd(base, b) === 1);
+      if (fix !== undefined) piece.mods[1].bars = fix;
+    }
+  } else if (piece.mods.length) {
+    V("F8", "only " + piece.mods.length + " modulator(s)");
+  }
+
+  // F9 — a `cutoff` modulator only where a cutoff is read. READ IN THE CODE:
+  // `cutoffMod` is consumed on channel 6 and on channel 7 and nowhere else,
+  // and `cutoffMod[5]` is written and read by nobody. A control that does
+  // nothing must not exist; rule G2.
+  for (const m of piece.mods)
+    if (m.verb === "cutoff" && H.cutoffChannels.indexOf(m.channel) === -1) {
+      V("F9", "a cutoff modulator on channel " + m.channel + ", which cannot hear it");
+      m.verb = "reverb";
+    }
+
+  // F10 — a patch with no noise floor sounds like a demo of an oscillator.
+  if (piece.globals.bedTrim < H.bedTrimMin) {
+    V("F10", "the noise floor was trimmed to " + piece.globals.bedTrim);
+    piece.globals.bedTrim = H.bedTrimMin;
+  }
+
+  // F11 — the tempo band both sources agree on.
+  if (piece.tempo < H.tempo[0] || piece.tempo > H.tempo[1]) {
+    V("F11", "tempo " + piece.tempo);
+    piece.tempo = clamp(piece.tempo, H.tempo[0], H.tempo[1]);
+  }
+
+  // F12 — at least four voices sounding, and the kick and the stab always
+  // among them: the kick and the stab ARE the style.
+  for (const ch of (piece.budget.never || [])) if (piece.empty[ch]) {
+    V("F12", "channel " + ch + " was stripped and it is on the never list");
+    delete piece.empty[ch];
+  }
+  const live = ALL_CHANNELS.filter(ch => !piece.empty[ch]);
+  if (live.length < H.budgetMin) {
+    V("F12", "only " + live.length + " voices were left sounding");
+    for (const ch of ALL_CHANNELS) {
+      if (ALL_CHANNELS.filter(c => !piece.empty[c]).length >= H.budgetMin) break;
+      if (piece.empty[ch] && piece.chords[ch] !== undefined) delete piece.empty[ch];
+    }
+  }
+  return piece;
+}
+
+/* -------------------------------------------------------------------------
+   THE QUIZ — A SEPARATE IMPLEMENTATION FROM THE REPAIRS, AND IT ASSERTS ONLY.
+   A repair that silently no-ops passes its own check; it cannot pass an
+   independent one. This is the project's rule that a check needs a check.
+   ------------------------------------------------------------------------- */
+function quiz(piece, contract) {
+  const H = contract.hard, out = [];
+  const fail = (fence, why) => out.push({ fence: fence, why: why });
+  const eq = (a, b) => a.length === b.length && a.every((x, i) => x === b[i]);
+
+  const k = piece.drums && piece.drums[0];
+  if (!k || !k.steps || !H.kickTemplates.some(t => eq(t, k.steps)))
+    fail("F1", "the kick is not one of the declared templates");
+  const stab = piece.chords[6] || [];
+  if (stab.some(e => e.step === H.stabNotOnStep))
+    fail("F2", "a chord onset is on step " + H.stabNotOnStep);
+  const taken = stab.map(e => e.step);
+  const bass = piece.chords[5] || [];
+  if (bass.length && !bass.some(e => taken.indexOf(e.step) === -1))
+    fail("F3", "no bass onset lands where the chord is not");
+  if (bass.some(e => taken.indexOf(e.step) !== -1))
+    fail("F3", "a bass onset doubles the chord");
+  for (const ch of [1, 2])
+    if (piece.drums[ch] && piece.drums[ch].hits > H.percHitsMax)
+      fail("F4", "channel " + ch + " is a pattern, not punctuation");
+  if (piece.chords[4] && piece.chords[4].length > H.leadOnsetsMax)
+    fail("F5", "the lead is busy");
+  const moved = (piece.mods || []).some(m => m.channel === 6 && m.verb === "delay" && m.depth > 0);
+  if (piece.wets[6] && !piece.globals.dry && !moved && piece.wets[6].delay < H.chordDelayMin)
+    fail("F6", "a dry constant chord wall");
+  const sh = piece.frame && piece.frame.swingShare;
+  if (sh) for (const ch of ALL_CHANNELS)
+    if (sh[ch] && H.swingLanes.indexOf(ch) === -1) fail("F7", "swing on channel " + ch);
+  const g = (a, b) => b ? g(b, a % b) : a;
+  if ((piece.mods || []).length < H.modsMin) fail("F8", "fewer than " + H.modsMin + " modulators");
+  else if (H.modsCoprime && !piece.mods.some((m, i) => piece.mods.some((n, j) =>
+      j > i && g(Math.round(m.bars), Math.round(n.bars)) === 1)))
+    fail("F8", "no coprime pair of modulator bar counts");
+  for (const m of (piece.mods || []))
+    if (m.verb === "cutoff" && H.cutoffChannels.indexOf(m.channel) === -1)
+      fail("F9", "a cutoff modulator on channel " + m.channel);
+  if (!(piece.globals.bedTrim >= H.bedTrimMin)) fail("F10", "no noise floor");
+  if (piece.tempo < H.tempo[0] || piece.tempo > H.tempo[1]) fail("F11", "tempo out of band");
+  const live = ALL_CHANNELS.filter(ch => !piece.empty[ch]);
+  if (live.length < H.budgetMin) fail("F12", "only " + live.length + " voices sounding");
+  for (const ch of (piece.budget && piece.budget.never) || [])
+    if (piece.empty[ch]) fail("F12", "channel " + ch + " is on the never list and is silent");
+  return out;
+}
+
+/* -------------------------------------------------------------------------
+   THE PIECE. `let`, NOT `const`, AND WRITTEN ONCE PER SEED.
+
+   Thirty places outside this layer reach for `PIECE` by name, and three inside
+   it — `countHits`, `countFirings` and `fingerprint` — reach for the global
+   while their callers pass a `piece` parameter. So a drawn piece threaded
+   through the parameter would mix two pieces silently: the fold would use the
+   drawn one and the silence reasons and the loop detector would use the other.
+   THE DRAW REBINDS THE MODULE BINDING. The parameter stays, because the pure
+   layer must remain callable with an explicit piece from a test, but nothing
+   may rely on the parameter and the global disagreeing.
+   ------------------------------------------------------------------------- */
+let PIECE = draw(DEFAULT_SEED);
+
+/* =========================================================================
    4b-bis. THE MODULATOR SLOTS — every modulator this arrangement CAN bind.
 
    DERIVED, NEVER WRITTEN OUT. A hand-written list is a second copy of the
@@ -1567,7 +2269,7 @@ function modSlotsOf(piece, movement) {
     if (out[key]) return;                 // first declaration names the slot
     out[key] = { key, from, channel, verb, depth, bars, shape: shape || "tri", why: why || "" };
   };
-  for (const m of piece.mods) add("piece", m.channel, m.verb, m.depth, MOD_RATES[m.rate], m.shape, m.why);
+  for (const m of piece.mods) add("piece", m.channel, m.verb, m.depth, modBars(m.bars), m.shape, m.why);
   for (const s of (movement.sections || [])) {
     const e = s.event;
     // depth 0 is an UNBIND, not a binding: it can never make a slot.
@@ -1576,19 +2278,37 @@ function modSlotsOf(piece, movement) {
   }
   return out;
 }
-const MOD_SLOTS = modSlotsOf(PIECE, MOVEMENT);
-const MOD_SLOT_KEYS = Object.keys(MOD_SLOTS);
-
+let MOD_SLOTS = {};
+let MOD_SLOT_KEYS = [];
 
 /* =========================================================================
-   THE PATTERNS — built once from [M], in the pure region, because the loop
-   detector has to be able to read them without an audio context.
+   THE PATTERNS — in the pure region, because the loop detector has to be able
+   to read them without an audio device.
+
+   A KICK IS A TEMPLATE AND THE OTHER THREE LANES ARE EUCLIDEAN. `euclid(16,
+   hits)` cannot express [0,5,10], so the kick carries `steps` and this reads
+   them when they are there.
    ========================================================================= */
-const DRUM_PAT = {};
-for (const ch of Object.keys(PIECE.drums)) {
-  const d = PIECE.drums[ch];
-  DRUM_PAT[ch] = rotated(euclid(16, d.hits), d.rotate);
+let DRUM_PAT = {};
+
+/* NOT "ONCE AT MODULE SCOPE" — ONCE PER PIECE. The seed changes at runtime,
+   on a bar line, while the transport runs, so everything derived from `PIECE`
+   has to be rebuilt when the piece changes and not merely when the page
+   loads. This is the half of that which is pure; `rebuild()` on the surface
+   side does the rest (the faders, the transport's tempo, the engine's echo,
+   and the modulator rows). */
+function rebuildDerived() {
+  DRUM_PAT = {};
+  for (const ch of Object.keys(PIECE.drums)) {
+    const d = PIECE.drums[ch];
+    DRUM_PAT[ch] = d.steps
+      ? (() => { const a = new Array(16).fill(0); for (const s of d.steps) a[((s % 16) + 16) % 16] = 1; return a; })()
+      : rotated(euclid(16, d.hits), d.rotate);
+  }
+  MOD_SLOTS = modSlotsOf(PIECE, MOVEMENT);
+  MOD_SLOT_KEYS = Object.keys(MOD_SLOTS);
 }
+rebuildDerived();
 
 /* =========================================================================
    THE FINGERPRINT — what actually fires in one bar, as a string.
@@ -1623,7 +2343,7 @@ function fingerprint(C, seed) {
     for (let e = 0; e < take.length; e++) {
       const n = [];
       for (let k = 0; k < take[e].notes.length; k++) {
-        if (!stepFires(seed, ch, C.key[ch], take[e].step * 8 + e * 4 + k, C.chance[ch])) continue;
+        if (!stepFires(seed, ch, C.key[ch], e * 4 + k, C.chance[ch])) continue;
         n.push(transposeDegrees(take[e].notes[k], C.walk, C.root, C.scale));
       }
       if (n.length) ev.push(take[e].step + "@" + n.join("."));
@@ -1852,19 +2572,19 @@ function createEngine(ctx, opts) {
   const cfg = {
     bpm: PIECE.tempo,
     master: 0.8,
-    pump: 0,                             // see the control's own title: measured, not assumed
+    pump: PIECE.globals.pump,            // see the control's own title: measured, not assumed
     dlyBeats: DLY_DIVISIONS[PIECE.globals.dlytime],
     dlyFbk: PIECE.globals.dlyfbk / 100,
     dlyTrim: 1,
     revTrim: 1,
-    revSeconds: 4.5,
+    revSeconds: PIECE.globals.revSeconds,
     modDepth: 1,
     stabCut: 1,
-    rumble: 0.70,                        // [E] :1015 — their fader ships at 70 of 0-150
+    rumble: PIECE.globals.rumble,        // [E] :1015 — their fader ships at 70 of 0-150
     rumbleCap: RUMBLE_CAP,
     // the noise floor, as a TRIM on BED_LEVEL. 1 is the bed as measured; 0 is
     // off and is silent, not quiet.
-    bedTrim: (opts.bedTrim === undefined ? 1 : opts.bedTrim),
+    bedTrim: (opts.bedTrim === undefined ? PIECE.globals.bedTrim : opts.bedTrim),
     bypassFaders: !!opts.bypassFaders,   // calibration render: [M]'s faders off
     raw: !!opts.raw,                     // …and the input gain off too: the voice exactly as built
     solo: (opts.solo === undefined ? null : opts.solo),
@@ -3018,7 +3738,7 @@ function createEngine(ctx, opts) {
         // deliberate, and this comment is where that is said.
         const notes = [];
         for (let k = 0; k < ev.notes.length; k++) {
-          if (!stepFires(cfg.seed, ch, C.key[ch], s * 8 + e * 4 + k, C.chance[ch])) continue;
+          if (!stepFires(cfg.seed, ch, C.key[ch], e * 4 + k, C.chance[ch])) continue;
           // THE CHORD WALKER — scale degrees, never semitones, so the walk
           // stays diatonic and a return to zero returns to exactly the key
           // [M] dialled and not near it.
@@ -3213,8 +3933,117 @@ function seedText() {
   const el = ui("seedin");
   return el && el.value.trim() !== "" ? el.value.trim() : String(SEED);
 }
+/* ---------------------------------------------------------------------------
+   THE PIECE IS DRAWN, AND EVERYTHING DERIVED FROM IT IS REBUILT WITH IT.
+
+   `const PIECE` was read from thirty places and six more things were derived
+   from it once, at load — the drum patterns, the modulator slot table, where
+   the faders start, the transport's tempo, the engine's echo, the modulator
+   rows on the surface. THE SEED CHANGES AT RUNTIME, on a bar line, while the
+   transport runs, so "once at module scope" was never the defect: "once,
+   ever" was.
+
+   `setPiece` catches, and the reason is that `draw` runs at load. A throw
+   there is a blank page, which is worse than any wrong piece — and the seed is
+   in the URL, so somebody will send that URL to somebody else. It falls back
+   to the default piece AND SAYS SO, in the same place a silent channel says
+   why it is silent. A fallback that does not announce itself is a page lying
+   about which piece it is playing.
+   --------------------------------------------------------------------------- */
+let surfaceBuilt = false;
+
+function setPiece(seed) {
+  const before = PIECE;
+  try { PIECE = draw(seed); }
+  catch (e) {
+    PIECE = draw(DEFAULT_SEED);
+    PIECE.drawFailed = { seed: seed, why: e.message };
+  }
+  rebuild(before);
+  if (PIECE.drawFailed && surfaceBuilt)
+    say("the draw for seed " + PIECE.drawFailed.seed + " could not be repaired into a dub "
+      + "techno piece (" + PIECE.drawFailed.why + ") — playing the default instead.", true);
+  return PIECE;
+}
+
+function rebuild(before) {
+  rebuildDerived();                       // DRUM_PAT and the modulator slot table
+  FADER_START = Object.assign({}, PIECE.levels, { R: 0.70 });
+
+  // THE HAND'S CONTROLS ARE ONLY MOVED WHERE THE PIECE'S OWN VALUE MOVED.
+  // A slider is the owner's hand; a draw that lands on the same tempo as the
+  // last one has no business snapping it back. A draw that lands on a
+  // different tempo does, because at that point the number on the slider is
+  // describing a piece that is not playing.
+  const moved = read => !before || read(before) !== read(PIECE);
+  const follow = (id, v, set, key) => {
+    if (surfaceBuilt && ui(id)) ui(id).value = String(v);
+    if (engine) set(v, key);
+  };
+  if (moved(p => p.tempo)) {
+    T.bpm = PIECE.tempo;
+    // THE TEMPO SLIDER HAS step="1" AND THE DRAWN TEMPO IS CONTINUOUS. While
+    // the pool is pinned at 125 the two agree exactly; the moment §14 step 4+
+    // opens `frame.tempo`, 124.3 on the transport reads 124 on the slider and
+    // `start()` hands the engine the slider's number. A number the surface
+    // shows and a number the engine receives are different claims — that one
+    // is named here rather than discovered at the ear, and it is the widening
+    // commit's to resolve.
+    follow("bpm", PIECE.tempo, v => { engine.cfg.bpm = v; engine.set("bpm", v); });
+  }
+  if (moved(p => p.globals.dlytime)) {
+    const beats = DLY_DIVISIONS[PIECE.globals.dlytime];
+    // the select carries four of the six divisions; a draw outside them moves
+    // the engine and leaves the control showing what it can show.
+    const el = surfaceBuilt && ui("dlydiv");
+    if (el && Array.prototype.some.call(el.options, o => parseFloat(o.value) === beats))
+      el.value = String(beats);
+    if (engine) engine.set("dlyBeats", beats);
+  }
+  if (moved(p => p.globals.dlyfbk))
+    follow("fbk", PIECE.globals.dlyfbk / 100, v => engine.set("dlyFbk", v));
+  if (moved(p => p.globals.revSeconds))
+    follow("revsize", PIECE.globals.revSeconds, v => engine.set("revSeconds", v));
+  if (moved(p => p.globals.rumble) && engine) engine.setLevel("R", PIECE.globals.rumble);
+  if (moved(p => p.globals.pump)) follow("pump", PIECE.globals.pump, v => engine.set("pump", v));
+
+  if (surfaceBuilt) { rebuildModRows(); outputs(); }
+}
+
+/* THE SLOT TABLE IS REBUILT ON A SEED CHANGE AND ONLY ON A SEED CHANGE, AND
+   EVERY TRIM THE HAND WAS HOLDING ON A SLOT THAT IS GONE IS RELEASED WITH A
+   SENTENCE. The table's own comment says it is fixed for the life of the page
+   so that rows do not appear and disappear underneath a hand; under a draw
+   that reason still holds WITHIN a piece and cannot hold ACROSS pieces.
+   Carrying a trim over to a slot the new piece happens to share would be a
+   hand holding a control it never touched. */
+function rebuildModRows() {
+  const held = {};
+  for (const r of MOD_ROWS) { const el = ui(r.id); if (el) held[r.key] = parseFloat(el.value); }
+  const was = MOD_ROWS.map(r => r.key);
+  MOD_ROWS = modRowsOf();
+  const now = MOD_ROWS.map(r => r.key);
+  if (was.length === now.length && was.every((k, i) => k === now[i])) return;
+  buildMods();
+  for (const r of MOD_ROWS) {
+    const el = ui(r.id);
+    if (!el || held[r.key] === undefined) continue;
+    el.value = String(held[r.key]);
+    if (engine) engine.set(r.key, held[r.key]);
+  }
+  wireModRows();
+  const gone = was.filter(k => now.indexOf(k) === -1 && held[k] !== undefined && held[k] !== 1);
+  if (gone.length) say("seed " + PIECE.seed + ": " + gone.length + " modulator"
+    + (gone.length > 1 ? "s are" : " is") + " not in this piece — your trim on "
+    + gone.join(", ") + " was released.", true);
+}
+
 function applySeed(v, spoken) {
   SEED = v | 0;
+  // A DIFFERENT SEED IS A DIFFERENT PIECE, and it is drawn here rather than
+  // only handed to the engine's dice. Everything derived from the piece is
+  // rebuilt with it, before anything repaints.
+  setPiece(SEED);
   if (engine) engine.set("seed", SEED);
   ui("seedline").textContent = "seed " + SEED;
   ui("seedin_v").textContent = String(SEED);
@@ -3315,7 +4144,7 @@ function say(msg, sticky) {
 
 // Where each fader starts. [M] has an opinion about eight of them; the ninth
 // is the reference's own default, because [M]'s round has no rumble in it.
-const FADER_START = Object.assign({}, PIECE.levels, { R: 0.70 });
+let FADER_START = Object.assign({}, PIECE.levels, { R: 0.70 });
 
 /* --- WHAT THE HAND HAS MUTED AND SOLOED -----------------------------------
    Held here as well as in the engine, for the reason `autoOn` and `HOLDS` are:
@@ -3353,17 +4182,15 @@ const CHANNELS = [
 ];
 
 function patternText(ch) {
+  // IT READS `DRUM_PAT` AND DOES NOT RE-DERIVE IT. This ran `euclid(16, hits)`
+  // a second time, which was a second implementation of the same idea and
+  // cannot express a kick TEMPLATE like [0,5,10] at all.
   if (ch === "R") {
     // it has no pattern of its own: it sounds wherever the kick does
-    const pat = rotated(euclid(16, PIECE.drums[0].hits), PIECE.drums[0].rotate);
-    return pat.map(x => x ? "\u2500" : ".").join("");   // the kick's steps, smeared
+    return DRUM_PAT[0].map(x => x ? "\u2500" : ".").join("");   // the kick's steps, smeared
   }
   if (PIECE.empty[ch]) return "empty";
-  const d = PIECE.drums[ch];
-  if (d) {
-    const pat = rotated(euclid(16, d.hits), d.rotate);
-    return pat.map(x => x ? "x" : ".").join("");
-  }
+  if (DRUM_PAT[ch]) return DRUM_PAT[ch].map(x => x ? "x" : ".").join("");
   const take = PIECE.chords[ch];
   if (take) {
     const line = new Array(16).fill(".");
@@ -3927,7 +4754,8 @@ function paintMovement(bar) {
 // `room send`; this matches it rather than inventing a second vocabulary.
 const MOD_VERB_WORD = { delay: "echo", reverb: "room", level: "level", cutoff: "tone" };
 const MOD_SHAPE_WORD = { tri: "triangle", ramp: "ramp", square: "square", sh: "sample & hold" };
-const MOD_ROWS = MOD_SLOT_KEYS.map(k => {
+let MOD_ROWS = modRowsOf();
+function modRowsOf() { return MOD_SLOT_KEYS.map(k => {
   const slot = MOD_SLOTS[k];
   const c = CHANNELS.find(x => x.ch === slot.channel);
   return {
@@ -3935,7 +4763,7 @@ const MOD_ROWS = MOD_SLOT_KEYS.map(k => {
     id: "mt_" + slot.channel + "_" + slot.verb,
     label: (c ? c.voice : "channel " + slot.channel) + " \u00b7 " + (MOD_VERB_WORD[slot.verb] || slot.verb)
   };
-});
+}); }
 const modBarsWord = b => b === 1 ? "1 bar" : b + " bars";
 /* THE COMPOSER'S OWN SENTENCE, AND ONLY THE FIRST OF THEM \u2014 the whole of it is
    in the title, the way the empty channel's `why` is printed in the grid. Two
@@ -3947,6 +4775,19 @@ const modBarsWord = b => b === 1 ? "1 bar" : b + " bars";
 function modWhySentence(text) {
   const t = String(text || "").trim().replace(/^OPENING STATE[,.]?\s*(and\s+)?/, "");
   return t.split(/\.\s/)[0].replace(/\.$/, "");
+}
+
+/* THE ROWS' OWN WIRING, AT MODULE SCOPE RATHER THAN INSIDE `wire()`, BECAUSE
+   THE ROWS CAN BE REBUILT. Rebuilding the markup throws the listeners away
+   with it, and a slider that moves nothing is the fault rule G2 refuses. */
+function wireModRows() {
+  const repaintMods = () => paintMods(shownComposition());
+  for (const r of MOD_ROWS) {
+    const el = ui(r.id);
+    if (!el) continue;
+    el.addEventListener("input", () => { if (engine) engine.set(r.key, parseFloat(el.value)); });
+    el.addEventListener("input", repaintMods);
+  }
 }
 
 function buildMods() {
@@ -4113,12 +4954,8 @@ function wire() {
   // repainted by hand rather than by `outputs()` because it is not a function
   // of this slider alone: it is this slider times `all modulation` times the
   // depth the arrangement is currently running.
-  const repaintMods = () => paintMods(shownComposition());
-  for (const r of MOD_ROWS) {
-    bind(r.id, r.key);
-    ui(r.id).addEventListener("input", repaintMods);
-  }
-  ui("moddepth").addEventListener("input", repaintMods);
+  wireModRows();
+  ui("moddepth").addEventListener("input", () => paintMods(shownComposition()));
   // BACK TO THE MANIFEST, down the path a hand takes — the same reason
   // `voicereset` dispatches the event instead of calling the engine itself.
   ui("modreset").addEventListener("click", () => {
@@ -4238,6 +5075,27 @@ function stop() {
    --------------------------------------------------------------------------- */
 async function renderOffline(o) {
   o = o || {};
+  // THE RENDER DRAWS THE PIECE IT IS ASKED FOR.
+  //
+  // This took `seed` and handed it to the engine — but the tempo came off the
+  // GLOBAL piece and the engine played the GLOBAL piece, so every seed
+  // rendered 221-dub-basic with a different set of dice thrown over it. Until
+  // this drew, no measurement over N seeds was possible at all, and the whole
+  // proof plan rests on it.
+  //
+  // THE PIECE IS PUT BACK AFTERWARDS. A measurement is not allowed to leave
+  // the page playing something other than what the seed in the URL says.
+  const wasSeed = PIECE.seed;
+  const drawSeed = (o.seed === undefined || o.seed === null) ? wasSeed : (o.seed | 0);
+  const swapped = drawSeed !== wasSeed;
+  if (swapped) setPiece(drawSeed);
+  try {
+    return await renderOffline_(o, drawSeed);
+  } finally {
+    if (swapped) setPiece(wasSeed);
+  }
+}
+async function renderOffline_(o, drawSeed) {
   const bars = o.bars || 4, bpm = o.bpm || PIECE.tempo, rate = 44100;
   const stepDur = 60 / bpm / 4;
   // `startBar` is the SEEK. The steps scheduled are absolute — bar 200 is
@@ -4435,7 +5293,10 @@ window.p02 = {
   engineComposition: () => engine && engine.composition()
 };
 
-/* --- boot --- */
+/* --- boot ---
+   THE PIECE IS DRAWN FIRST. Everything below reads `PIECE`, `DRUM_PAT`,
+   `FADER_START` and `MOD_SLOT_KEYS`, and all four now follow the seed. */
+setPiece(SEED);
 buildChannels();
 wireFaders();
 wireHand();
@@ -4444,6 +5305,8 @@ buildSections();
 buildSteps();
 buildVoices();
 buildMods();
+wireModRows();
+surfaceBuilt = true;
 ui("seedline").textContent = "seed " + SEED + (location.search.indexOf("seed=") === -1 ? " (the default piece)" : "");
 ui("seedin").value = (/(?:^|[?&])seed=([^&]+)/.exec(location.search || "") || [, String(SEED)])[1];
 ui("seedin_v").textContent = String(SEED);
