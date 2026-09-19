@@ -2839,6 +2839,428 @@ const VOICE_PARAMS = {
 const VOICE_KEYS = Object.keys(VOICE_PARAMS);
 
 /* ---------------------------------------------------------------------------
+   4b. THE DRAWN VOICE PARAMETERS — [#48]. What a SEED may change about how a
+       voice is built, as opposed to what a HAND may change about it.
+       ----------------------------------------------------------------------
+   `VOICE_PARAMS` above is the hand's surface: nine multipliers, x1.00 is the
+   recipe, and every one of them has a slider. This table is the SEED's: each
+   entry is an ABSOLUTE number standing inside a voice recipe, and the recipe
+   reads it through `P("name")` instead of carrying the literal. There is
+   still exactly one copy of each number — it moved from the recipe to here.
+
+   It has no sliders and it is not meant to. The hand's surface is nine
+   controls on purpose; this is the machinery behind "a different track", and
+   a seed writes it, not a finger. Anything here is still reachable from a
+   measurement: `renderOffline({set: {"p.hatDecay": 0.18}})`.
+
+   EVERY ROW CARRIES THE MEASUREMENT THAT CHOSE ITS RANGE. All of them were
+   taken 2026-09-19, 4 bars, the channel soloed, band-limited with four
+   cascaded poles each side, three renders, the loudest reported — the method
+   and the full sweeps are in notes/specs/2026-09-19-drawn-voices.md §2/§3.
+   `moves` is the dB of band RMS between the two ends of the DRAWN range, not
+   of the sweep.
+
+   WHAT IS DELIBERATELY NOT HERE, and it is a longer list than what is:
+   fifteen more literals were routed through this same door and measured, and
+   they are back to being literals because the measurement said they move
+   nothing this method can see — the kick's click highpass corner, the rim's
+   highpass, the kick's sub landing pitch, the rumble's bottom pitch and sweep
+   time, the clap's burst spacing and burst count, the sub's attack and its
+   (absent) glide, the stab's filter open and close times, `cfg.stabCut`, the
+   pad's detune and drift depth, and the boom kick's top. Six of those are
+   TIMING, PHASE or TRANSIENT controls that the genre cares about and band RMS
+   cannot read; they are not dead and they are not ranges. §6 of the spec says
+   which is which. A row appears here when a measurement justifies it.
+
+   THE KIND IS DECLARED, NEVER INFERRED — `draw` carries exactly one of
+   `range` (continuous), `range` + `q` (quantised), `pool` (one of, and a
+   repeated entry is the weight) or `fixed`. That is #38's schema, and
+   `VOX_STYLE` below is this table folded into it so there is no second copy.
+   --------------------------------------------------------------------------- */
+const VOX = {
+
+  /* --- CHANNEL 0, THE KICK ------------------------------------------------ */
+
+  kickEngine: {
+    def: "909", draw: { pool: ["909", "909", "boom"] },
+    of: "which drum channel 0 builds. `909` is [E] playKick :8487, shipped "
+      + "since p01: two sines, a filtered noise tick, no drive. `boom` is the "
+      + "long boom — one sine, a much deeper and faster sweep, a tanh stage "
+      + "the 909 does not have, and a pitched attack instead of noise.",
+    why: "One in three. The 909 is the instrument this piece was judged on, "
+       + "so it stays the common case; the boom is the one a listener is "
+       + "meant to notice. TASTE, NOT MEASUREMENT — the weight is the only "
+       + "number on this row that no render chose. What IS measured is that "
+       + "the two are different drums: soloed, 4 bars, same seed and trims, "
+       + "20-60 Hz -30.23 against -17.19 and 3-12 kHz -55.64 against -65.92. "
+       + "Thirteen dB more weight and ten dB less top."
+  },
+
+  kickSweepStart: {
+    def: 150, min: 80, max: 320, unit: "Hz",
+    draw: { range: [120, 220] },
+    of: "where the 909 body's sweep starts, before `voice.kick.tune` "
+      + "transposes it. The landing pitch is the trim's; this is the height "
+      + "it falls from.",
+    why: "150-400 Hz band, ch0 soloed: 90/120/150/220/300 Hz read "
+       + "-37.10/-34.81/-31.96/-28.12/-27.25 dBFS RMS. Monotonic over "
+       + "9.85 dB, and it FLATTENS above 220 (0.87 dB for the last third), so "
+       + "the range stops there. moves 6.7 dB."
+  },
+
+  kickSweepTime: {
+    def: 0.11, min: 0.02, max: 0.35, unit: "s",
+    draw: { range: [0.04, 0.14] },
+    of: "how long the 909 body takes to land on its pitch.",
+    why: "60-200 Hz: 0.03/0.06/0.11/0.20/0.35 s read "
+       + "-29.22/-26.37/-26.01/-25.99/-26.02. A MEASURED CEILING — past about "
+       + "0.14 s the corner moves and the sound does not. moves 3.2 dB."
+  },
+
+  kickSubMix: {
+    def: 0.55, min: 0, max: 1.4,
+    draw: { range: [0.30, 0.95] },
+    of: "the 909's second sine — the weight sine's share of the hit.",
+    why: "25-60 Hz: 0/0.25/0.55/0.90/1.40 read "
+       + "-40.97/-34.06/-29.64/-26.42/-23.39, monotonic over 17.6 dB. The "
+       + "drawn range stops well inside that because this is THE most "
+       + "level-carrying single number in the instrument and a draw that uses "
+       + "all of it is voting on loudness. moves 7.6 dB."
+  },
+
+  kickClickDecay: {
+    def: 0.02, min: 0.004, max: 0.15, unit: "s",
+    draw: { range: [0.008, 0.09] },
+    of: "how long the 909's noise tick lasts. Its LEVEL is the hand's "
+      + "(`voice.kick.click`); its length is the seed's.",
+    why: "1.2-8 kHz: 5 ms -56.69, 60 ms -51.00. moves 5.7 dB."
+  },
+
+  /* --- CHANNEL 1, THE RIMSHOT --------------------------------------------- */
+
+  rimWave: {
+    def: "triangle",
+    draw: { pool: ["triangle", "square", "sine"] },
+    of: "the ping oscillator's waveform. Triangle is [E] playPerc2 :9047.",
+    why: "4-12 kHz: triangle -53.95, square -46.79, sine -54.92 — 8.1 dB "
+       + "between the ends, and square is a different piece of wood rather "
+       + "than a louder one. SAWTOOTH WAS MEASURED AND LEFT OUT: 1-4 kHz "
+       + "-43.50 against triangle's -40.80 while being brighter, which reads "
+       + "as the rim going away rather than changing."
+  },
+
+  rimDecay: {
+    def: 0.03, min: 0.006, max: 0.22, unit: "s",
+    draw: { range: [0.012, 0.14] },
+    of: "the ping's decay.",
+    why: "1-4 kHz: 8 ms -46.86, 90 ms -35.95. moves 10.9 dB. One of the "
+       + "seven biggest audible differences between two drawn tracks."
+  },
+
+  rimNoise: {
+    def: 0.15, min: 0, max: 0.45,
+    draw: { range: [0.05, 0.45] },
+    of: "the raw noise click under the ping, as a share of the hit.",
+    why: "4-16 kHz: 0 -60.50, 0.40 -47.51. moves 13.0 dB. THE CEILING IS A "
+       + "MEASUREMENT AND NOT A TASTE: at 0.90 the soloed channel peaks at "
+       + "-1.50 dBFS, above the audio gate's -0.5 threshold once anything "
+       + "else is in the mix. The door clamps at 0.45 for that reason."
+  },
+
+  rimNoiseDecay: {
+    def: 0.015, min: 0.003, max: 0.12, unit: "s",
+    draw: { range: [0.006, 0.06] },
+    of: "how long that noise click lasts.",
+    why: "4-16 kHz: 5 ms -57.68, 50 ms -49.26. moves 8.4 dB."
+  },
+
+  /* --- CHANNEL 2, THE CLAP ------------------------------------------------ */
+
+  clapQ: {
+    def: 1.4, min: 0.4, max: 4.0,
+    draw: { range: [0.8, 4.0] },
+    of: "the width of the bandpass all three bursts pass through. Its CORNER "
+      + "is the hand's (`voice.clap.tone`); its width is the seed's.",
+    why: "2.4-3.2 kHz: 0.6/1.4/3.0/7.0 read -36.30/-39.22/-43.49/-49.02, "
+       + "monotonic over 12.7 dB. It stops at 4.0 because a width control "
+       + "that is also taking 12.7 dB out of the channel is half a loudness "
+       + "vote. moves 7.2 dB."
+  },
+
+  clapBody: {
+    def: 0.14, min: 0.03, max: 0.6, unit: "s",
+    draw: { range: [0.06, 0.40] },
+    of: "how long the THIRD burst rings. The first two are the slap and stay "
+      + "at 20 ms; this one is the room in the hands.",
+    why: "1-4 kHz: 40 ms -40.85, 320 ms -32.89. moves 8.0 dB."
+  },
+
+  /* --- CHANNEL 3, THE HATS ------------------------------------------------ */
+
+  hatDecay: {
+    def: 0.045, min: 0.008, max: 0.32, unit: "s",
+    draw: { range: [0.018, 0.22] },
+    of: "the closed hat's decay.",
+    why: "THE BIGGEST SINGLE UNREACHED CONTROL IN THE INSTRUMENT. 4-16 kHz: "
+       + "12/25/45/90/180/320 ms read -44.31/-40.98/-38.39/-35.36/-32.33/"
+       + "-29.82, monotonic over 14.5 dB. 18 ms is a tick, 220 ms is a "
+       + "sizzle, and the two are different kits. It stops at 0.22 s because "
+       + "at 320 ms an eighth-note hat at 125 BPM (240 ms per eighth) is "
+       + "still ringing when the next one lands, and that is an open hat with "
+       + "no choke — this recipe has no choke. moves 12.0 dB."
+  },
+
+  hatQ: {
+    def: 1.2, min: 0.4, max: 4.0,
+    draw: { range: [0.6, 4.0] },
+    of: "the resonance of the hat's highpass corner.",
+    why: "4-16 kHz: 0.5 -38.76, 3.0 -37.47. moves 1.3 dB — the WEAKEST row "
+       + "in this table and it stays only because it is free (it is four "
+       + "times the channel's own 0.033 dB render spread, and one twelfth of "
+       + "what the decay does). An implementer who has to drop one row drops "
+       + "this one."
+  },
+
+  /* --- CHANNEL 5, THE SUB ------------------------------------------------- */
+
+  subWave: {
+    def: "triangle",
+    draw: { pool: ["triangle", "triangle", "square", "sawtooth"] },
+    of: "the waveform of the CHARACTER oscillator sitting on top of the sub "
+      + "sine. Its AMOUNT is the hand's (`voice.sub.tone`); its shape is the "
+      + "seed's. The sine underneath never changes: that is the weight.",
+    why: "200 Hz-4 kHz: triangle -53.40, square -38.91, sawtooth -42.04. "
+       + "moves 14.5 dB — replacing the triangle moves the sub's entire "
+       + "midrange. Weighted [E]'s way, by repeating an entry, because a "
+       + "square sub every other track is not dub techno."
+  },
+
+  /* --- CHANNEL 6, THE STAB ------------------------------------------------ */
+
+  stabEngine: {
+    def: "dubstab", draw: { pool: ["dubstab", "dubstab", "dubstab", "dubstab", "rhodes"] },
+    of: "which instrument channel 6 builds. `dubstab` is [E] playChord "
+      + "engine \"dubstab\" :9737, the chord hit whose filter does the "
+      + "talking. `rhodes` is the tine — two-operator FM with NO filter "
+      + "envelope at all; what moves is the modulation index.",
+    why: "One in five, and that weight is NOT this session's: [E]'s own "
+       + "dub-techno chord-engine pool is [dubstab, dubstab, dubstab, "
+       + "ensemble, rhodes] and `ensemble` is already this instrument's pad, "
+       + "so rhodes is the one that was missing and it is a one-in-five draw "
+       + "where it came from."
+  },
+
+  stabDrive: {
+    def: 1.8, min: 0.4, max: 6.0,
+    draw: { range: [0.8, 4.0] },
+    of: "the tanh drive each note passes on its way into its filter.",
+    why: "0.4/1.0/1.8/3.2/6.0 read, 1-4 kHz, -62.22/-61.20/-59.52/-57.20/"
+       + "-54.67 and, 4-12 kHz, -82.66/-81.98/-80.39/-77.88/-75.18 — "
+       + "monotonic on both, 7.6 and 7.5 dB over the full sweep. The drawn "
+       + "range takes the middle because 6.0 is 5 dB of added level in the "
+       + "channel's own band. moves 4.0 dB."
+  },
+
+  stabDetune: {
+    def: 21, min: 0, max: 40, unit: "cents",
+    draw: { range: [0, 26] },
+    of: "how far the outer two oscillators of each note are spread. [E] "
+      + "det 12 + 9.",
+    why: "1-4 kHz: 0/8/21/45/80 cents read -55.89/-57.28/-59.55/-58.73/"
+       + "-58.16. MONOTONIC ONLY UP TO 21, so 26 is the top. Detune is a "
+       + "beating control and band RMS reads it poorly; 3.7 dB is what there "
+       + "is, and it is 100x the channel's own band-render spread."
+  },
+
+  stabHold: {
+    def: 0.35, min: 0.05, max: 0.95,
+    draw: { range: [0.12, 0.40] },
+    of: "the fraction of the note the chord envelope holds flat before it "
+      + "falls.",
+    why: "1-4 kHz: 0.10/0.35/0.70/0.95 read -63.75/-59.52/-59.47/-59.47. A "
+       + "MEASURED CEILING — past 0.40 nothing moves, because the note is "
+       + "1.6 steps (192 ms at 125 BPM) and the filter has already shut. "
+       + "moves 4.2 dB."
+  },
+
+  stabSubShare: {
+    def: 0.12, min: 0.03, max: 0.30,
+    draw: { range: [0.06, 0.20] },
+    of: "the sub-octave root's share. It bypasses the 130 Hz highpass, so "
+      + "this is the stab's own weight and it sits in the kick's way.",
+    why: "30-90 Hz: 0.12 -34.67, 0.30 -27.39. moves 7.3 dB across the drawn "
+       + "range."
+  },
+
+  /* --- CHANNEL 7, THE PAD ------------------------------------------------- */
+
+  padBreath: {
+    def: 0.09, min: 0, max: 0.35,
+    draw: { range: [0.03, 0.22] },
+    of: "the band-limited air riding the pad's own envelope. [E] :10143.",
+    why: "3-8 kHz: 0/0.09/0.25/0.50 read -52.89/-41.93/-33.70/-27.93. "
+       + "moves 19.2 dB, THE LARGEST SINGLE FIGURE IN THIS TABLE — and it is "
+       + "also the most level-carrying thing on the channel, which is why the "
+       + "drawn range is a third of what was swept."
+  },
+
+  padFoundation: {
+    def: 1, min: 0, max: 1.8,
+    draw: { range: [0.55, 1.35] },
+    of: "a multiplier on the pad foundation's level — the compact root/fifth/"
+      + "octave layer under the pad, [E] playPadFoundation :10188. x1.00 is "
+      + "the recipe exactly.",
+    why: "100-600 Hz: 0/0.5/1.0/1.6 read -37.35/-34.30/-30.25/-26.70, "
+       + "monotonic over 10.65 dB. moves 4.1 dB."
+  },
+
+  padAttack: {
+    def: 0.055, min: 0.01, max: 0.5,
+    draw: { fixed: 0.055 },
+    of: "the fraction of the note the pad takes to open.",
+    why: "DECLARED AND NOT DRAWN, and the reason is the clamp it lives "
+       + "inside. 3-8 kHz reads -43.65/-42.89/-41.04/-40.61 at "
+       + "0.010/0.055/0.200/0.500 — 3.04 dB, monotonic — but that sweep was "
+       + "taken with the recipe's own clamp(0.22, 0.72) WIDENED to "
+       + "(0.02, 4.0). At the shipped clamp and this piece's note length the "
+       + "factor is already at the floor, so the bottom half of any range "
+       + "would do nothing and the top half is worth under 2 dB. Drawing it "
+       + "honestly means moving the clamp, and no measurement here justifies "
+       + "that. It is through the door so the next sprint can re-measure it "
+       + "without patching the file again."
+  },
+
+  /* --- THE RUMBLE BUS ----------------------------------------------------- */
+
+  rumbleTop: {
+    def: 90, min: 40, max: 200, unit: "Hz",
+    draw: { range: [60, 150] },
+    of: "where the rumble exciter's sine starts before it falls to 28 Hz. "
+      + "[E] :8048.",
+    why: "32-120 Hz: 50/70/90/130/180 Hz read -20.62/-20.90/-21.84/-22.34/"
+       + "-26.08, monotonic over 5.46 dB; inside the drawn range it is 1.4 dB."
+  },
+
+  rumbleDecay: {
+    def: 0.55, min: 0.15, max: 1.4, unit: "s",
+    draw: { range: [0.35, 1.10] },
+    of: "how long the rumble exciter rings into the reverb. Nothing you hear "
+      + "is this oscillator; it is what the convolver is fed.",
+    why: "32-120 Hz: 0.25/0.55/1.10/2.00 s read -25.53/-21.84/-19.04/-17.53. "
+       + "It stops at 1.10 s because the rumble is under RUMBLE_CAP = 0.09 "
+       + "and a 2 s tail at 125 BPM is still ringing two kicks later. "
+       + "moves 6.5 dB."
+  },
+
+  /* --- THE LONG BOOM, channel 0's alternative drum ------------------------ */
+
+  boomDecay: {
+    def: 2.7, min: 1.0, max: 5.0,
+    draw: { range: [1.5, 4.0] },
+    of: "a multiplier on `voice.kick.decay` — the boom rides the SAME decay "
+      + "control the 909 does, two and a half times longer by default.",
+    why: "20-60 Hz: x1.5 -21.68, x4.0 -14.78. moves 6.9 dB."
+  },
+
+  boomDrive: {
+    def: 2.4, min: 0.8, max: 5.0,
+    draw: { range: [1.2, 3.6] },
+    of: "the tanh the boom's sine passes through, with a 26 Hz highpass after "
+      + "it because tanh of a near-DC sine makes DC.",
+    why: "THE DRIVE IS LOAD-BEARING AND NOT DECORATION. A pure sine at 43 Hz "
+       + "is nothing a phone speaker can reproduce; tanh puts energy at 2f, "
+       + "3f, 4f, so the drum keeps its pitch on a small speaker — the "
+       + "missing-fundamental effect. 200-800 Hz at 1.2/2.4/4.0: "
+       + "-38.00/-35.09/-32.15. moves 5.9 dB there and 6.0 dB in 20-60 Hz."
+  },
+
+  boomTop: {
+    def: 3.2, min: 1.5, max: 6.0,
+    draw: { fixed: 3.2 },
+    of: "how far above its landing pitch the boom's sine starts, as a "
+      + "multiple of it.",
+    why: "DECLARED AND NOT DRAWN. 60-200 Hz at x2.0/x3.2/x5.0 reads "
+       + "-21.43/-20.53/-20.64 — non-monotonic and inside a decibel. Fixed "
+       + "at 3.2 until something can measure it."
+  },
+
+  boomLevel: {
+    def: 0.50, min: 0.2, max: 1.2,
+    draw: { fixed: 0.50 },
+    of: "the boom body's peak, as a share of the hit's velocity.",
+    why: "DECLARED AND NOT DRAWN, because it is a LEVEL and this is the one "
+       + "number holding the alternative drum in family with the 909. Swept "
+       + "0.36/0.50/0.65/0.95 the calibration-tap peak reads "
+       + "-2.77/-0.83/+0.39/+1.64 and the 8-bar mix RMS -17.82/-17.39/-17.00/"
+       + "-16.34 against the 909 mix's -18.50. 0.50 keeps the drum's peak in "
+       + "family with the 909's (+3.10 at the tap) while leaving only 1.11 dB "
+       + "for `pieceTrim` to remove."
+  },
+
+  /* --- THE TINE, channel 6's alternative instrument ----------------------- */
+
+  rhodesRatio: {
+    def: 7, min: 1, max: 20,
+    draw: { pool: [4, 4, 7, 7, 7, 14] },
+    of: "the FM modulator's frequency as a multiple of the carrier's.",
+    why: "3-12 kHz at index 1.6: ratio 4 -53.00, 7 -44.53, 14 -37.60. "
+       + "moves 15.4 dB. READ THE RATIO-14 ROWS OF THE SPEC'S TABLE: at 14 "
+       + "the 3-12 kHz figure is LOUDER than the 800 Hz-3 kHz figure, which "
+       + "is a bell and not a piano. That is why 7 is the default and 14 is "
+       + "one entry in six rather than the DX7 tine's headline."
+  },
+
+  rhodesIndex: {
+    def: 1.4, min: 0.3, max: 4.0,
+    draw: { range: [0.8, 2.6] },
+    of: "how far the modulator bends the carrier at the strike, in multiples "
+      + "of the modulator frequency. It falls to almost nothing over `bark`.",
+    why: "3-12 kHz at ratio 7: 0.8 -50.41, 2.6 -40.63. moves 9.8 dB."
+  },
+
+  rhodesTone: {
+    def: 2200, min: 400, max: 9000, unit: "Hz",
+    draw: { range: [1200, 5000] },
+    of: "the tine's one lowpass — FIXED, with no envelope on it at all, which "
+      + "is the whole difference from the dub stab. `cfg.stabCut` and the "
+      + "`cutoff` modulator still multiply it, so channel 6's modulator "
+      + "lands on this engine too.",
+    why: "A GENUINE BRIGHTNESS CONTROL AND NOT A FADER: over 1200-5000 Hz it "
+       + "moves 3-12 kHz by 14.59 dB (-56.30 to -41.71) while moving "
+       + "800 Hz-3 kHz by only 3.37 dB (-35.25 to -31.88)."
+  },
+
+  rhodesBark: {
+    def: 0.08, min: 0.01, max: 0.4, unit: "s",
+    draw: { range: [0.03, 0.25] },
+    of: "how fast the modulation index collapses — the strike noise of a "
+      + "tine, and the only envelope this engine has.",
+    why: "3-12 kHz: 0.03 s -49.69, 0.25 s -41.80. moves 7.9 dB."
+  },
+
+  rhodesLevel: {
+    def: 1.4, min: 0.4, max: 3.0,
+    draw: { fixed: 1.4 },
+    of: "the tine's own output level, ahead of its input gain.",
+    why: "DECLARED AND NOT DRAWN, for the same reason `boomLevel` is. Swept "
+       + "0.9/1.4/2.2 the 8-bar mix RMS reads -18.46/-18.40/-18.31 against "
+       + "the dub stab's -18.50: at 1.4 the mix is matched to 0.10 dB, which "
+       + "is inside the 0.5 dB the delay wobble puts on channel 6."
+  }
+};
+const VOX_KEYS = Object.keys(VOX);
+
+/* THE STYLE BLOCK THIS TABLE OWNS, folded out of the table itself so there is
+   no second copy of a range anywhere. This is `STYLE.vox` in #38's schema:
+   every key carries exactly one of `range`, `range`+`q`, `pool` or `fixed`,
+   and the draw writes `piece.vox[k]`, which the engine reads as `p.<k>`. */
+const VOX_STYLE = (() => {
+  const out = {};
+  for (const k of VOX_KEYS) out[k] = VOX[k].draw;
+  return out;
+})();
+
+/* ---------------------------------------------------------------------------
    5. THE ENGINE
       Built against a context rather than against `window`, so the same code
       renders offline for measurement as plays live. [E] does the same thing
@@ -2912,6 +3334,19 @@ function createEngine(ctx, opts) {
   // surface prints and the figure a filter receives come from one number.
   const vtrim = k => cfg[k];
   const vnum = k => VOICE_PARAMS[k].base * cfg[k];
+
+  /* --- THE SEED'S VOICE NUMBERS — section 4b's table, and `P` is the only
+     door to them. It is one comparison deep on purpose: it is read at NOTE
+     TIME, on every hit of every channel, so it may not allocate and may not
+     look anything up twice. The defaults come from the table and nowhere
+     else, so `P("hatDecay")` on an untouched engine IS the 45 ms that used to
+     stand in the recipe — the number moved, it was not copied.
+
+     A drawn piece writes these through `set`, exactly as a measurement render
+     does: one path, so the number the surface prints and the number the
+     oscillator receives cannot drift apart. --- */
+  for (const k of VOX_KEYS) cfg["p." + k] = VOX[k].def;
+  const P = k => { const v = cfg["p." + k]; return v === undefined ? VOX[k].def : v; };
 
   /* --- EVERYTHING RANDOM IN THIS ENGINE IS NOW SEEDED, AND HERE IS WHY. -----
      Three things in this file drew from the global RNG or from the wall clock:
@@ -3167,13 +3602,14 @@ function createEngine(ctx, opts) {
   function rumbleExciter(t, v) {
     if (!(v > 0.001)) return;
     const o = ctx.createOscillator(), g = ctx.createGain();
+    const rdec = P("rumbleDecay");
     o.type = "sine";
-    o.frequency.setValueAtTime(90, t);
+    o.frequency.setValueAtTime(P("rumbleTop"), t);
     o.frequency.exponentialRampToValueAtTime(28, t + 0.3);
     g.gain.setValueAtTime(v * 0.9, t);
-    g.gain.exponentialRampToValueAtTime(0.001, t + 0.55);
+    g.gain.exponentialRampToValueAtTime(0.001, t + rdec);
     o.connect(g); g.connect(A.rIn);
-    o.start(t); o.stop(t + 0.6);
+    o.start(t); o.stop(t + rdec + 0.05);
   }
 
   // the duck. [E] :8083 — and it holds what the swell had actually reached
@@ -3489,12 +3925,12 @@ function createEngine(ctx, opts) {
   function voiceKick(t, v, out, sd) {
     const rr = mulberry32(sd | 0);
     const kt = vtrim("voice.kick.tune"), kd = vtrim("voice.kick.decay");
-    const f0 = 150 * kt, f1 = vnum("voice.kick.tune");
+    const f0 = P("kickSweepStart") * kt, f1 = vnum("voice.kick.tune");
     const dec = vnum("voice.kick.decay"), subDec = 0.42 * kd;
-    const click = 0.25 * vtrim("voice.kick.click"), subMix = 0.55;
+    const click = 0.25 * vtrim("voice.kick.click"), subMix = P("kickSubMix");
     const o = ctx.createOscillator(), g = ctx.createGain();
     o.frequency.setValueAtTime(f0, t);
-    o.frequency.exponentialRampToValueAtTime(f1, t + 0.11);
+    o.frequency.exponentialRampToValueAtTime(f1, t + P("kickSweepTime"));
     g.gain.setValueAtTime(v * 0.9, t);
     g.gain.exponentialRampToValueAtTime(0.001, t + dec);
     o.connect(g); g.connect(out); o.start(t); o.stop(t + dec + 0.05);
@@ -3513,10 +3949,11 @@ function createEngine(ctx, opts) {
     // and the cheapest way to have no click is to have no click.
     if (click > 0) {
       const n = ctx.createBufferSource(), ng = ctx.createGain(), hp = ctx.createBiquadFilter();
+      const cd = P("kickClickDecay");
       n.buffer = noise(rr); hp.type = "highpass"; hp.frequency.value = 1200;
       ng.gain.setValueAtTime(v * click, t);
-      ng.gain.exponentialRampToValueAtTime(0.001, t + 0.02);
-      n.connect(hp); hp.connect(ng); ng.connect(out); n.start(t); n.stop(t + 0.03);
+      ng.gain.exponentialRampToValueAtTime(0.001, t + cd);
+      n.connect(hp); hp.connect(ng); ng.connect(out); n.start(t); n.stop(t + cd + 0.01);
     }
   }
 
@@ -3528,8 +3965,8 @@ function createEngine(ctx, opts) {
     const rr = mulberry32(sd | 0);
     const n = ctx.createBufferSource(), g = ctx.createGain(), hp = ctx.createBiquadFilter();
     n.buffer = noise(rr); hp.type = "highpass";
-    hp.frequency.value = vnum("voice.hats.tone"); hp.Q.value = 1.2;
-    const d = 0.045;
+    hp.frequency.value = vnum("voice.hats.tone"); hp.Q.value = P("hatQ");
+    const d = P("hatDecay");
     g.gain.setValueAtTime(v * 0.3, t);
     g.gain.exponentialRampToValueAtTime(0.001, t + d);
     const p = ctx.createStereoPanner(); p.pan.value = pan || 0;
@@ -3543,15 +3980,16 @@ function createEngine(ctx, opts) {
   // 4, drenched" — p01 left it out; it is here.
   function voiceClap(t, v, out, sd) {
     const rr = mulberry32(sd | 0);
+    const body = P("clapBody");
     for (let i = 0; i < 3; i++) {
       const n = ctx.createBufferSource(), g = ctx.createGain(), bp = ctx.createBiquadFilter();
       n.buffer = noise(rr); bp.type = "bandpass";
-      bp.frequency.value = vnum("voice.clap.tone"); bp.Q.value = 1.4;
+      bp.frequency.value = vnum("voice.clap.tone"); bp.Q.value = P("clapQ");
       const tt = t + i * 0.011;
       g.gain.setValueAtTime(v * 0.28 * (i === 2 ? 1 : 0.6), tt);
-      g.gain.exponentialRampToValueAtTime(0.001, tt + (i === 2 ? 0.14 : 0.02));
+      g.gain.exponentialRampToValueAtTime(0.001, tt + (i === 2 ? body : 0.02));
       n.connect(bp); bp.connect(g); g.connect(out);
-      n.start(tt); n.stop(tt + 0.18);
+      n.start(tt); n.stop(tt + (i === 2 ? body : 0.14) + 0.04);
     }
   }
 
@@ -3563,19 +4001,20 @@ function createEngine(ctx, opts) {
   function voiceRim(t, v, out, pan, sd) {
     const rr = mulberry32(sd | 0);
     const o = ctx.createOscillator(), g = ctx.createGain(), hp = ctx.createBiquadFilter();
-    o.type = "triangle"; o.frequency.value = vnum("voice.rim.tune");
+    o.type = P("rimWave"); o.frequency.value = vnum("voice.rim.tune");
     hp.type = "highpass"; hp.frequency.value = 900 * vtrim("voice.rim.tune");
-    const rd = 0.03;
+    const rd = P("rimDecay");
     g.gain.setValueAtTime(v * 0.4, t);
     g.gain.exponentialRampToValueAtTime(0.001, t + rd);
     const p = ctx.createStereoPanner(); p.pan.value = pan || 0;
     o.connect(hp); hp.connect(g); g.connect(p); p.connect(out);
     o.start(t); o.stop(t + rd + 0.02);
     const n = ctx.createBufferSource(), ng = ctx.createGain();
+    const nd = P("rimNoiseDecay");
     n.buffer = noise(rr);
-    ng.gain.setValueAtTime(v * 0.15, t);
-    ng.gain.exponentialRampToValueAtTime(0.001, t + 0.015);
-    n.connect(ng); ng.connect(out); n.start(t); n.stop(t + 0.02);
+    ng.gain.setValueAtTime(v * P("rimNoise"), t);
+    ng.gain.exponentialRampToValueAtTime(0.001, t + nd);
+    n.connect(ng); ng.connect(out); n.start(t); n.stop(t + nd + 0.005);
   }
 
   // SUB — [E] playBass model "sub" :9170. "Pure sine an octave down with a
@@ -3592,7 +4031,7 @@ function createEngine(ctx, opts) {
     g.gain.setValueAtTime(peak, t + dur * 0.85);
     g.gain.linearRampToValueAtTime(0, t + dur * 1.15);
     const o = ctx.createOscillator(); o.type = "sine"; o.frequency.value = mtof(midi - 12);
-    const o2 = ctx.createOscillator(); o2.type = "triangle"; o2.frequency.value = mtof(midi);
+    const o2 = ctx.createOscillator(); o2.type = P("subWave"); o2.frequency.value = mtof(midi);
     g2.gain.value = vnum("voice.sub.tone");
     o.connect(g); o2.connect(g2); g2.connect(g); g.connect(out);
     o.start(t); o.stop(t + dur * 1.2 + 0.05);
@@ -3615,7 +4054,7 @@ function createEngine(ctx, opts) {
     const vv = v * 0.1 * 0.85;                       // [E] :9706 stab vv, ×.85 for dubstab
     g.gain.setValueAtTime(0, t);
     g.gain.linearRampToValueAtTime(vv, t + 0.02);
-    g.gain.setValueAtTime(vv, t + dur * 0.35);
+    g.gain.setValueAtTime(vv, t + dur * P("stabHold"));
     g.gain.exponentialRampToValueAtTime(0.001, t + dur);
     notes.forEach((m, i) => {
       const f0 = mtof(m), tt = t + rr() * 0.006;
@@ -3636,7 +4075,7 @@ function createEngine(ctx, opts) {
         f.frequency.linearRampToValueAtTime(top * (k ? 1.25 : 1), tt + 0.008);
         f.frequency.exponentialRampToValueAtTime(floor9, tt + Math.min(dur * 0.9, 0.1 + rr() * 0.16));
       });
-      const drv = ctx.createWaveShaper(); drv.curve = satCurve(1.8); drv.oversample = "2x";
+      const drv = ctx.createWaveShaper(); drv.curve = satCurve(P("stabDrive")); drv.oversample = "2x";
       const drvIn = satTrim();
       const pre = ctx.createGain(); pre.gain.value = 0.5 / Math.sqrt(notes.length);
       const env = ctx.createGain();
@@ -3648,7 +4087,7 @@ function createEngine(ctx, opts) {
         o.type = ty;
         o.frequency.setValueAtTime(f0 * (1 + (k === 1 ? 0.0009 : 0)), tt);
         o.frequency.exponentialRampToValueAtTime(f0, tt + 0.03);        // the sag into pitch
-        o.detune.setValueAtTime((k - 1) * (12 + 9) + (rr() * 6 - 3), tt);  // [E] det 12 + 9
+        o.detune.setValueAtTime((k - 1) * P("stabDetune") + (rr() * 6 - 3), tt);  // [E] det 12 + 9
         og.gain.value = amt;
         o.connect(og); og.connect(pre);
         o.start(tt); o.stop(tt + dur + 0.05);
@@ -3666,7 +4105,7 @@ function createEngine(ctx, opts) {
     const so = ctx.createOscillator(), sg = ctx.createGain();
     so.type = "triangle"; so.frequency.value = subF;
     sg.gain.setValueAtTime(0, t);
-    sg.gain.linearRampToValueAtTime(v * 0.12, t + 0.02);      // stabs keep .12; pads get .22
+    sg.gain.linearRampToValueAtTime(v * P("stabSubShare"), t + 0.02);   // stabs keep .12; pads get .22
     sg.gain.exponentialRampToValueAtTime(0.001, t + dur);
     so.connect(sg); sg.connect(out); so.start(t); so.stop(t + dur + 0.05);
   }
@@ -3691,7 +4130,7 @@ function createEngine(ctx, opts) {
     // cutoff modulator. The breath's bandpass and the pad foundation's lowpass
     // are derived from this below and follow it.
     const cutoff = vnum("voice.pad.tone") * cutoffMod[7];
-    const atk = clamp(dur * 0.055, 0.22, 0.72);   // [E] :9705 pad attack
+    const atk = clamp(dur * P("padAttack"), 0.22, 0.72);   // [E] :9705 pad attack
     const vv = v * 0.075;                         // [E] :9705 pad vv
     const body = ctx.createBiquadFilter();
     body.type = "highpass"; body.frequency.value = 130; body.Q.value = 0.7;
@@ -3776,7 +4215,7 @@ function createEngine(ctx, opts) {
     n.buffer = noise(rr); n.loop = true;
     nf.type = "bandpass"; nf.frequency.value = Math.min(3800, cutoff * 1.2); nf.Q.value = 0.8;
     ng.gain.setValueAtTime(0, t);
-    ng.gain.linearRampToValueAtTime(0.09, t + Math.min(atk * 2, dur * 0.5));
+    ng.gain.linearRampToValueAtTime(P("padBreath"), t + Math.min(atk * 2, dur * 0.5));
     ng.gain.exponentialRampToValueAtTime(0.0005, t + dur);
     n.connect(nf); nf.connect(ng); ng.connect(body);
     n.start(t); n.stop(t + dur + 0.05);
@@ -3797,7 +4236,7 @@ function createEngine(ctx, opts) {
     // deep": root/fifth/octave in a compact register, triangle and two sines,
     // through a lowpass at .34–.44 of the pad cutoff clamped to 850–1900 Hz.
     // It does not enter the sub region; bass keeps that.
-    const base = v * (0.105 + 0.085 * 0.82);
+    const base = v * (0.105 + 0.085 * 0.82) * P("padFoundation");
     let root = notes[0]; while (root < 45) root += 12; while (root > 60) root -= 12;
     const fbus = ctx.createGain(), flp = ctx.createBiquadFilter(), fenv = ctx.createGain();
     flp.type = "lowpass"; flp.frequency.value = clamp(cutoff * 0.42, 850, 1900); flp.Q.value = 0.35;
@@ -3816,6 +4255,19 @@ function createEngine(ctx, opts) {
     });
     fbus.connect(flp); flp.connect(fenv); fenv.connect(out);
   }
+
+  /* --- WHICH INSTRUMENT A CHANNEL BUILDS. Two channels have more than one
+     recipe behind them, and the choice is the SEED's — `p.kickEngine` and
+     `p.stabEngine` in section 4b. Everything else about the channel is
+     unchanged by the choice: the fader, the sends, the modulators, the
+     composition layer and the hand's trims all land on whichever recipe is
+     playing, because the switch is here and not upstream of any of them.
+
+     A name with no recipe behind it is the one failure this has to make
+     loud, so it is handled where the note would have been played and it
+     writes a `silences` reason. See the call sites. --- */
+  const KICK_ENGINES = { "909": voiceKick };
+  const STAB_ENGINES = { dubstab: voiceStab };
 
   /* =========================================================================
      THE COMPOSITION, PER BAR
@@ -4044,7 +4496,16 @@ function createEngine(ctx, opts) {
       const out = A.chan[ch].in;
       const sd = voiceSeed(ch, absStep, 0);
       if (ch === 0) {
-        if (audible(0)) voiceKick(t, v, out, sd);
+        if (audible(0)) {
+          const kf = KICK_ENGINES[P("kickEngine")];
+          // SILENCE THAT EXPLAINS ITSELF. An engine name with no recipe is a
+          // quiet channel and a green suite — the one thing this instrument
+          // refuses to produce. It cannot happen from a draw, because every
+          // pool entry in section 4b has a branch above and a test asserts
+          // it; if it ever does, this is the sentence that says why.
+          if (kf) kf(t, v, out, sd);
+          else silences[0] = 'kick engine "' + P("kickEngine") + '" has no recipe';
+        }
         duck(t);                                   // the bus automation runs either way
         if (rumbleAudible()) rumbleHit(t);
       }
@@ -4095,10 +4556,17 @@ function createEngine(ctx, opts) {
         const sd = voiceSeed(ch, absStep, e);
         // [D] swing and humanisation are per channel and the TONAL lanes were
         // never given either — the round's Shuffle piece swings the stab and
-        // this engine could not. Same treatment, same two lines (#52).
+        // this engine could not. Same treatment, same two lines (#52). The
+        // ENGINE the seed drew is a separate question from WHEN the note is
+        // played, and both belong on this line: a tine that ignored the swing
+        // would be the one voice in the piece playing straight.
         const tsw = swingOf(ch, s, stepDur) + (HUMAN_TIME[ch] || 0) * (rnd() * 2 - 1) * stepDur;
         if (ch === 5) voiceSub(when + tsw, notes[0], dur, v, out, sd);
-        else if (ch === 6) voiceStab(when + tsw, notes, dur, v, out, sd);
+        else if (ch === 6) {
+          const sf = STAB_ENGINES[P("stabEngine")];
+          if (sf) sf(when + tsw, notes, dur, v, out, sd);   // and see the kick's comment
+          else silences[6] = 'stab engine "' + P("stabEngine") + '" has no recipe';
+        }
         else voicePad(when + tsw, notes, dur, v, out, sd);
       }
     }
@@ -4141,6 +4609,16 @@ function createEngine(ctx, opts) {
     // 0..2 its slider offers. `renderOffline` and `p02` come through this door
     // directly; 0 is `still` and 2 is measured not to clip this piece.
     if (MOD_SLOTS[key]) value = clamp(value, 0, 2);
+    // A DRAWN VOICE NUMBER IS CLAMPED AT THE SAME DOOR, to section 4b's own
+    // min/max — which is deliberately WIDER than the drawn range, so that a
+    // measurement can sweep past both ends of a range while still being
+    // unable to drive a corner to 0 Hz and get silence with nothing to
+    // explain it. A pool row has no min and is not clamped: its values are
+    // names, and a name that has no recipe is caught where it is played.
+    if (key.charCodeAt(0) === 112 && key.charCodeAt(1) === 46) {
+      const d = VOX[key.slice(2)];
+      if (d && d.min !== undefined) value = clamp(value, d.min, d.max);
+    }
     cfg[key] = value;
     // ...and then nothing. A voice trim needs no branch below: every voice is
     // built from `cfg` at NOTE TIME, so the next hit is the new sound and the
@@ -5576,6 +6054,7 @@ window.p02 = {
   }),
   renderOffline,
   PIECE, INPUT_GAIN, MASTER_TRIM, BED_LEVEL, MOVEMENT, MOD_RATE_BARS, MOD_RATES, HOLD_PARAMS,
+  VOX, VOX_STYLE,
   // the voice table itself, so a measurement can sweep every control to its own
   // declared ends without a second list of them to fall out of date
   VOICE_PARAMS, VOICE_KEYS,
