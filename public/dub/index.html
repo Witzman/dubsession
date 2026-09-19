@@ -53,7 +53,14 @@
      applied BY EXCLUSION rather than by a class, so a fieldset added later
      inherits it without having to know this rule exists. */
   main { max-width: 1240px; margin: 0 auto; }
-  main > *:not(#chanbox) { max-width: 720px; }
+  /* THE MEASURE, AND THE TWO THINGS IT DOES NOT APPLY TO. Prose and a column
+     of controls are read, so they are capped at a line length a person can
+     read. THE SHEET IS NOT READ, IT IS PLAYED: the bar pane and the desk are
+     nine rows that have to line up across the page, and capping them would
+     put sixteen steps in half the width available while the other half stays
+     empty. Named rather than typed as a child index, so adding a pane does not
+     silently inherit a cap nobody meant it to have. */
+  main > *:not(#chanbox):not(#barbox) { max-width: 720px; }
   h1 { font-size: 13px; font-weight: 400; color: var(--dim); margin: 0 0 20px; letter-spacing: .08em; }
   h1 b { color: var(--ink); font-weight: 400; }
   button {
@@ -87,6 +94,44 @@
   .row input[type=text]:focus { outline: none; border-color: var(--hot); }
   .row output { width: 78px; text-align: right; color: var(--hot); flex: none; }
   #bars { margin: 18px 0 8px; color: var(--dim); }
+  /* --- THE SHEET. A row is the unit, not a fieldset, and the page is
+     CHANNEL-MAJOR: the same nine names down the left of every pane, so a
+     channel is one place on the page and not one place per parameter. --- */
+  #barbox { margin: 14px 0 18px; }
+  .pane-head { display: flex; align-items: baseline; gap: 12px; margin-bottom: 6px; }
+  .pane-head b { letter-spacing: .14em; font-size: 12px; }
+  .pane-note { color: var(--dim); font-size: 12px; }
+  .pane-note .t { color: var(--time); font-style: normal; }
+  #barsheet { display: grid; grid-template-columns: 104px repeat(16, 1fr) minmax(150px, 210px);
+              gap: 2px 3px; align-items: stretch; }
+  .bs-h { color: var(--dim); font-size: 11px; text-align: center; padding-bottom: 2px; }
+  .bs-h.beat { color: var(--ink); }
+  .bs-name { display: flex; align-items: center; gap: 6px; color: var(--ink);
+             font-size: 12px; padding-right: 6px; white-space: nowrap; }
+  .bs-name .badge { color: var(--time); border: 1px solid var(--time); font-size: 10px;
+                    padding: 0 3px; line-height: 14px; }
+  .bs-name .wait { color: var(--time); font-size: 11px; }
+  /* A CELL SAYS TWO THINGS AT ONCE AND THEY ARE CARRIED BY DIFFERENT PARTS OF
+     IT: the FILL says whether it sounds, and the EDGE (from #51 on) says whose
+     it is. Nothing is drawn with colour — the machine's own output is this
+     page's normal state. */
+  .bs-c { height: 22px; background: var(--panel); border: 1px solid transparent; }
+  .bs-c.beat { background: #171310; }
+  .bs-c.on { background: var(--ink); }
+  .bs-c.take { background: var(--ink); color: var(--bg); font-size: 10px; line-height: 20px;
+               text-align: center; overflow: hidden; }
+  .bs-c.sus { background: linear-gradient(var(--panel) 46%, var(--ink) 46%, var(--ink) 54%, var(--panel) 54%); }
+  .bs-c.here { box-shadow: inset 0 0 0 1px var(--time); }
+  .bs-c.seam { border-left: 1px dotted var(--time); }
+  /* A RESTED ROW IS A ROW STATE, because that is what it is in the engine:
+     the arrangement is not sounding this channel. The marks stay legible and
+     go inert — what the machine drew is still there, it is simply not
+     sounding, and erasing it would make the reason unreadable. */
+  .bs-row-rest .bs-c.on, .bs-row-rest .bs-c.take { background: var(--inert); }
+  .bs-row-rest .bs-c { background: repeating-linear-gradient(45deg,
+      var(--panel), var(--panel) 3px, #14110e 3px, #14110e 6px); }
+  .bs-why { color: var(--dim); font-size: 11px; display: flex; align-items: center;
+            padding-left: 8px; line-height: 1.25; }
   #steps { display: flex; gap: 3px; margin-bottom: 8px; }
   #steps i { flex: 1; height: 5px; background: var(--line); }
   #steps i.on { background: var(--hot); }
@@ -125,7 +170,7 @@
        two grids that happen to look alike is how a column drifts. */
     --cols: repeat(12, minmax(0, 1fr));
     --areas:
-      "id id pat pat pat fad fad fad lvl lvl mix mix"
+      "id id id fad fad fad fad fad lvl lvl mix mix"
       "chance chance phrase phrase move move lock lock delay delay reverb reverb"
       "why why why why why why why why why why rel rel";
   }
@@ -134,7 +179,6 @@
   .ghead { border-top: 0; border-bottom: 1px solid var(--line); padding-bottom: 7px; }
   .ghead i { font-style: normal; color: var(--dim); font-size: 11px; letter-spacing: .07em; }
   .g-id { grid-area: id; color: var(--ink); font-weight: 400; }
-  .g-pat { grid-area: pat; letter-spacing: .06em; color: var(--dim); }
   .g-fad { grid-area: fad; }
   input.g-fad { width: 100%; min-width: 0; accent-color: var(--hot); }
   .g-lvl { grid-area: lvl; display: flex; align-items: baseline; gap: 6px; }
@@ -144,7 +188,7 @@
      thing a screenshot caught. */
   .g-lvl .n { color: var(--hot); font-style: normal; }
   .g-lvl .in { color: var(--dim); font-size: 11px; font-style: normal; }
-  .g-lvl, .g-pat, .g-id { white-space: nowrap; }
+  .g-lvl, .g-id { white-space: nowrap; }
   .g-mix { grid-area: mix; display: flex; align-items: center; gap: 6px; }
   .g-chance { grid-area: chance; }
   .g-phrase { grid-area: phrase; }
@@ -168,7 +212,7 @@
   /* NOT SOUNDING BECAUSE OF THE HAND — the row keeps its layout and loses its
      ink, which is the same thing `silent` already does for the composition's
      own reasons. Nothing moves when a channel is muted. */
-  .chan.hushed .g-id, .chan.hushed .g-pat, .chan.hushed .g-lvl .n { color: var(--inert); }
+  .chan.hushed .g-id, .chan.hushed .g-lvl .n { color: var(--inert); }
   /* A cell always carries a 1px edge and never changes size when its state
      changes: state changes INK, never layout. A surface that reflows when
      something latches is disorienting and expensive at once. */
@@ -222,7 +266,7 @@
   .mwhy:empty::before { content: "\00a0"; }
   /* a channel that is silent, or sounding but unable to vary, is marked where
      its name is as well as on its reason line: one colour, one meaning */
-  .chan.silent .g-id, .chan.silent .g-pat, .chan.frozen .g-id { color: var(--dim); }
+  .chan.silent .g-id, .chan.frozen .g-id { color: var(--dim); }
   .rel { padding: 2px 6px !important; font-size: 11px; background: transparent; }
   .cwhy:empty::before { content: "\00a0"; }
   .note { color: var(--dim); margin-top: 10px; }
@@ -251,12 +295,12 @@
          breakpoint gives at least 1203 px on a real 1280 desktop, scrollbar
          included \u2014 the headless browser has no scrollbar and would not have
          shown that. */
-      --cols: 72px 138px minmax(68px, 1fr) 132px 60px
+      --cols: 104px minmax(150px, 1.2fr) 132px 60px
               minmax(106px, .9fr) minmax(106px, .8fr) minmax(106px, .9fr) 52px
               minmax(146px, 1.1fr) minmax(146px, 1.1fr);
       --areas:
-        "id pat fad lvl mix chance phrase move lock delay reverb"
-        "why why why why why why why why why rel rel";
+        "id fad lvl mix chance phrase move lock delay reverb"
+        "why why why why why why why why rel rel";
     }
     .g-rel { justify-self: end; }
     /* WHERE THE MIXER STOPS AND THE COMPOSITION STARTS. One hairline, drawn
@@ -279,7 +323,6 @@
       --cols: repeat(4, minmax(0, 1fr));
       --areas:
         "id id mix mix"
-        "pat pat pat pat"
         "fad fad lvl lvl"
         "chance chance phrase phrase"
         "move move move lock"
@@ -350,6 +393,24 @@
 
   <div id="bars">bar — · step —</div>
   <div id="steps"></div>
+
+  <!-- ===================================================================
+       THE BAR. Channel by step, and it is the sixteen steps ABOUT TO PLAY
+       rather than any lane's own cycle: a hat lane that drew twelve steps
+       wraps inside the bar, and the seam that says where is drawn on the
+       column it wraps on. The engine plays the bar; so does this.
+
+       It replaces the text pattern that used to sit in the desk's second
+       column (`x...x...x...x...`), which could say WHERE a hit was and
+       nothing else — not what is about to play it, not whose it is, and
+       not what the arrangement has done to the row.
+       =================================================================== -->
+  <section id="barbox">
+    <div class="pane-head"><b>THE BAR</b>
+      <span class="pane-note" id="barnote">what the machine drew · the column in
+        <i class="t">oxide</i> is where you are</span></div>
+    <div id="barsheet"></div>
+  </section>
 
   <!-- ===================================================================
        THE CHANNELS. This is the instrument, so it is first. Everything in
@@ -5661,6 +5722,7 @@ function seedText() {
    about which piece it is playing.
    --------------------------------------------------------------------------- */
 let surfaceBuilt = false;
+let lastHeadStep = -1;   // which column the playhead is on
 
 function setPiece(seed) {
   const before = PIECE;
@@ -5717,7 +5779,16 @@ function rebuild(before) {
   if (moved(p => p.globals.rumble) && engine) engine.setLevel("R", PIECE.globals.rumble);
   if (moved(p => p.globals.pump)) follow("pump", PIECE.globals.pump, v => engine.set("pump", v));
 
-  if (surfaceBuilt) { rebuildModRows(); outputs(); }
+  // A NEW PIECE IS NEW MATERIAL, NEW LANE LENGTHS AND POSSIBLY A CHANNEL THAT
+  // DID NOT EXIST. The bar sheet is rebuilt rather than repainted: its rows
+  // carry the voice names and the lane badges, which are the piece's, not the
+  // bar's.
+  if (surfaceBuilt) {
+    buildBarSheet();
+    lastHeadStep = -1;
+    paintBarSheet(previewBar(), shownComposition());
+    rebuildModRows(); outputs();
+  }
 }
 
 /* THE SLOT TABLE IS REBUILT ON A SEED CHANGE AND ONLY ON A SEED CHANGE, AND
@@ -6011,7 +6082,7 @@ function verbCell(ch, v, dead) {
    blank: LOCK is a value of `move` and not a column of its own. */
 function channelHead() {
   return `<div class="chan ghead" id="chhead">`
-    + `<i class="g-id">channel</i><i class="g-pat">pattern</i>`
+    + `<i class="g-id">channel</i>`
     + `<i class="g-fad">fader</i><i class="g-lvl">level \u00b7 in</i>`
     + `<i class="g-mix">m \u00b7 s</i>`
     + VERBS.map(v => `<i class="g-${v.p}">${v.label}</i>`).join("")
@@ -6023,6 +6094,142 @@ function channelHead() {
 /* ONE CHANNEL IS ONE ROW OF THE GRID, and every cell it owns is a direct
    child placed by name. There is no wrapper per band, because a band with a
    box of its own is a second grid, and two grids drift. */
+/* =========================================================================
+   THE BAR PANE — channel by step, built once and repainted per bar.
+
+   IT READS `DRUM_PAT` AND `PIECE.chords`, NEVER A SECOND DERIVATION. The one
+   rule this pane has to keep is the one `patternText` already learned: a lane
+   is not always sixteen steps long, so every lookup goes through `laneStep`
+   and what is drawn is THE BAR ABOUT TO PLAY, not the lane's own twelve. A
+   grid whose rows had different numbers of columns would be a grid nobody can
+   read across, and the engine is playing the bar.
+   ========================================================================= */
+const BAR_COLS = 16;
+
+function buildBarSheet() {
+  const box = ui("barsheet");
+  if (!box) return;
+  let h = '<div class="bs-h"></div>';
+  for (let i = 0; i < BAR_COLS; i++)
+    h += `<div class="bs-h${i % 4 === 0 ? " beat" : ""}">${
+      i % 4 === 0 ? (i / 4 + 1) : ["e", "&", "a"][(i % 4) - 1]}</div>`;
+  h += '<div class="bs-h" style="text-align:left;padding-left:8px">and why it is silent</div>';
+  box.innerHTML = h;
+  for (const c of CHANNELS) {
+    const ch = c.ch;
+    const name = document.createElement("div");
+    name.className = "bs-name"; name.id = "bsn" + ch;
+    name.innerHTML = `<span>${ch} ${PIECE.empty[ch] ? "\u2014" : c.voice}</span>`
+                   + `<i class="badge" id="bsb${ch}" hidden></i>`
+                   + `<i class="wait" id="bsw${ch}" hidden></i>`;
+    box.appendChild(name);
+    for (let i = 0; i < BAR_COLS; i++) {
+      const cell = document.createElement("div");
+      cell.className = "bs-c"; cell.id = `bsc${ch}_${i}`;
+      box.appendChild(cell);
+    }
+    const why = document.createElement("div");
+    why.className = "bs-why"; why.id = "bsy" + ch;
+    box.appendChild(why);
+  }
+}
+
+// What channel `ch` fires on each of this bar's sixteen steps, as an array of
+// null | {kind, text, sustain}. ONE PLACE ANSWERS IT, so the pane and any
+// future editor cannot disagree about what the bar contains.
+function barRow(ch, bar, C) {
+  const out = new Array(BAR_COLS).fill(null);
+  const base = bar * BAR_COLS;
+  if (ch === "R") {
+    // no pattern of its own: it sounds wherever the kick does
+    const pat = DRUM_PAT[0];
+    if (pat) for (let i = 0; i < BAR_COLS; i++)
+      if (pat[laneStep(pat, base + i)]) out[i] = { kind: "on" };
+    return out;
+  }
+  const pat = DRUM_PAT[ch];
+  if (pat) {
+    for (let i = 0; i < BAR_COLS; i++)
+      if (pat[laneStep(pat, base + i)]) out[i] = { kind: "on" };
+    // THE SEAM: the column where a lane on its own cycle starts again inside
+    // this bar. It moves every bar, which is the polymeter made watchable
+    // rather than described.
+    if (pat.length !== BAR_COLS)
+      for (let i = 0; i < BAR_COLS; i++)
+        if (laneStep(pat, base + i) === 0) (out[i] = out[i] || {}).seam = true;
+    return out;
+  }
+  // A TAKE IS NOT A DRUM LANE. It carries notes with a length, so the onset
+  // is a cell with the scale degree in it and the steps it sustains over are
+  // drawn as a rule through the middle — a chord that lasts six steps and one
+  // that lasts one are different things a player has to be able to see apart.
+  const take = ch === 4 ? (C && C.lead && C.lead.take) : PIECE.chords[ch];
+  if (!take) return out;
+  const sc = SCALE_STEPS[C ? C.scale : PIECE.globals.scale] || SCALE_STEPS[0];
+  const root = C ? C.root : PIECE.globals.root;
+  for (const e of take) {
+    const st = ((e.step % BAR_COLS) + BAR_COLS) % BAR_COLS;
+    const d = degreeOf(e.notes[0], root, sc);
+    out[st] = { kind: "take", text: d === null ? "\u00b7" : String(((d % sc.length) + sc.length) % sc.length + 1) };
+    const len = Math.max(1, Math.round(e.duration || 1));
+    for (let k = 1; k < len && st + k < BAR_COLS; k++)
+      if (!out[st + k]) out[st + k] = { kind: "sus" };
+  }
+  return out;
+}
+
+function paintBarSheet(bar, C) {
+  const box = ui("barsheet");
+  if (!box) return;
+  for (const c of CHANNELS) {
+    const ch = c.ch;
+    const row = barRow(ch, bar, C);
+    const rested = !!(C && (C.present[ch] <= 0 || C.silent[ch]));
+    const name = ui("bsn" + ch);
+    if (name) name.classList.toggle("bs-row-rest", false);
+    for (let i = 0; i < BAR_COLS; i++) {
+      const cell = ui(`bsc${ch}_${i}`);
+      if (!cell) continue;
+      const v = row[i];
+      cell.className = "bs-c"
+        + (i % 4 === 0 ? " beat" : "")
+        + (v && v.kind === "on" ? " on" : "")
+        + (v && v.kind === "take" ? " take" : "")
+        + (v && v.kind === "sus" ? " sus" : "")
+        + (v && v.seam ? " seam" : "")
+        + (rested ? " bs-row-rest" : "");
+      cell.textContent = (v && v.text) || "";
+    }
+    // THE LANE'S OWN LENGTH, said once, on the name. A number nobody can
+    // explain is worse than no number, so it is only shown when it differs.
+    const badge = ui("bsb" + ch), pat = DRUM_PAT[ch];
+    if (badge) {
+      const poly = pat && pat.length !== BAR_COLS;
+      badge.hidden = !poly;
+      if (poly) badge.textContent = String(pat.length);
+    }
+    // THE LEAD'S COUNTDOWN, in bars, because that is the unit it moves in.
+    const wait = ui("bsw" + ch);
+    if (wait) {
+      const w = (ch === 4 && C) ? leadWait(C, bar) : null;
+      wait.hidden = w === null;
+      if (w !== null) wait.textContent = w + (w === 1 ? " bar" : " bars");
+    }
+    const why = ui("bsy" + ch);
+    if (why) why.textContent = rested ? shortSilence(ch, C).replace(/^silent · /, "") : "";
+  }
+}
+
+// HOW MANY BARS UNTIL THE LEAD IS BACK. Derived from the piece's own cycle
+// rather than counted, so a seek to bar 3000 answers it without running.
+function leadWait(C, bar) {
+  if (!PIECE.chords[4] || !PIECE.chords[4].length) return null;
+  const cyc = (PIECE.lead && PIECE.lead.cycle) || 4;
+  if (bar < LEAD_FROM) return LEAD_FROM - bar;
+  const phase = ((bar - LEAD_FROM) % (cyc * 2) + cyc * 2) % (cyc * 2);
+  return phase >= cyc ? (cyc * 2 - phase) : null;
+}
+
 function buildChannels() {
   const box = ui("chans");
   box.innerHTML = channelHead();
@@ -6039,7 +6246,6 @@ function buildChannels() {
     el.id = "ch" + ch;
     el.innerHTML =
       `<b class="g-id">${ch} ${empty ? "\u2014" : c.voice}</b>`
-      + `<span class="g-pat">${patternText(ch)}</span>`
       + `<input class="g-fad" type="range" id="fad${ch}" min="0" max="${c.max || 1.2}"`
       + ` step="0.005" value="${lvl}" aria-label="fader channel ${ch}"${empty ? " disabled" : ""}>`
       + `<span class="g-lvl"><i class="n" id="lvl${ch}">${lvl.toFixed(3)}</i>`
@@ -6242,6 +6448,18 @@ function paint() {
     const lamps = ui("steps").children;
     for (let i = 0; i < 16; i++) lamps[i].classList.toggle("on", i === s);
     paintMovement(bar);
+    // THE PLAYHEAD. The only thing on the sheet that moves at step rate, and
+    // it is one class on one column: `paintBarSheet` owns the cells' content
+    // and is not called here, because a bar's material does not change inside
+    // the bar — that is the whole of "structure lands on the bar".
+    if (s !== lastHeadStep) {
+      for (const c of CHANNELS) {
+        const off = ui(`bsc${c.ch}_${lastHeadStep}`), on = ui(`bsc${c.ch}_${s}`);
+        if (off) off.classList.remove("here");
+        if (on) on.classList.add("here");
+      }
+      lastHeadStep = s;
+    }
   }
   // WHAT THE ENGINE RECEIVED for the parameters a modulator is writing. This is
   // the only thing repainted per frame, it is at most three leaf nodes, and it
@@ -6456,6 +6674,7 @@ function paintMovement(bar) {
   paintHeader(C);
   if (bar === lastPainted) return;
   lastPainted = bar;
+  paintBarSheet(bar, C);
   paintHand();
 }
 
@@ -6712,8 +6931,16 @@ function wire() {
     const b = parseInt(sk.value, 10);
     sko.textContent = `${b + 1} / ${MOVEMENT.bars}`;
   };
-  sk.addEventListener("input", () => { updSeek(); if (!engine) refreshHand(); }); updSeek();
-  ui("seekgo").addEventListener("click", () => { seek(parseInt(sk.value, 10)); lastPainted = -1; refreshHand(); });
+  // THE SHEET FOLLOWS THE SEEK WHILE THE TRANSPORT IS STOPPED. A bar the hand
+  // is pointing at is a bar it should be able to see: the lead's countdown,
+  // the lane seams and which channels the arrangement has rested are all
+  // per-bar answers, and a sheet frozen at bar 1 while the slider says 40
+  // would be the surface disagreeing with the layer about what is playing.
+  sk.addEventListener("input", () => {
+    updSeek();
+    if (!engine) { refreshHand(); paintBarSheet(previewBar(), shownComposition()); }
+  }); updSeek();
+  ui("seekgo").addEventListener("click", () => { seek(parseInt(sk.value, 10)); lastPainted = -1; lastHeadStep = -1; refreshHand(); });
   // THE RING, SWITCHED BY HAND, AND IT IS A LATCH LIKE EVERY OTHER LATCH HERE.
   // `autoOn` is held here as well as in the engine because the engine does not
   // exist until the first gesture, and the switch has to be settable before
@@ -7028,6 +7255,7 @@ window.p02 = {
    `FADER_START` and `MOD_SLOT_KEYS`, and all four now follow the seed. */
 setPiece(SEED);
 buildChannels();
+buildBarSheet();
 wireFaders();
 wireHand();
 wireMix();
@@ -7040,6 +7268,7 @@ surfaceBuilt = true;
 ui("seedline").textContent = "seed " + SEED + (location.search.indexOf("seed=") === -1 ? " (the default piece)" : "");
 ui("seedin").value = (/(?:^|[?&])seed=([^&]+)/.exec(location.search || "") || [, String(SEED)])[1];
 ui("seedin_v").textContent = String(SEED);
+paintBarSheet(previewBar(), shownComposition());
 outputs();
 wire();
 ui("go").addEventListener("click", start);
