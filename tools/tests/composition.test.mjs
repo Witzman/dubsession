@@ -104,7 +104,18 @@ if (PROVE_RED) console.log('\n*** --prove-red: chance pinned to 1, move pinned t
 // so it passes `{ auto: true }` explicitly. A test that forgot to would be
 // asking the held-still instrument whether the schedule ran, and the answer
 // would be no — which is a hole this comment exists to keep shut.
-const AUTO = { auto: true };
+//
+// AND TIER 3 IS OFF UNLESS A TEST SAYS OTHERWISE, for the same kind of reason.
+// Everything from here to section 6 is asking about TIER 1 (the material) and
+// TIER 2 (the schedule): does the arrangement land where it says, does a held
+// value outrank it, does the ring come home. Tier 3 writes one or two small
+// things OVER every bar, so left on it would make every one of those counts
+// read 256 and prove nothing — §6.5 of the spec names that exact trap.
+// SECTION 7 IS TIER 3'S OWN, and it turns it back on. If you add an assertion
+// above section 7, it is about the arrangement and it wants NOMUT; if it is
+// about the grain it belongs in section 7.
+const NOMUT = { mutate: false };
+const AUTO = { auto: true, mutate: false };
 const fp = bar => L.fingerprint(L.compositionAt(SEED, L.PIECE, MOVE, bar, AUTO), SEED);
 
 /* -- 3. THE LOOP DETECTOR ------------------------------------------------- */
@@ -175,7 +186,7 @@ ok(other !== prints[200] || PROVE_RED, 'a different seed is a different composit
 /* -- 5. the verbs -------------------------------------------------------- */
 group('the verbs');
 const at = (bar, mv, opts) => L.compositionAt(SEED, L.PIECE, mv || MOVE, bar,
-  opts ? { auto: true, ...opts } : AUTO);
+  opts ? { auto: true, mutate: false, ...opts } : AUTO);
 
 // base state == today's page: chance 1, move 0, phrase 1 -> key 0 every bar
 const bare = { phrase: 8, section: 32, bars: 256, sections: [{ at: 0, event: null, why: 'reference' }] };
@@ -515,7 +526,7 @@ for (const b of OFF_BARS) {
 // The four things the schedule WOULD have done by those bars, named one at a
 // time — because "it equals the base" passes just as well if the base itself
 // quietly moved. These are the events, checked at bars past where each fires.
-const offAt = b => L.compositionAt(SEED, L.PIECE, M, b);
+const offAt = b => L.compositionAt(SEED, L.PIECE, M, b, NOMUT);
 ok(offAt(40).chance[6] === 1, 'the chance event at bar 33 did not land', 'ch6 chance still 1');
 ok(offAt(70).wet[6].delay === L.PIECE.wets[6].delay / 100,
    'the echo did not open at bar 65', `ch6 delay still ${offAt(70).wet[6].delay}`);
@@ -544,7 +555,12 @@ ok(!offMods.some(m => m.channel === 7 && m.verb === 'reverb'),
 // the schedule are gone, so the `m:` field cannot move either.
 const offPrints = [];
 for (let b = 0; b < N; b++) offPrints.push(L.fingerprint(offAt(b), SEED));
-ok(new Set(offPrints).size === 1, 'THE ARRANGEMENT HOLDS STILL: one distinct bar in ' + N + ' with auto off',
+// TIER 3 IS NOT THE ARRANGEMENT, and this pair is where that claim is kept
+// honest. `offAt` carries NOMUT, so what is counted here is the SCHEDULE: with
+// auto off it must still be one bar, exactly as the owner decided. Section 7
+// then counts the same 256 bars with the grain on, and it is a large number —
+// two different questions, two different numbers, neither hiding the other.
+ok(new Set(offPrints).size === 1, 'THE ARRANGEMENT HOLDS STILL: one distinct bar in ' + N + ' with auto off, tier 3 aside',
    `${new Set(offPrints).size} distinct fingerprint(s)`);
 ok(L.fingerprint(offAt(3583), SEED) === offPrints[0],
    'and bar 3584 — the far end of a two-hour set — is still the same bar');
@@ -639,7 +655,7 @@ ok(offHand.chance[3] === 0.7 && offHand.chance[6] === 1 && offHand.walk === 0,
    'with auto OFF a held value is the only thing that moves', 'ch3 chance 0.7, everything else base');
 const offHandPrints = [];
 for (let b = 0; b < 32; b++)
-  offHandPrints.push(L.fingerprint(L.compositionAt(SEED, L.PIECE, M, b, { holds: { chance: { 3: 0.7 } } }), SEED));
+  offHandPrints.push(L.fingerprint(L.compositionAt(SEED, L.PIECE, M, b, { mutate: false, holds: { chance: { 3: 0.7 } } }), SEED));
 ok(new Set(offHandPrints).size === 8,
    'and it VARIES — the hats thin and come round on the movement\'s phrase, with no schedule at all',
    `${new Set(offHandPrints).size} distinct bars in 32`);
