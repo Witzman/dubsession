@@ -93,6 +93,7 @@ const exported = [
   // a test that set `PIECE` some other way would be testing a piece the
   // pattern table has never seen.
   'usePiece', 'writeBass', 'lanePat', 'laneStep', 'laneLen',
+  'writeLead', 'quoteMotif', 'LEAD_QUOTES', 'LEAD_FROM',
   'DEG_T', 'DEG_T5', 'degTableFor', 'SCALE_STEPS', 'countHits',
 ];
 const L = new Function(`${region}\n; return { ${exported.join(', ')} };`)();
@@ -925,6 +926,96 @@ ok(JSON.stringify([lanesNow(), P.chords, P.drums]) === matBefore,
 // before tier 3 existed — no field, not an empty one.
 ok(mutFp(far, { mutate: false }).indexOf('t3:') === -1 && mutFp(far).indexOf('t3:') !== -1,
    '`mutate: false` is a real door: the fingerprint of an unmutated bar is the string it always was');
+
+/* -- 8. THE LEAD ON CHANNEL 4 --------------------------------------------
+   Channel 4 was a hole: a fader, a send and a silence reason for a channel
+   that was in neither playback loop. It is now a voice, and the five laws
+   that keep it dub rather than a tune are asserted here over every seed that
+   draws one — not over the one the page happens to land on.
+
+   The laws are not decoration. The source's own dub contract lists "busy
+   melodic lead" under `avoid`; it is the one thing the genre explicitly
+   refuses, and three of these five exist to make refusing it structural.
+   ------------------------------------------------------------------------ */
+group('the lead is a part, not a tune');
+
+const LEADS = 400;
+let withLead = 0, regBad = 0, stepBad = 0, polyBad = 0, earlyBad = 0, halfBad = 0, wetBad = 0;
+let answerBad = 0, barsOn = 0, worstShare = 0;
+const quotesSeen = new Set();
+for (let i = 0; i < LEADS; i++) {
+  const sd = seedOf(i);
+  const pc = L.draw(sd);
+  const take = pc.chords[4];
+  if (!take || !take.length) continue;
+  withLead++;
+  const stabSteps = pc.chords[6].map(e => e.step);
+  const stabTop = Math.max.apply(null, pc.chords[6][0].notes);
+  // L-LEAD-REG — three semitones of clear air under the lead's lowest note.
+  if (Math.min.apply(null, take.map(e => e.notes[0])) < stabTop + 3) regBad++;
+  // L-LEAD-STEP — the stab does not move for anybody.
+  for (const e of take) if (stabSteps.indexOf(e.step) !== -1) stepBad++;
+  // MONOPHONIC: one note per bar of the cycle. Two is a line, and a line is
+  // the thing the contract refuses.
+  const perBar = {};
+  for (const e of take) { if (perBar[e.atBar]) polyBad++; perBar[e.atBar] = 1; }
+  // L-LEAD-WET — furthest back: the highest delay send in the piece.
+  const d4 = pc.wets[4].delay;
+  if (!(d4 >= pc.wets[6].delay) || !(pc.wets[4].reverb >= pc.wets[6].reverb)) wetBad++;
+  if (!Object.keys(pc.wets).every(ch => pc.wets[ch].delay <= d4)) wetBad++;
+  // L-LEAD-SPARSE and L-LEAD-ANSWER, over the real movement.
+  let on = 0, run = 0, longestRun = 0, longestRest = 0, rest = 0;
+  for (let b = 0; b < N; b++) {
+    const c = L.compositionAt(sd, pc, M, b, { auto: true, mutate: false });
+    const sounding = !!(c.lead && c.lead.take.length);
+    if (c.lead) quotesSeen.add(c.lead.how);
+    if (sounding) {
+      if (b < L.LEAD_FROM) earlyBad++;
+      on++; run++; rest = 0; longestRun = Math.max(longestRun, run);
+    } else { run = 0; rest++; longestRest = Math.max(longestRest, rest); }
+  }
+  barsOn += on;
+  worstShare = Math.max(worstShare, on / N);
+  if (on > N / 2) halfBad++;
+  if (longestRest < longestRun) answerBad++;
+}
+
+ok(withLead > LEADS / 4 && withLead < LEADS,
+   'a lead is a draw and not a fixture — some pieces have one and some do not',
+   `${withLead} of ${LEADS} seeds drew a lead`);
+ok(regBad === 0, 'L-LEAD-REG: the lead sits at least 3 semitones above the stab, every seed',
+   `${regBad} breaches in ${withLead} leads`);
+ok(stepBad === 0, 'L-LEAD-STEP: no lead onset lands on a stab onset — the chord does not move',
+   `${stepBad} collisions`);
+ok(polyBad === 0, 'the lead is MONOPHONIC — never two notes in one bar of its cycle');
+ok(wetBad === 0, 'L-LEAD-WET: the lead carries the highest delay send in the piece, and the stab\'s reverb at least');
+ok(earlyBad === 0, `L-LEAD-SPARSE: nothing before bar ${L.LEAD_FROM} — the piece states itself first`);
+ok(halfBad === 0, 'L-LEAD-SPARSE: never more than half the movement',
+   `worst seed sounds in ${(100 * worstShare).toFixed(1)}% of bars, mean ${(100 * barsOn / withLead / N).toFixed(1)}%`);
+ok(answerBad === 0, 'L-LEAD-ANSWER: it rests for at least as long as it plays — the space is the part');
+ok(quotesSeen.size === L.LEAD_QUOTES.length - 1,
+   'every quote of the motif is reached — a motif that is re-drawn is not a motif',
+   `${[...quotesSeen].sort().join(', ')}`);
+
+// AND THE QUOTES ARE TRANSFORMS OF ONE FIGURE, not six figures. `literal`
+// appears twice in the pool, so it is the common case by weight.
+const anyLead = (() => {
+  for (let i = 0; i < LEADS; i++) { const pc = L.draw(seedOf(i)); if (pc.chords[4] && pc.chords[4].length > 2) return pc; }
+  return null;
+})();
+ok(anyLead !== null, 'a motif of three notes or more exists to ask about');
+if (anyLead) {
+  const sc = L.SCALE_STEPS ? null : null;   // the scale comes from the piece
+  const m = anyLead.chords[4];
+  const retro = L.quoteMotif(m, 'retrograde', [0, 2, 3, 5, 7, 8, 10], anyLead.globals.root);
+  const thin = L.quoteMotif(m, 'thin', [0, 2, 3, 5, 7, 8, 10], anyLead.globals.root);
+  ok(retro.length === m.length && retro[0].notes[0] === m[m.length - 1].notes[0],
+     'the retrograde is the same notes backwards, and it keeps the figure\'s own bars');
+  ok(thin.length === 2 && thin[0].notes[0] === m[0].notes[0],
+     'the thin quote is the first note and the last, and nothing in between');
+  ok(JSON.stringify(anyLead.chords[4]) === JSON.stringify(m),
+     'and a quote never writes back into the material it quotes');
+}
 
 console.log(`\n${checks - failures}/${checks} checks passed`);
 if (PROVE_RED) {

@@ -1002,6 +1002,48 @@ const VOX = {
        + "0.9/1.4/2.2 the 8-bar mix RMS reads -18.46/-18.40/-18.31 against "
        + "the dub stab's -18.50: at 1.4 the mix is matched to 0.10 dB, which "
        + "is inside the 0.5 dB the delay wobble puts on channel 6."
+  },
+
+  /* --- CHANNEL 4, THE LEAD. Appended, never inserted: `rand01` is not a
+     stream, so rows added here move nothing above them, and a row inserted in
+     the middle would re-seed every row after it and change every piece. --- */
+
+  leadAttack: {
+    def: 0.06, draw: { range: [0.03, 0.12] },
+    of: "how long the lead takes to reach full level. It must BLOOM, not hit.",
+    why: "The stab owns the transient in this genre; a lead with a hard front "
+       + "competes with it and the ear hears two stabs. 30-120 ms is slow "
+       + "enough that the attack is a swell and short enough that the note "
+       + "still lands somewhere a listener can place."
+  },
+  leadTail: {
+    def: 1.6, draw: { range: [0.8, 2.5] },
+    of: "the note's own decay, in seconds, after the hold.",
+    why: "Most of what is heard of this voice is its tail going into the "
+       + "sends. Shorter than 0.8 s and the echo has nothing to work with."
+  },
+  leadTone: {
+    def: 1600, draw: { range: [900, 3000] },
+    of: "the lowpass corner the note opens toward, in Hz, over seconds "
+      + "rather than over the note.",
+    why: "DARK: the top of the lead sits below the hats. The slow arch is the "
+       + "stab's second envelope read at the lead's own time base - it is what "
+       + "makes a long note move without anything modulating it."
+  },
+  leadDetune: {
+    def: 9, draw: { range: [4, 18], q: 1 },
+    of: "cents between the two oscillators of the voice.",
+    why: "WIDE AND OFF THE CENTRE, because the stab is the centre. Two "
+       + "oscillators a few cents apart, panned opposite, is width without a "
+       + "chorus and without a resonant peak - and the genre's own avoid list "
+       + "names the busy resonant lead."
+  },
+  leadFifth: {
+    def: 0.22, draw: { range: [0.0, 0.34] },
+    of: "how much of a fifth above rides under the note, as a share of it.",
+    why: "The melodica is the genre's actual ancestor and it is a reeded "
+       + "fifth as often as it is a single tone. At 0 this is the dub chime; "
+       + "at the top of the range it is the siren. One range, two instruments."
   }
 };
 const VOX_KEYS = Object.keys(VOX);
@@ -1256,12 +1298,45 @@ const STYLE = {
   // CHANNEL 4 IS ABSENT AND IT SAYS SO IN [M]'S OWN WORDS. §1.2 generates a
   // sentence for a drawn absence; here the pool entry carries the composer's,
   // because it is the one the surface has always printed and it is better.
-  lead: { present:{pool:[ {v:false, why:"silent in this piece — rhythm_reg 0 in the manifest. "
-                           + "Said explicitly, because a channel that goes quiet with nothing "
-                           + "explaining it is the one thing the instrument refuses to produce [G]."} ],
+  /* --- THE LEAD ON CHANNEL 4. It was a hole: a fader, a send and a silence
+     reason for a channel that was in neither playback loop.
+
+     NOT THE SOURCE'S MOTIF AS WRITTEN. The source quotes a four-note figure on
+     steps 2/6/10/14 in about half its tracks — those are the STAB's steps, the
+     Basic Channel figure, and in this genre they belong to the chord. Copying
+     the placement would put the lead on top of the identity of the genre.
+
+     THE DUB READING IS THE SAME MOTIF ONE TIME BASE SLOWER: three to five
+     notes spread over a cycle of four or eight BARS, roughly one note a bar,
+     each one long and drenched. That is Deepchord and Fluxion rather than a
+     melody line — a voice that says one thing and lets the room answer.
+
+     A MOTIF THAT IS RE-DRAWN IS NOT A MOTIF. The figure is drawn once and then
+     QUOTED: each appearance takes one transform of six, addressed by the
+     appearance's own index, so the part is recognisable across eight minutes
+     and never literally the same twice. --- */
+  lead: { present:{pool:[ {v:true,  why:"the lead is in this track — three to five notes over "
+                           + "four or eight bars, and the spaces between them are the part"},
+                          {v:true,  why:"the lead is in this track — three to five notes over "
+                           + "four or eight bars, and the spaces between them are the part"},
+                          {v:false, why:"no lead in this track — the chord and the room carry "
+                           + "the top, and nothing sings over them"} ],
                    d:D.NOTE, f:15},
-          onsets:{range:[2,2],q:1,d:D.NOTE,f:16}, motif:{pool:[null],d:D.NOTE,f:17},
-          velo:{range:[70,70],q:1,d:D.NOTE,f:18} },
+          onsets:{range:[3,5],q:1,d:D.NOTE,f:16},
+          // the degrees, ABOVE THE LEAD ROOT and inside one octave of the mode.
+          // Drawn one per onset with the onset's POSITION as `I`, so the motif
+          // is a shape and not a run of independent notes.
+          degree:{pool:[0,0,1,2,2,3,4,4,5,6,7],d:D.NOTE,f:19},
+          // WHICH BAR OF THE CYCLE each note lands in, and where in that bar.
+          // Step 0 is weighted because a dub lead states its note on a
+          // downbeat and lets it hang; the rest are offbeat eighths and
+          // sixteenths. L-LEAD-STEP moves any of them off a stab onset.
+          atBar:{range:[0,7],q:1,d:D.NOTE,f:20},
+          step:{pool:[0,0,0,8,4,12,6,14],d:D.NOTE,f:21},
+          cycle:{pool:[4,4,8],d:D.NOTE,f:22},
+          duration:{range:[6,14],q:1,d:D.NOTE,f:23},
+          octave:{pool:[5],d:D.NOTE,f:24},
+          velo:{range:[64,88],q:1,d:D.NOTE,f:18} },
 
   /* --- THE SPACE. THIS SPEC OWNS THIS BLOCK. --------------------------- */
   // [D] "in dub the send IS the arrangement", so a fixed send is a fixed
@@ -1271,7 +1346,10 @@ const STYLE = {
     1: { delay:{range:[0,0],d:D.SPACE,f:0},   reverb:{range:[6,6],d:D.SPACE,f:1} },
     2: { delay:{range:[18,18],d:D.SPACE,f:2}, reverb:{range:[30,30],d:D.SPACE,f:3} },
     3: { delay:{range:[30,30],d:D.SPACE,f:4}, reverb:{range:[34,34],d:D.SPACE,f:5} },
-    4: { delay:{range:[0,0],d:D.SPACE,f:6},   reverb:{range:[8,8],d:D.SPACE,f:7} },
+    // L-LEAD-WET — the lead's delay send is the HIGHEST in the piece and its
+    // reverb is at least the stab's. It is the furthest-back voice, and in
+    // this genre the echo is what makes a lead a part rather than a tune.
+    4: { delay:{range:[48,72],q:1,d:D.SPACE,f:6}, reverb:{range:[34,52],q:1,d:D.SPACE,f:7} },
     5: { delay:{range:[0,0],d:D.SPACE,f:8},   reverb:{range:[0,0],d:D.SPACE,f:9} },
     6: { delay:{range:[0,0],d:D.SPACE,f:10},  reverb:{range:[6,6],d:D.SPACE,f:11} },
     7: { delay:{range:[44,44],d:D.SPACE,f:12},reverb:{range:[36,36],d:D.SPACE,f:13} }
@@ -1348,14 +1426,15 @@ const STYLE = {
   // engine's, and MASTER_TRIM below says why copying it is the exact mistake
   // the parent lost a day to.
   levels: {
-    fixed: { 0:0.77, 1:0.7065, 2:0.7826, 3:0.67, 4:null,
+    fixed: { 0:0.77, 1:0.7065, 2:0.7826, 3:0.67, 4:0.12,
              5:0.337, 6:0.3261, 7:0.2826 },
-    // §7: CHANNEL 4'S LEVEL IS OWED. `INPUT_GAIN[4]` and this fader must be
-    // MEASURED the way the other seven were — rendered alone, no fader, at the
-    // deck sum, four bars — and set by ear once. Not drawn, not guessed.
-    // `draw` THROWS if channel 4 has material while `fixed[4]` is still null.
-    // While the lead is absent the fader still has to start somewhere and the
-    // surface prints the number, so [M]'s own 0.2065 stands in and says so.
+    // §7 IS PAID: `INPUT_GAIN[4]` is measured (1.0803, from the worst peak of
+    // eight seeds rendered alone, raw, faders bypassed, at the deck sum, four
+    // bars from bar 32) and this fader is set against the stab rather than
+    // guessed. At [M]'s stand-in 0.2065 the lead came out level with the stab
+    // and 5.7 dB ABOVE it on one seed; the brief says it sits UNDER. 0.12 is
+    // that, measured — and it is the one number here the owner's ear should
+    // overrule, because "under the stab" is a judgement and not a figure.
     owed4: { fixed:0.2065 }
   },
 
@@ -1462,7 +1541,11 @@ const INPUT_GAIN = {
   1: 1.2604,   // rim    alone: peak -14.01 dBFS, RMS -49.00
   2: 3.6657,   // clap   alone: peak -23.28 dBFS, RMS -54.24
   3: 1.4248,   // hats   alone: peak -15.08 dBFS, RMS -45.60
-  4: 1,        // (empty — no material behind it; it renders at -180 dBFS)
+  4: 1.0803,   // lead   alone: peak -12.67 dBFS, RMS -29.68 — MEASURED 2026-09-19,
+               // 8 seeds that drew a lead, 4 bars FROM BAR 32 because the lead is
+               // not in the piece before it, soloed/raw/faders bypassed at the deck
+               // sum. The worst peak of the eight sets it, not the mean: a gain that
+               // only holds for the average seed is not a calibration. Spread 6.19 dB.
   5: 0.4419,   // sub    alone: peak  -4.91 dBFS, RMS  -9.97
   6: 2.5372,   // stab   alone: peak -20.09 dBFS, RMS -39.27
   7: 1.0784,   // pad    alone: peak -12.66 dBFS, RMS -27.72
@@ -2123,6 +2206,43 @@ function compositionAt(seed, piece, movement, bar, opts) {
   // TIER 3 — the per-bar mutation. Last, because it READS the resolved bar
   // (what is present, what is silent) and writes over it for this bar only.
   out.mut = opts.mutate === false ? MUT_NONE : mutationsAt(seed, piece, movement, out, auto);
+  /* --- THE LEAD IS AN ARRANGEMENT DECISION, NOT A PATTERN. -----------------
+     `piece.chords[4]` is the motif as written; this decides whether this bar
+     has any of it and which QUOTE it takes.
+
+     L-LEAD-SPARSE — never before bar 32, and at most half the bars of the
+     movement. L-LEAD-ANSWER — it plays its cycle and then rests for at least
+     as long: "how you fill the spaces between the notes with effects rather
+     than the notes themselves", made structural instead of hoped for. The two
+     together are one rule here: cycle on, cycle off, from bar 32.
+
+     THE QUOTE IS ADDRESSED BY THE APPEARANCE'S OWN INDEX, never by a counter,
+     so bar 3000 asked cold is the bar the long way round would have given. */
+  const lead = piece.chords && piece.chords[4];
+  out.lead = null;
+  if (lead && lead.length) {
+    const cyc = (piece.lead && piece.lead.cycle) || 4;
+    if (bar < LEAD_FROM) {
+      out.silent[4] = "the lead has not come in yet — it enters at bar " + LEAD_FROM;
+    } else {
+      const since = bar - LEAD_FROM, phase = ((since % (cyc * 2)) + cyc * 2) % (cyc * 2);
+      if (phase >= cyc) {
+        out.silent[4] = "the lead is resting — it answers itself for " + cyc
+                      + " bars after every " + cyc + " it plays";
+      } else {
+        const app = Math.floor(since / (cyc * 2));
+        const how = LEAD_QUOTES[Math.floor(rand01(seed, D.NOTE, 25, app) * LEAD_QUOTES.length)];
+        const sc4 = SCALE_STEPS[out.scale] || SCALE_STEPS[0];
+        const notes = quoteMotif(lead, how, sc4, out.root);
+        const here = notes.filter(e => (e.atBar % Math.max(1, cyc)) === phase);
+        out.lead = { how: how, bar: phase, cycle: cyc, take: here };
+        if (!here.length)
+          out.silent[4] = "the lead is between notes — this bar of its "
+                        + how + " quote has none";
+      }
+    }
+  }
+
   return out;
 }
 
@@ -2508,6 +2628,92 @@ const degTableFor = sc => (sc.length === 5 ? DEG_T5 : DEG_T);
    beat at 1.5 (that is where a dub bass answers), the half bar at 1.3, and
    everything else at 0.7.
    ------------------------------------------------------------------------- */
+/* THE MOTIF, WRITTEN ONCE PER PIECE. Each note carries the BAR of the cycle it
+   lands in as well as its step, because a dub lead is spread over bars: three
+   to five notes across four or eight of them, one note long enough to be
+   answered by the room before the next one arrives.
+
+   TWO OF THE FIVE LAWS ARE ENFORCED HERE, where the material is written:
+
+   L-LEAD-REG — the lead's lowest note sits at least 3 semitones above the
+   stab's highest, by raising the whole motif an octave until it does. Two
+   tonal voices in one band is one blurred voice. With root 7 and octave 5 the
+   bands are sub 31-43, pad 43-50, stab 55-62, lead 67-79 — four bands, no
+   overlap.
+
+   L-LEAD-STEP — a lead onset never lands on a stab onset step. The stab does
+   not move for anybody, so the lead slides to the nearest free sixteenth. */
+function writeLead(seed, cfg) {
+  const sc = cfg.sc, n = sc.length;
+  const R = (f, i) => rand01(seed, D.NOTE, f, i);
+  const pick = (pool, f, i) => pool[Math.floor(R(f, i) * pool.length)];
+  const taken = cfg.stabSteps || [];
+  // THE NEAREST FREE SIXTEENTH, searched outward so a collision moves the note
+  // as little as possible: a lead note pushed half a bar is a different part.
+  const free = st => {
+    for (let d = 0; d < 16; d++) {
+      const a = (st + d) % 16, b = ((st - d) % 16 + 16) % 16;
+      if (taken.indexOf(a) === -1) return a;
+      if (taken.indexOf(b) === -1) return b;
+    }
+    return st;
+  };
+  let base = n * cfg.octave;
+  for (let guard = 0; guard < 4; guard++) {
+    const low = Math.min.apply(null, cfg.degrees.map(d => fromDegree(base + d, cfg.root, sc)));
+    if (!cfg.stabTop || low >= cfg.stabTop + 3) break;
+    base += n;                                        // an octave of the MODE
+  }
+  const out = [];
+  for (let i = 0; i < cfg.degrees.length; i++) {
+    // The notes are spread over the cycle in order: note i lands in its own
+    // bar, and a drawn offset decides which one within the cycle's span.
+    const atBar = Math.floor(R(20, i) * cfg.cycle);
+    out.push({
+      atBar: atBar,
+      step: free(pick(cfg.steps, 21, i)),
+      notes: [fromDegree(base + cfg.degrees[i], cfg.root, sc)],
+      velo: cfg.velo,
+      duration: cfg.duration
+    });
+  }
+  // One note per bar at most: two notes in one bar is a line, and a line is
+  // the "busy melodic lead" the genre's own contract lists under `avoid`.
+  const seen = {}, kept = [];
+  for (const e of out.sort((a, b) => a.atBar - b.atBar || a.step - b.step)) {
+    if (seen[e.atBar]) continue;
+    seen[e.atBar] = 1; kept.push(e);
+  }
+  return { base: base, notes: kept };
+}
+
+/* THE SIX QUOTES. A motif that is re-drawn is not a motif — every appearance
+   is one transform of the SAME figure, addressed by the appearance's index, so
+   nothing is a stream and a seek to bar 3000 gets the same answer the long way
+   round would have got. */
+// L-LEAD-SPARSE names bar 32: the piece states itself first, and a lead
+// that is there from bar 0 is a tune with a backing track under it.
+const LEAD_FROM = 32;
+const LEAD_QUOTES = ["literal", "literal", "retrograde", "thin", "augment", "octDown", "up3"];
+function quoteMotif(notes, how, sc, root) {
+  const n = sc.length;
+  const shift = (e, by) => Object.assign({}, e, {
+    notes: e.notes.map(m => {
+      const d = degreeOf(m, root, sc);
+      return d === null ? m : fromDegree(d + by, root, sc);
+    })
+  });
+  if (how === "retrograde") {
+    const bars = notes.map(e => e.atBar).slice().reverse();
+    return notes.slice().reverse().map((e, i) => Object.assign({}, e, { atBar: bars[i] }));
+  }
+  if (how === "thin") return notes.length > 2 ? [notes[0], notes[notes.length - 1]] : notes.slice();
+  if (how === "augment") return notes.map(e => Object.assign({}, e, { atBar: e.atBar * 2 }));
+  if (how === "octDown") return notes.map(e => shift(e, -n));
+  if (how === "up3") return notes.map(e => shift(e, 2));
+  return notes.slice();
+}
+
 function writeBass(seed, cfg) {
   const sc = cfg.sc, n = sc.length, T = degTableFor(sc);
   const base = n * cfg.octave;                       // degree of the bass root
@@ -2717,10 +2923,30 @@ function draw(seed) {
   const leadOn = pull(LD.present, "lead.present");
   const leadOnsets = pull(LD.onsets, "lead.onsets");
   const leadVelo = pull(LD.velo, "lead.velo");
-  piece.lead = { motif: pull(LD.motif, "lead.motif"), onsets: leadOnsets, velo: leadVelo };
-  if (leadOn) piece.chords[4] = [];                 // #47 fills it; the shape is here
-  else piece.empty[4] = (drawn["lead.present"] && drawn["lead.present"].why)
-                        || "no material — the draw left the lead out of this piece";
+  const leadCycle = pull(LD.cycle, "lead.cycle");
+  const leadOct = pull(LD.octave, "lead.octave");
+  const leadDur = pull(LD.duration, "lead.duration");
+  const leadDegs = [];
+  for (let i = 0; i < leadOnsets; i++) leadDegs.push(pull(LD.degree, "lead.degree", i));
+  if (leadOn) {
+    const written = writeLead(seed, {
+      sc: sc, root: piece.globals.root, octave: leadOct, cycle: leadCycle,
+      degrees: leadDegs, steps: LD.step.pool, velo: leadVelo, duration: leadDur,
+      stabSteps: piece.chords[6].map(e => e.step),
+      stabTop: Math.max.apply(null, stabNotes)
+    });
+    piece.lead = { motif: leadDegs, onsets: written.notes.length, velo: leadVelo,
+                   cycle: leadCycle, base: written.base,
+                   why: (drawn["lead.present"] && drawn["lead.present"].why) || "" };
+    // THE MOTIF IS THE MATERIAL; WHICH BARS IT SOUNDS IN IS THE ARRANGEMENT'S.
+    // `chords[4]` carries the figure as written, and `compositionAt` decides
+    // per bar whether the lead is in this bar at all and which quote it takes.
+    piece.chords[4] = written.notes;
+  } else {
+    piece.lead = { motif: leadDegs, onsets: 0, velo: leadVelo, cycle: leadCycle };
+    piece.empty[4] = (drawn["lead.present"] && drawn["lead.present"].why)
+                     || "no material — the draw left the lead out of this piece";
+  }
   // A LANE WITH NO HITS IS ALREADY THE ENGINE'S OWN "not playing", AND THE
   // CHANNEL SAYS WHY. A drawn absence with no sentence is a channel that is
   // silent with nothing explaining it, which is the one thing this instrument
@@ -4661,6 +4887,69 @@ function createEngine(ctx, opts) {
     so.connect(sg); sg.connect(out); so.start(t); so.stop(t + dur + 0.05);
   }
 
+  /* --- THE LEAD — channel 4, and it had no voice at all. ----------------
+     MONOPHONIC on purpose: one note at a time. It is a voice, not a chord;
+     the piece already has two chord layers and a third would be a wash.
+
+     THE BRIEF WAS MUSICAL, so these are the readings it got. Soft attack
+     (it blooms, and the stab keeps the transient). Long tail into the sends,
+     and most of what is heard of the note is that tail. Dark — the top of it
+     sits under the hats — with the tone arching open over SECONDS rather than
+     over the note, which is the stab's second envelope at the lead's own time
+     base. Wide and off the centre, by two oscillators a few cents apart panned
+     against each other: width with no chorus and no resonant peak, because
+     the genre's own avoid list names the busy resonant lead and a resonance
+     is the fastest way to write one by accident.
+
+     ONE RANGE, TWO INSTRUMENTS: `leadFifth` at 0 is the filtered dub chime,
+     and at the top of its range the fifth underneath makes it the melodica —
+     the sound this genre actually descends from. --- */
+  function voiceLead(t, midi, dur, v, out, sd) {
+    const rr = mulberry32((sd | 0) ^ 0x1EAD);
+    const f0 = mtof(midi);
+    const atk = P("leadAttack"), tail = P("leadTail"), det = P("leadDetune");
+    const hold = Math.max(0.05, dur * 0.6);
+
+    // ONE LOWPASS, NO RESONANCE, OPENING OVER SECONDS.
+    const lp = ctx.createBiquadFilter();
+    lp.type = "lowpass"; lp.Q.value = 0.6;
+    const top = P("leadTone") * (0.9 + rr() * 0.2);
+    lp.frequency.setValueAtTime(Math.max(300, top * 0.45), t);
+    lp.frequency.linearRampToValueAtTime(top, t + Math.min(hold + tail, 2.4));
+
+    const g = ctx.createGain();
+    g.gain.setValueAtTime(0.0001, t);
+    g.gain.linearRampToValueAtTime(v * 0.22, t + atk);       // the bloom
+    g.gain.setValueAtTime(v * 0.22, t + hold);
+    g.gain.exponentialRampToValueAtTime(0.001, t + hold + tail);
+
+    // the pair, opposite sides, a few cents apart
+    const stop = t + hold + tail + 0.05;
+    [-1, 1].forEach(side => {
+      const o = ctx.createOscillator(), og = ctx.createGain(), pn = ctx.createStereoPanner();
+      o.type = side < 0 ? "triangle" : "sawtooth";
+      o.frequency.value = f0;
+      o.detune.value = side * det;
+      og.gain.value = side < 0 ? 0.75 : 0.35;                // the saw is the edge, not the body
+      pn.pan.value = side * 0.45;
+      o.connect(og); og.connect(pn); pn.connect(lp);
+      o.start(t); o.stop(stop);
+    });
+
+    // THE FIFTH, UNDER IT AND IN THE MIDDLE. A seventh semitone above is a
+    // fifth; it rides at a share of the note and is a sine, so it thickens
+    // without adding anything for the filter to ring on.
+    const fifth = P("leadFifth");
+    if (fifth > 0.01) {
+      const o5 = ctx.createOscillator(), g5 = ctx.createGain();
+      o5.type = "sine"; o5.frequency.value = f0 * Math.pow(2, 7 / 12);
+      g5.gain.value = fifth;
+      o5.connect(g5); g5.connect(lp);
+      o5.start(t); o5.stop(stop);
+    }
+    lp.connect(g); g.connect(out);
+  }
+
   // THE PAD — [E] playChord engine "ensemble" in mode "pad" :10035..:10145,
   // with playPadFoundation :10188 underneath it.
   // Per note: a CENTRE anchor oscillator dead on the pitch plus a detuned pair
@@ -5076,10 +5365,14 @@ function createEngine(ctx, opts) {
     }
 
     // the takes — channels 5, 6, 7
-    for (const ch of [5, 6, 7]) {
+    // CHANNEL 4 JOINS THE TONAL LOOP. It was in neither this one nor the
+    // drum one — not muted, not silent: absent. Its take is the COMPOSITION's
+    // and not the piece's, because which bar of the motif sounds, and which
+    // quote of it, is an arrangement decision resolved once per bar.
+    for (const ch of [4, 5, 6, 7]) {
       if (!audible(ch)) continue;
       if (C.present[ch] <= 0) continue;
-      const take = PIECE.chords[ch];
+      const take = ch === 4 ? (C.lead && C.lead.take) : PIECE.chords[ch];
       if (!take) continue;
       for (let e = 0; e < take.length; e++) {
         const ev = take[e];
@@ -5122,7 +5415,8 @@ function createEngine(ctx, opts) {
         // played, and both belong on this line: a tine that ignored the swing
         // would be the one voice in the piece playing straight.
         const tsw = swingOf(ch, s, stepDur) + (HUMAN_TIME[ch] || 0) * (rnd() * 2 - 1) * stepDur;
-        if (ch === 5) voiceSub(when + tsw, notes[0], dur, v, out, sd);
+        if (ch === 4) voiceLead(when + tsw, notes[0], dur, v, out, sd);
+        else if (ch === 5) voiceSub(when + tsw, notes[0], dur, v, out, sd);
         else if (ch === 6) {
           const sf = STAB_ENGINES[P("stabEngine")];
           if (sf) sf(when + tsw, notes, dur, v, out, sd);   // and see the kick's comment
@@ -5551,7 +5845,7 @@ const CHANNELS = [
   { ch: 1, voice: "rimshot", from: "[E] playPerc2 rim :9047" },
   { ch: 2, voice: "clap",    from: "[E] playClap :8576" },
   { ch: 3, voice: "hats",    from: "[E] playHat :8531" },
-  { ch: 4, voice: "—",       from: "—" },
+  { ch: 4, voice: "lead",    from: "the motif, quoted" },
   { ch: 5, voice: "sub",     from: "[E] playBass sub :9170" },
   { ch: 6, voice: "stab",    from: "[E] playChord dubstab :9737" },
   { ch: 7, voice: "pad",     from: "[E] playChord ensemble/pad :10035" },
@@ -6018,6 +6312,16 @@ function shortSilence(ch, C) {
   if (PIECE.empty[ch]) return "silent · no material";
   if (C.present[ch] <= 0) return "silent · left the arrangement";
   if (C.chance[ch] <= 0) return "silent · chance 0";
+  // THE LEAD HAS REASONS OF ITS OWN, and they are not about chance. It has
+  // not come in yet, it is resting between cycles, or this bar of its quote
+  // simply has no note in it. Printing "chance let nothing through" over any
+  // of those is the surface guessing at a channel the layer already explained
+  // — and the guess is wrong three times out of three.
+  if (ch === 4 && C.silent[4]) {
+    if (C.silent[4].indexOf("not come in") !== -1) return "silent · not in yet";
+    if (C.silent[4].indexOf("resting") !== -1)     return "silent · resting · it answers itself";
+    if (C.silent[4].indexOf("between notes") !== -1) return "silent · between notes";
+  }
   return "silent · chance let nothing through this bar";
 }
 function paintWhy(ch, C) {
