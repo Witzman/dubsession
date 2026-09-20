@@ -1,5 +1,40 @@
 # Changelog
 
+## 2026-09-20 — the grid becomes playable: a cell is a pin
+
+- **Click a cell on the bar and it pins.** The hit fires, or it stops, and the
+  generator draws around it from then on. There is no pin modifier and no
+  second mode: the cell cycles `drawn/empty → pinned (flipped) → released`, so
+  three taps put it back and there is nothing to remember. The hit area is the
+  whole cell, and at a touch pointer the row is taller — a cell is played with
+  a finger on one of the two targets.
+- **A pin outranks the manifest and not the arrangement.** A pinned hit fires
+  without going through `chance`; a pinned hole never fires, and not under a
+  tier 3 ghost either. But a channel the arrangement has rested is silent pins
+  or not, and the row says which of the two is happening. A pin that overrode
+  the arrangement would make "the generator draws around it" mean "the
+  generator is off".
+- **The fill says whether it sounds; the edge says whose it is.** A pinned hit
+  is a light core inside a dark frame inside a light ring — a shape no other
+  cell has, because a brighter block alone is the same object at arm's length.
+  A hole you cut is a hollow square and is an OBJECT: if it looked like an
+  empty cell, "for ever" would be an invisible promise.
+- **Pins ride in the URL, readably:** `?seed=…&pins=0:x...x...x...x...` — `x`
+  on, `.` off, `-` untouched. A bitmask would be shorter and would make a URL
+  nobody can read or hand-edit, which is the opposite of what a seed line is
+  for.
+- **A pin survives a roll** — so the live count and `release pins` sit beside
+  `roll`, and `roll`'s own caption says it will not take them. A state that
+  outlives every roll with nothing on screen explaining it is a piece that
+  stops changing for no visible reason.
+- **A pin on a lane with its own cycle is pinned to the LANE's step**, so the
+  column it appears in moves every bar — that is the polymeter, and the row
+  says so in words rather than leaving it to be filed as a bug.
+- **A rested row now actually draws rested.** The hatch and the inert marks
+  shipped as a descendant selector over a flat grid, so they had never matched
+  anything: a channel that had left the arrangement painted exactly like one
+  that was playing.
+
 ## 2026-09-18 — every modulator has its own depth
 
 - **The piece's five modulators are five controls**, in their own block under

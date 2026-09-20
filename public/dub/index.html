@@ -148,15 +148,21 @@
      the arrangement is not sounding this channel. The marks stay legible and
      go inert — what the machine drew is still there, it is simply not
      sounding, and erasing it would make the reason unreadable. */
-  .bs-row-rest .bs-c.on, .bs-row-rest .bs-c.take { background: var(--inert); }
-  .bs-row-rest .bs-c { background: repeating-linear-gradient(45deg,
+  /* `.bs-c.bs-row-rest`, NOT `.bs-row-rest .bs-c`. The sheet is a flat grid:
+     every cell is a sibling of every other and the rest class is written onto
+     the CELL, so the descendant form shipped in #55 matched nothing and a
+     rested row has been drawing exactly like a sounding one since. Found by
+     staging a rested row for a screenshot under #51, which is the only way it
+     could have been found — the class was in the DOM and the paint was not. */
+  .bs-c.bs-row-rest.on, .bs-c.bs-row-rest.take { background: var(--inert); }
+  .bs-c.bs-row-rest { background: repeating-linear-gradient(45deg,
       var(--panel), var(--panel) 3px, #14110e 3px, #14110e 6px); }
   /* A PIN INSIDE A RESTED ROW KEEPS ITS EDGE [#51 §4.1]. The arrangement
      resting a channel does not erase your marks, it stops them sounding — and
      the question this grid exists to answer is which part of what I hear is
      mine. An answer that disappears when the channel rests is not an answer.
      The FILL goes inert with the rest of the row; the RING does not. */
-  .bs-row-rest .bs-c.pin-on { background: var(--inert); }
+  .bs-c.bs-row-rest.pin-on { background: var(--inert); }
   /* THE PIN COUNT SITS BESIDE THE ROLL THAT CANNOT TAKE IT AWAY, and it is
      --hot because it is the hand's [#51 §4.3]. */
   .pincount { color: var(--hot); font-size: 12px; letter-spacing: .1em; }
