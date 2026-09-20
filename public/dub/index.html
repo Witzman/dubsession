@@ -2485,6 +2485,14 @@ function holdClamp(param, v) {
   return clamp(v, 0, 2);                    // delay, reverb: the send's range
 }
 
+/* The bar the WALK is read at. One function so the wrap lives in one place
+   and `scheduleStateAt`'s rule and this one cannot drift apart. [#53] */
+function walkBar(movement, bar, auto) {
+  const span = (movement && movement.bars) || Infinity;
+  if (!auto || span === Infinity) return bar;
+  return ((bar % span) + span) % span;
+}
+
 function compositionAt(seed, piece, movement, bar, opts) {
   opts = opts || {};
   const auto = !!opts.auto;
@@ -2492,7 +2500,26 @@ function compositionAt(seed, piece, movement, bar, opts) {
   const now = scheduleStateAt(piece, movement, bar, auto);
   const out = {
     bar, seed, auto, mods: now.mods, root: now.root, scale: now.scale,
-    walk: walkAt(seed, now.walk, bar), walkCfg: now.walk,
+    /* THE RING CLOSES THE HARMONY TOO  [#53]
+       -------------------------------------------------------------------
+       `scheduleStateAt` wraps its own bar against `movement.bars`. This line
+       handed it the UNWRAPPED one, so the discrete arrangement came home at
+       the wrap and the harmony did not: on two laps of every four the piece
+       sat a whole tone below the tonic at bar 255 and snapped home on the
+       downbeat of bar 0. In G natural minor that is F major stabs, pad and
+       sub cutting to G minor with nothing under it. A cut, not a modulation.
+
+       The rule at the wrap says "discrete state must be home by bar 256;
+       modulator phase need not be, and is not", and put the walk on the wrong
+       side of itself. Modulator phase is CONTINUOUS and a boundary in it is
+       inaudible, so that exemption is right. A ROOT TRANSPOSITION IN SCALE
+       DEGREES IS DISCRETE PITCH and does not get it.
+
+       WRAPPED ONLY WHEN THE RING IS ON, deliberately. With `auto` false there
+       is no ring to come home to, and `auto` is false by default — so this
+       change cannot move a note for anybody who has not switched the ring on.
+       ------------------------------------------------------------------- */
+    walk: walkAt(seed, now.walk, walkBar(movement, bar, auto)), walkCfg: now.walk,
     phrase: {}, chance: {}, move: {}, key: {}, present: {}, wet: {},
     // `silent` says why a channel makes no sound; `frozen` says why a channel
     // that IS sounding cannot vary. `held` is the third and newest: which of

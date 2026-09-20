@@ -335,6 +335,44 @@ for (let b = 0; b < 4000; b++) { const w = L.walkAt(SEED, { bars: 4, span: 2 }, 
 ok(outside === 0, 'the walk reflects at the edge of its span rather than leaving it', `span 2, 4000 bars`);
 ok(seen.size > 1 && seen.has(0), 'and it moves, and it comes home to zero', `positions seen: ${[...seen].sort((a, b) => a - b).join(' ')}`);
 
+/* -- #53: THE RING MUST CLOSE THE HARMONY, NOT ONLY THE ARRANGEMENT --------
+   `scheduleStateAt` wraps its own bar against `movement.bars`; `compositionAt`
+   handed the UNWRAPPED bar to `walkAt`. So the discrete arrangement came home
+   at the wrap and the harmony did not: on 2 laps of every 4 the piece sat a
+   whole tone below the tonic at the last bar of the ring and snapped home on
+   the downbeat of the next — a cut, not a modulation.
+
+   The comment at the wrap states the rule and put the walk on the wrong side
+   of it: "Discrete state must be home by bar 256; modulator phase need not be,
+   and is not." Modulator phase is continuous and a boundary in it is
+   inaudible, so that exemption is right. A ROOT TRANSPOSITION IN SCALE DEGREES
+   IS DISCRETE PITCH and does not get the exemption. */
+group('#53 — the ring closes the harmony too');
+{
+  const span = N;
+  ok(Number.isFinite(span) && span > 0, 'the shipped movement has a finite ring', `${span} bars`);
+  const walkAtBar = (sd, b) => L.compositionAt(sd, P, M, b, { auto: true }).walk;
+  let snapped = [];
+  for (const sd of [0x11CE9E, 8675309, 42, 7, 999983, 20260920]) {
+    const home = walkAtBar(sd, 0);
+    for (let lap = 0; lap < 4; lap++) {
+      const last = walkAtBar(sd, lap * span + span - 1);
+      if (last !== home) snapped.push(`seed ${sd} lap ${lap}: ${last} vs home ${home}`);
+    }
+  }
+  ok(snapped.length === 0,
+     'the walk is home at the last bar of every lap, for every seed',
+     snapped.length ? snapped.slice(0, 3).join(' | ') : '6 seeds x 4 laps');
+
+  // The same statement said the other way round: the wrap is a wrap, so bar
+  // `span` must resolve exactly as bar 0 does, harmony included.
+  let differ = 0;
+  for (const sd of [0x11CE9E, 42, 999983]) {
+    for (let lap = 1; lap < 4; lap++) if (walkAtBar(sd, lap * span) !== walkAtBar(sd, 0)) differ++;
+  }
+  ok(differ === 0, 'and bar N*span resolves the same harmony as bar 0', `3 seeds x 3 laps`);
+}
+
 // mod: rates are BARS, depth 0 unbinds, shapes are the four
 group('the modulators');
 ok(L.MOD_RATE_BARS.includes(5) && L.MOD_RATE_BARS.includes(7) && L.MOD_RATE_BARS.includes(11)
