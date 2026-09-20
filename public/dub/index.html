@@ -2485,6 +2485,14 @@ function holdClamp(param, v) {
   return clamp(v, 0, 2);                    // delay, reverb: the send's range
 }
 
+/* The bar the WALK is read at. One function so the wrap lives in one place
+   and `scheduleStateAt`'s rule and this one cannot drift apart. [#53] */
+function walkBar(movement, bar, auto) {
+  const span = (movement && movement.bars) || Infinity;
+  if (!auto || span === Infinity) return bar;
+  return ((bar % span) + span) % span;
+}
+
 function compositionAt(seed, piece, movement, bar, opts) {
   opts = opts || {};
   const auto = !!opts.auto;
@@ -2492,7 +2500,26 @@ function compositionAt(seed, piece, movement, bar, opts) {
   const now = scheduleStateAt(piece, movement, bar, auto);
   const out = {
     bar, seed, auto, mods: now.mods, root: now.root, scale: now.scale,
-    walk: walkAt(seed, now.walk, bar), walkCfg: now.walk,
+    /* THE RING CLOSES THE HARMONY TOO  [#53]
+       -------------------------------------------------------------------
+       `scheduleStateAt` wraps its own bar against `movement.bars`. This line
+       handed it the UNWRAPPED one, so the discrete arrangement came home at
+       the wrap and the harmony did not: on two laps of every four the piece
+       sat a whole tone below the tonic at bar 255 and snapped home on the
+       downbeat of bar 0. In G natural minor that is F major stabs, pad and
+       sub cutting to G minor with nothing under it. A cut, not a modulation.
+
+       The rule at the wrap says "discrete state must be home by bar 256;
+       modulator phase need not be, and is not", and put the walk on the wrong
+       side of itself. Modulator phase is CONTINUOUS and a boundary in it is
+       inaudible, so that exemption is right. A ROOT TRANSPOSITION IN SCALE
+       DEGREES IS DISCRETE PITCH and does not get it.
+
+       WRAPPED ONLY WHEN THE RING IS ON, deliberately. With `auto` false there
+       is no ring to come home to, and `auto` is false by default — so this
+       change cannot move a note for anybody who has not switched the ring on.
+       ------------------------------------------------------------------- */
+    walk: walkAt(seed, now.walk, walkBar(movement, bar, auto)), walkCfg: now.walk,
     phrase: {}, chance: {}, move: {}, key: {}, present: {}, wet: {},
     // `silent` says why a channel makes no sound; `frozen` says why a channel
     // that IS sounding cannot vary. `held` is the third and newest: which of
@@ -4672,13 +4699,56 @@ function createEngine(ctx, opts) {
      the DECK bus rather than through any one channel's dynamics (their v1.391
      fix: fourteen voices shared that hall and all of them were being filtered,
      compressed and gated by the chord lane on the way back). --- */
+  /* TWO HALLS, AND ONE OF THEM IS ALWAYS THE OLD ONE  [#65]
+     -----------------------------------------------------------------------
+     MEASURED 2026-09-20 on the deployed build: moving the reverb-size control
+     dropped the reverb bus by 165.9 dB inside 250 ms. Assigning
+     `ConvolverNode.buffer` RESETS the node, so every tail in flight is cut
+     dead — and `revSeconds` is a control a hand can reach today, which makes
+     this a live fault rather than the latent one #64 §3 assumed.
+
+     A buffer swap cannot be scheduled and cannot be ramped, so one convolver
+     can never do this without a cut. Two can: the new size is built into the
+     idle hall and the pair is crossfaded, and the old hall goes on ringing
+     its tail out while it fades. `bin/browser/_p65-revsize.mjs` is the
+     measurement, in both directions. */
   A.revIn = ctx.createGain();
-  A.rev = ctx.createConvolver(); A.rev.buffer = makeImpulse(cfg.revSeconds, 2.2);
   A.revWet = ctx.createGain(); A.revWet.gain.value = 0.28;
   A.revLp = ctx.createBiquadFilter(); A.revLp.type = "lowpass";
   A.revLp.frequency.value = 3100; A.revLp.Q.value = 0.5;
-  A.revIn.connect(A.rev); A.rev.connect(A.revWet); A.revWet.connect(A.revLp);
+  A.halls = [0, 1].map(() => {
+    const conv = ctx.createConvolver();
+    const g = ctx.createGain();
+    A.revIn.connect(conv); conv.connect(g); g.connect(A.revWet);
+    return { conv: conv, gain: g };
+  });
+  A.hall = 0;                                   // which one is sounding
+  A.halls[0].conv.buffer = makeImpulse(cfg.revSeconds, 2.2);
+  A.halls[0].gain.gain.value = 1;
+  A.halls[1].conv.buffer = makeImpulse(cfg.revSeconds, 2.2);
+  A.halls[1].gain.gain.value = 0;
+  // `A.rev` stays as a name so nothing that reads it has to know there are two
+  A.rev = A.halls[0].conv;
+  A.revWet.connect(A.revLp);
   A.revLp.connect(A.pump);
+
+  /* THE CROSSFADE. Equal-gain over `REV_XFADE`, which is long enough that the
+     two halls do not comb audibly and short enough that the size change reads
+     as one gesture. The OLD hall keeps its buffer, and therefore its tail, for
+     the whole fade — that is the entire point. */
+  const REV_XFADE = 0.25;
+  function swapHall(seconds, t) {
+    const from = A.halls[A.hall], to = A.halls[A.hall ^ 1];
+    to.conv.buffer = makeImpulse(seconds, 2.2);   // silent node: nothing to cut
+    to.gain.gain.cancelScheduledValues(t);
+    from.gain.gain.cancelScheduledValues(t);
+    to.gain.gain.setValueAtTime(to.gain.gain.value, t);
+    from.gain.gain.setValueAtTime(from.gain.gain.value, t);
+    to.gain.gain.linearRampToValueAtTime(1, t + REV_XFADE);
+    from.gain.gain.linearRampToValueAtTime(0, t + REV_XFADE);
+    A.hall ^= 1;
+    A.rev = to.conv;
+  }
 
   /* =========================================================================
      THE RUMBLE — [E] :8023 (the recipe), :8034 (the IR), :8048 (the exciter),
@@ -6047,7 +6117,10 @@ function createEngine(ctx, opts) {
     // here: a noise bed that steps is a click, and a click is the one thing a
     // floor cannot make.
     if (key === "bedTrim") applyBed(t);
-    if (key === "revSeconds") A.rev.buffer = makeImpulse(value, 2.2);
+    // #65: NOT `A.rev.buffer = …`, which resets the node and kills every tail
+    // in flight — measured at -165.9 dB on the deployed build. The idle hall
+    // takes the new size and the pair crossfades.
+    if (key === "revSeconds") swapHall(value, t);
     if (key === "seed" || key === "movement") { cfg[key] = key === "seed" ? (value | 0) : value; recompose(); }
     // the ring, switched. It changes what the NEXT bar resolves to and nothing
     // else — no gain is written here, and a value the hand holds stays held
@@ -6206,6 +6279,28 @@ function setPiece(seed) {
   return PIECE;
 }
 
+/* TEMPO AND KEY BELONG TO THE JOURNEY, NOT TO THE TRACK  [#64 §3, #65, #74]
+   -------------------------------------------------------------------------
+   The music never stops, so a roll may not move the tempo: a set that lurches
+   from 118 to 131 between one bar and the next is not a transition, it is two
+   recordings. Key is the owner's decision of 2026-09-20 and goes further —
+   it is a MANUAL global control landing on the next bar (#74), which means a
+   roll may not move it either.
+
+   NOTHING BELOW ENFORCES THAT YET, AND NOTHING NEEDS TO. Measured 2026-09-20
+   over 60 seeds: tempo, root, scale, revSeconds, the delay division, feedback
+   and pump are one distinct value each, so every `moved()` guard here is
+   permanently false and these branches are unreachable. THE RULE IS WRITTEN
+   HERE BECAUSE #49 OPENS THOSE POOLS, and the branch it opens them into is
+   this one. When it does, tempo and key come OUT of the per-piece draw and
+   become the journey's; the room (revSeconds, the division, feedback) is the
+   open question §9 Q8 leaves to the owner.
+
+   What was destructive here is fixed rather than guarded: `revSeconds` reset
+   the convolver and killed every tail in flight — reachable by hand today via
+   the reverb-size control, measured at -24.7 dB against a -13.5 dB floor. The
+   engine crossfades two halls now, so this path is safe whether it fires or
+   not. `bin/browser/_p65-revsize.mjs`. */
 function rebuild(before) {
   rebuildDerived();                       // DRUM_PAT and the modulator slot table
   FADER_START = Object.assign({}, PIECE.levels, { R: 0.70 });
@@ -8314,6 +8409,12 @@ window.p02 = {
     // to be wrong in, and only the last one is audible.
     bedTrim: engine ? engine.cfg.bedTrim : null,
     bedGain: engine ? engine.A.bedGain.gain.value : null,
+    // THE TWO HALLS AND WHICH ONE IS AUDIBLE [#65]. Both convolvers are fed by
+    // the same send, so their raw outputs are nearly equal and a tap on either
+    // cannot tell them apart — only the gains can. A measurement that cannot
+    // tell the sounding hall from the silent one reports the crossfade itself
+    // as a fault, which is what it did before this line existed.
+    halls: engine && engine.A.halls ? engine.A.halls.map(h => h.gain.gain.value) : null,
     // THE VOICE TRIMS, TWICE, AND ON PURPOSE. `voiceUI` is what the sliders
     // read and `voice` is what the engine was told; they are two places for
     // one number to be wrong in and only the second one is audible. Before the
