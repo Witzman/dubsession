@@ -4428,7 +4428,7 @@ const HOLDS = emptyHolds();
 // THE OTHER INPUT OBJECT. `pending` is what the hand has asked for; only
 // `events` crosses into the pure composition layer. Promotion happens at the
 // scheduler's bar boundary, so an event can never redraw a bar in flight.
-function emptyFires() { return { seq: 0, pending: { macro: null, micros: [] }, events: [] }; }
+function emptyFires() { return { seq: 0, pending: { macro: null, micros: [], release: false }, events: [] }; }
 const FIRES = emptyFires();
 
 /* ---------------------------------------------------------------------------
@@ -6367,6 +6367,7 @@ function fireCapture(C) {
 }
 function fireEvent(id) { return FIRES.events.find(e => e.id === id); }
 function requestFire(kind, bars) {
+  FIRES.pending.release = false;
   if (FIRE_MICROS.indexOf(kind) !== -1) {
     const q = FIRES.pending.micros;
     const i = q.indexOf(kind);
@@ -6394,13 +6395,21 @@ function requestFire(kind, bars) {
 }
 function promoteFires(bar) {
   let changed = false;
+  if (FIRES.pending.release) {
+    FIRES.events.length = 0;
+    FIRES.pending.release = false;
+    changed = true;
+  }
   const q = FIRES.pending.macro;
   if (q) {
     const before = compositionAt(SEED, PIECE, MOVEMENT, bar,
       { auto: autoOn, holds: HOLDS, fires: FIRES });
-    const active = before.fire && before.fire.active;
-    if (active) {
-      const old = fireEvent(active.id);
+    const info = before.fire || { active: null, landed: [] };
+    // A LANDed gesture still owns the large-gesture layer. Starting another
+    // one replaces that owner just as starting during its trajectory does.
+    const owner = info.active || info.landed[info.landed.length - 1];
+    if (owner) {
+      const old = fireEvent(owner.id);
       if (old) old.until = bar;
     }
     if (!q.cancel) FIRES.events.push({
@@ -6424,10 +6433,14 @@ function promoteFires(bar) {
   return changed;
 }
 function releaseFires() {
-  FIRES.events.length = 0;
   FIRES.pending.macro = null;
   FIRES.pending.micros.length = 0;
-  if (engine) engine.recompose();
+  if (T.running) FIRES.pending.release = true;
+  else {
+    FIRES.events.length = 0;
+    FIRES.pending.release = false;
+    if (engine) engine.recompose();
+  }
   paintFires();
 }
 
@@ -7699,7 +7712,8 @@ function paintWhy(ch, C) {
 }
 
 function fireCount() {
-  return FIRES.events.length + (FIRES.pending.macro ? 1 : 0) + FIRES.pending.micros.length;
+  return FIRES.events.length + (FIRES.pending.macro ? 1 : 0)
+    + FIRES.pending.micros.length + (FIRES.pending.release ? 1 : 0);
 }
 function paintFires(C) {
   const box = ui("fires");
@@ -7726,6 +7740,7 @@ function paintFires(C) {
   if (info.landed.length) bits.push(info.landed.map(x => FIRE_MACROS[x.kind].label + " LANDED").join(" · "));
   if (waiting) bits.push(`${FIRE_MACROS[waiting.kind].label} waiting${waiting.cancel ? " to cancel" : ""}`);
   if (FIRES.pending.micros.length) bits.push(FIRES.pending.micros.join(" + ") + " waiting");
+  if (FIRES.pending.release) bits.push("release all waiting");
   ui("firestate").textContent = bits.join(" · ") || "nothing waiting";
   ui("releaseall").disabled = hand.count() === 0 && fireCount() === 0;
 }
