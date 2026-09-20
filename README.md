@@ -10,6 +10,8 @@ the Web Audio API. The same seed recalls the same piece; `roll` draws another.
 It is designed for a desktop or an iPad and is played directly from the page —
 there is no audio file or backing stream.
 
+## The instrument
+
 The instrument has nine channel strips: kick, rimshot, clap, hats, lead, sub,
 stab, pad and rumble. A channel can follow the arrangement or be taken by the
 player. The sixteen-column bar shows what is about to sound and distinguishes
