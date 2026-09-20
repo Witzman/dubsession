@@ -1,5 +1,20 @@
 # Changelog
 
+## 2026-09-21 — nine musicians become one performance station
+
+- **The flat desk is now nine channel strips.** Kick, rimshot, clap, hats,
+  lead, sub, stab, pad and rumble keep the same order across desktop and iPad,
+  but each now reads as one musician rather than one row in a parameter table.
+- **Different gestures have different shapes.** Material is a rail, level is a
+  fader, density is a segmented meter, tone is a dial and echo/room is a
+  two-axis plane. The controls still address the same engine values; the
+  station changes how they are found and played, not what they mean.
+- **Slow controls live with their channel.** Cycle, initiative, tuning,
+  detailed synthesis and modulation open from the relevant strip rather than
+  from global voice and movement tables.
+- **The public README now introduces the instrument and explains how to play
+  it**, including bar pins, fired gestures, seeds, ownership and release.
+
 ## 2026-09-20 — material is a dimension: every channel rides, jumps and throws
 
 - **Push a control and the material travels.** Sound, rhythm and melody are
