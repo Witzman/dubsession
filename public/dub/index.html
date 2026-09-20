@@ -110,9 +110,10 @@
      nothing is DEAD and says why. --- */
   #rides { margin: 12px 0 16px; border-top: 1px solid var(--line); padding-top: 10px; }
   #ridestate { color: var(--dim); font-size: 12px; }
-  .ride-row { display: grid; grid-template-columns: 92px minmax(0, 1fr) 104px 84px 58px;
+  .ride-row { display: grid; grid-template-columns: 116px minmax(0, 1fr) 104px 84px 58px;
               gap: 8px; align-items: center; padding: 2px 0; }
-  .ride-nm { font-size: 11px; color: var(--dim); font-style: normal; }
+  .ride-nm { font-size: 11px; color: var(--dim); font-style: normal; white-space: nowrap; }
+  .ride-nm b { color: var(--ink); font-weight: 400; }
   .ride-v { font-size: 11px; color: var(--dim); font-style: normal; text-align: right;
             font-variant-numeric: tabular-nums; }
   .ride-row.is-moving .ride-v { color: var(--time); }
@@ -130,7 +131,7 @@
   }
   .ride-row input[type=range] { min-width: 0; }
   @media (max-width: 700px) {
-    .ride-row { grid-template-columns: 70px minmax(0, 1fr) 76px 68px 52px; }
+    .ride-row { grid-template-columns: 96px minmax(0, 1fr) 76px 68px 52px; }
   }
   /* `.row` — a 150 px label beside a slider beside a 78 px readout — WAS THE
      WHOLE OF THE PAGE BELOW THE SHEET, and §2 of the grammar rejects it by
@@ -633,7 +634,7 @@
   </section>
 
   <section id="rides" aria-label="ride the sound">
-    <div class="fire-head"><b>RIDE</b><span id="ridestate">the sound is a dimension — push it and it travels</span></div>
+    <div class="fire-head"><b>RIDE</b><span id="ridestate">material is a dimension — push it and it travels; jump lands somewhere unrelated</span></div>
     <div id="ridelist"></div>
   </section>
 
@@ -4654,6 +4655,70 @@ function rhythmAt(seed, ch, base, pos, lap, len) {
            rotate: rotateMix(a.rotate, b.rotate, t, len) };
 }
 
+/* --- MELODY IS THE THIRD DIMENSION, AND IT IS DEGREES, NEVER SEMITONES ----
+   Only the pitched voices have one — lead 4, sub 5, stab 6, pad 7 (#64 §5).
+   The material here is already written: `piece.chords[ch]` is events with
+   absolute MIDI notes on them, because the draw resolves degrees through the
+   root and the mode once, at draw time. So this is the OTHER SIDE of #64 §9
+   Q4's fork from the sound dimension — the written material, moved — and what
+   makes an in-between legal is the unit it is moved in.
+
+   A MELODY RIDE MOVES EVENTS BY WHOLE SCALE DEGREES. `transposeDegrees` reads
+   a note back to its degree, adds, and resolves forward again, so every
+   intermediate note is IN THE MODE by construction — in a way that no
+   interpolation in semitones could be, because half-way between a minor third
+   and a fourth is a note the piece's own scale does not contain. One offset
+   per EVENT, applied to all of its notes, so a chord keeps its voicing and
+   moves as a chord: that is the dub chord walk, not a re-voicing.
+
+   AND THE CONTRACT STILL JUDGES IT. Unlike the sound dimension, this one CAN
+   draw an illegal piece: the bass may not state something other than the root
+   on the downbeat (L2), a bass note may not sit more than an octave above the
+   bass root (L4), and the pad's top must stay three semitones clear of the
+   chord's bottom (L-PAD). So a melody candidate is quizzed against the piece's
+   own contract before it is allowed to land, and a position the contract
+   refuses is walked back toward the last legal one rather than dropped: the
+   ride stops where the genre stops, and says so. That is #72's "an
+   intermediate state has to pass them too", answered by running them.
+   ------------------------------------------------------------------------- */
+const RIDE_MELODY = { 4: true, 5: true, 6: true, 7: true };
+
+// TWO DEGREES EITHER WAY. Far enough that the figure is a different figure,
+// near enough that the contract usually still holds — and where it does not,
+// the quiz below is what says so rather than a wider guess.
+const MELODY_OFFSET = { range: [-2, 2], q: 1 };
+const RIDE_MEL_F = (ch, i) => 200 + (ch | 0) * 16 + (i % 16);
+
+function melodyOffsets(seed, ch, n, count, lap) {
+  const out = [];
+  for (let i = 0; i < count; i++)
+    out.push((!lap && n <= 0) ? 0
+      : drawRange(seed, D.RIDE, RIDE_MEL_F(ch, i), (lap | 0) * RIDE_LAP + n, MELODY_OFFSET));
+  return out;
+}
+
+function melodyAt(seed, ch, count, pos, lap) {
+  const p = Math.max(0, Math.min(RIDE_SPAN, pos));
+  const i = Math.floor(p), t = p - i;
+  const a = melodyOffsets(seed, ch, i, count, lap);
+  if (t === 0) return a;
+  const b = melodyOffsets(seed, ch, i + 1, count, lap);
+  return a.map((x, k) => Math.round(x + (b[k] - x) * t));
+}
+
+/* THE EVENTS, MOVED. `keepRoot` is L2 as a rule rather than as a repair: the
+   bass states the root on the downbeat, so the downbeat event of channel 5
+   does not move at all and the rest of the line walks around it. */
+function melodyApply(base, offsets, root, scale, keepRoot) {
+  return base.map((e, i) => {
+    const d = (keepRoot && e.step === 0) ? 0 : (offsets[i] || 0);
+    if (!d) return Object.assign({}, e, { notes: e.notes.slice() });
+    return Object.assign({}, e, {
+      notes: e.notes.map(n => transposeDegrees(n, d, root, scale))
+    });
+  });
+}
+
 /* A THROW'S POSITION AT A GIVEN BAR. `done` is bars since it started, and the
    arrival is EXACT on the last one rather than within a rounding error of it:
    a throw that ends at 3.9999 has not arrived, and the surface would have to
@@ -4756,10 +4821,22 @@ const RIDE = {
   delayMs: 0,        // test door: a generator that takes its time
   dropped: 0,        // stale candidates refused, since the page loaded
   landings: 0,
+  held: 0,           // positions the contract refused, since the page loaded
   log: []            // the last 64 landings, with the scheduler step each got
 };
 const rideKey = (ch, dim) => ch + ":" + (dim || "sound");
+/* A CHANNEL OFFERS WHAT IT HAS MATERIAL FOR, AND THE DOOR SAYS SO. Measured
+   2026-09-20 with every channel thrown at every dimension: `0:rhythm` — the
+   kick, whose rhythm is a template and a jump — built a lane, asked
+   `STYLE.drums.lanes[0]` for its pools and threw "Cannot read properties of
+   undefined". A door that accepts a gesture a channel cannot make is the
+   surface's dead-control rule broken from the other side. */
+function rideHas(ch, dim) {
+  const D = RIDE_DIMS[dim || "sound"];
+  return !!(D && D.has(ch));
+}
 function rideLane(ch, dim) {
+  if (!rideHas(ch, dim)) return null;
   const k = rideKey(ch, dim);
   return RIDE.lanes[k] || (RIDE.lanes[k] = {
     ch: ch, dim: dim || "sound",
@@ -4768,13 +4845,16 @@ function rideLane(ch, dim) {
     // so the drawn lane has to be kept or "push it back and the old one
     // returns" would return whatever the last landing left behind.
     base: (dim === "rhythm" && PIECE.drums[ch])
-      ? { hits: PIECE.drums[ch].hits, rotate: PIECE.drums[ch].rotate } : null,
+      ? { hits: PIECE.drums[ch].hits, rotate: PIECE.drums[ch].rotate }
+      : (dim === "melody" && PIECE.chords[ch]) ? clone(PIECE.chords[ch]) : null,
     pos: 0,            // where the ENGINE is — landed, sounding
     want: 0,           // where the hand has asked for
     bars: 0,           // glide length; 0 is the hand's own speed
     from: 0,           // a throw in flight: where it started
     at: null,          // ...and the bar it started on
     seq: 0, landedSeq: 0,
+    held: null,        // what the contract said, when it said no
+    blockedFor: null,  // ...and which target it said it about
     lap: 0,            // how many times the dice was thrown at this channel
     lapLanded: 0,      // ...and which lap the engine is actually playing
     asked: null,       // the position a generation is in flight FOR
@@ -4808,6 +4888,40 @@ const RIDE_DIMS = {
     make: (L, pos) => rideVector(SEED, PIECE.vox, L.ch, pos, L.lap),
     validate: rideValidate,
     land: (v) => { if (engine) for (const k of Object.keys(v)) engine.set("p." + k, v[k]); }
+  },
+  /* MELODY. A candidate is offsets in scale degrees; what it produces is
+     events, and the events are QUIZZED against the piece's own contract before
+     they are allowed to land — this dimension, unlike sound, can draw an
+     illegal piece. A refused position is walked back toward the last legal one
+     in halvings rather than dropped, so a ride stops where the genre stops
+     instead of stalling with nothing said. */
+  melody: {
+    has: ch => !!RIDE_MELODY[ch] && !!(PIECE.chords[ch] && PIECE.chords[ch].length),
+    rides: ch => !!RIDE_MELODY[ch] && !!(PIECE.chords[ch] && PIECE.chords[ch].length),
+    make: (L, pos) => {
+      const base = L.base || [];
+      for (let tries = 0, p = pos; tries < 5; tries++) {
+        const offs = melodyAt(SEED, L.ch, base.length, p, L.lap);
+        const events = melodyApply(base, offs, PIECE.globals.root, PIECE.globals.scale, L.ch === 5);
+        const bad = melodyQuiz(L.ch, events);
+        if (!bad) return { pos: p, events: events, offsets: offs, held: p !== pos ? bad : null };
+        // toward the position that is already sounding, never past it
+        p = L.pos + (p - L.pos) / 2;
+        if (Math.abs(p - L.pos) < 0.02) {
+          return { pos: L.pos, events: melodyApply(base,
+                     melodyAt(SEED, L.ch, base.length, L.pos, L.lap),
+                     PIECE.globals.root, PIECE.globals.scale, L.ch === 5),
+                   offsets: null, held: bad };
+        }
+      }
+      return null;
+    },
+    validate: v => v ? null : "no legal position was found",
+    land: (v, L) => {
+      PIECE.chords[L.ch] = v.events;
+      if (engine) engine.recompose();
+      if (surfaceBuilt) { lastHeadStep = -1; repaintSheet(); }
+    }
   },
   rhythm: {
     has: ch => !!RIDE_RHYTHM[ch],
@@ -4848,6 +4962,25 @@ function rideTargetAt(L, bar) {
   return throwPosition(L.from, L.want, L.bars, bar - L.at);
 }
 
+/* THE CONTRACT, ASKED ABOUT ONE CHANNEL'S PROPOSED EVENTS. `quiz` judges a
+   whole piece, so the probe IS a whole piece — the current one with this
+   channel's events swapped — and only the fences that can be about notes are
+   reported: a melody ride cannot make the kit wrong, and reporting a fence it
+   did not cause would stop a legal ride for something that was already true.
+   Measured rather than assumed: the fences kept are the ones whose text names
+   the bass, the pad or the chord. */
+const MELODY_FENCES = ["L2", "L4", "L-PAD", "F3"];
+function melodyQuiz(ch, events) {
+  const probe = Object.assign({}, PIECE);
+  probe.chords = Object.assign({}, PIECE.chords);
+  probe.chords[ch] = events;
+  let left = [];
+  try { left = quiz(probe, CONTRACT) || []; } catch (e) { return "the contract could not judge it: " + e.message; }
+  const mine = left.filter(v => MELODY_FENCES.indexOf(v.fence) !== -1);
+  if (!mine.length) return null;
+  return mine.map(v => v.fence + " " + (v.why || "")).join("; ");
+}
+
 /* THE CANDIDATE. `pos` is where it is FOR, `seq` is when it was asked for, and
    `values` is the whole channel. Validation is here and not at the landing:
    a candidate that carries a number outside its own declared range is a
@@ -4886,7 +5019,12 @@ function generateRide(L, pos) {
     const values = dim.make(L, pos);
     const bad = dim.validate(values, L);
     if (bad) { RIDE.dropped++; say("ride on channel " + L.ch + " refused: " + bad, true); return; }
-    L.candidate = { seq: seq, pos: pos, lap: L.lap, values: values };
+    // A DIMENSION MAY LAND SHORT OF WHERE IT WAS ASKED, and it says why. The
+    // melody's contract can refuse a position; nothing else's can yet.
+    const at = (values && values.pos !== undefined) ? values.pos : pos;
+    if (values && values.held) { L.held = values.held; L.blockedFor = pos; RIDE.held++; }
+    else if (at === pos) L.held = null;
+    L.candidate = { seq: seq, pos: at, lap: L.lap, values: values };
   };
   L.inflight++;
   L.asked = pos; L.askedLap = L.lap;
@@ -4930,7 +5068,10 @@ function promoteRides(bar) {
     // drawn, four refused as stale, and NOTHING EVER LANDED. A staleness rule
     // that starves the thing it protects is a livelock, not a safeguard.
     const asked = (L.candidate && L.candidate.pos === next && L.candidate.lap === L.lap)
-               || (L.inflight > 0 && L.asked === next && L.askedLap === L.lap);
+               || (L.inflight > 0 && L.asked === next && L.askedLap === L.lap)
+               // and a target the contract has already refused is not asked
+               // for again every bar: that is the livelock in another costume.
+               || (L.blockedFor === next);
     // A JUMP CHANGES NOTHING ABOUT THE POSITION AND EVERYTHING ABOUT THE
     // PLACE: lap 1 position 0 and lap 0 position 0 are different sounds, so
     // the lap is part of "is the engine where it should be", not only the
@@ -4945,8 +5086,10 @@ function promoteRides(bar) {
    because a hand on a control outranks a schedule exactly as `holds` does. */
 function requestRide(ch, pos, dim) {
   const L = rideLane(ch, dim);
+  if (!L) return null;
   L.want = clamp(pos, 0, RIDE_SPAN);
   L.from = L.pos; L.at = null;
+  L.blockedFor = null;                        // a new gesture is a new question
   if (!L.bars) generateRide(L, L.want);         // lands on the next bar line
   else { L.at = rideBar() + 1; generateRide(L, rideTargetAt(L, L.at)); }
   paintRides();
@@ -4968,6 +5111,7 @@ function requestRide(ch, pos, dim) {
    the bar that is playing. */
 function jumpRide(ch, dim) {
   const L = rideLane(ch, dim);
+  if (!L) return null;
   L.lap++;
   L.want = 0; L.from = 0; L.at = null;
   generateRide(L, 0);
@@ -4981,6 +5125,7 @@ function jumpRide(ch, dim) {
    It decides only WHEN it arrives, never WHAT changes [#64 §5]. */
 function setRideLength(ch, bars, dim) {
   const L = rideLane(ch, dim);
+  if (!L) return null;
   L.bars = RIDE_LENGTHS.indexOf(bars) === -1 ? 0 : bars;
   if (L.bars && L.want !== L.pos) { L.from = L.pos; L.at = rideBar() + 1; }
   paintRides();
@@ -7842,7 +7987,7 @@ function leadWait(C, bar) {
    a row that pretended otherwise would be the flattening #64 §5 was corrected
    for. It is deliberately NOT a second copy of the state — every number
    printed here is read back out of `RIDE` and out of the engine. */
-const RIDE_DIM_ORDER = ["sound", "rhythm"];
+const RIDE_DIM_ORDER = ["sound", "rhythm", "melody"];
 function rideRowsOf() {
   const out = [];
   for (const c of CHANNELS) for (const dim of RIDE_DIM_ORDER) {
@@ -7884,8 +8029,11 @@ function rideWord(L, dead) {
   if (dead) return L.lap ? `jump ${L.lap}` : "jump only";
   const at = L.pos.toFixed(2);
   if (L.at !== null && L.want !== L.pos) return `${at} → ${L.want.toFixed(2)}${lap}`;
-  if (L.pos === 0 && L.want === 0) return "as drawn" + lap;
-  return at + lap;
+  // THE CONTRACT HOLDING A RIDE IS NOT THE RIDE BEING BROKEN, and the row
+  // has to say which it is or the hand reads a stuck slider as a bug.
+  const held = L.held ? " · held by the contract" : "";
+  if (L.pos === 0 && L.want === 0) return "as drawn" + lap + held;
+  return at + lap + held;
 }
 function paintRides() {
   for (const r of rideRowsOf()) {
@@ -9478,6 +9626,7 @@ window.p02 = {
     lanes: Object.keys(RIDE.lanes).reduce((o, k) => {
       const L = RIDE.lanes[k];
       o[k] = { ch: L.ch, dim: L.dim, pos: L.pos, want: L.want, bars: L.bars, lap: L.lap,
+               held: L.held,
                at: L.at, from: L.from, seq: L.seq, landedSeq: L.landedSeq,
                inflight: L.inflight, candidate: L.candidate ? L.candidate.pos : null,
                slider: ui("ride_" + L.dim + "_" + L.ch)
@@ -9500,6 +9649,28 @@ window.p02 = {
     const base = L ? L.base : { hits: PIECE.drums[ch].hits, rotate: PIECE.drums[ch].rotate };
     return rhythmAt(SEED, ch, base, pos, lap === undefined ? (L ? L.lap : 0) : lap,
                     laneLen(PIECE.drums[ch]));
+  },
+  melody: ch => ({ events: clone(PIECE.chords[ch] || []),
+                   offsets: (RIDE.lanes[rideKey(ch, "melody")] || {}).pos,
+                   held: (RIDE.lanes[rideKey(ch, "melody")] || {}).held || null }),
+  melodyAt: (ch, pos, lap) => {
+    const L = RIDE.lanes[rideKey(ch, "melody")];
+    const base = L ? L.base : clone(PIECE.chords[ch] || []);
+    return melodyApply(base, melodyAt(SEED, ch, base.length, pos,
+                                      lap === undefined ? (L ? L.lap : 0) : lap),
+                       PIECE.globals.root, PIECE.globals.scale, ch === 5);
+  },
+  // IS EVERY NOTE THIS CHANNEL PLAYS IN THE PIECE'S OWN SCALE? The claim a
+  // melody ride rests on, asked of the notes rather than of the argument.
+  inKey: ch => {
+    const sc = SCALE_STEPS[PIECE.globals.scale] || SCALE_STEPS[0];
+    const pcs = sc.map(x => (x + PIECE.globals.root) % 12);
+    let notes = 0, off = 0;
+    for (const e of (PIECE.chords[ch] || [])) for (const n of e.notes) {
+      notes++;
+      if (pcs.indexOf(((n % 12) + 12) % 12) === -1) off++;
+    }
+    return { notes: notes, off: off, scale: PIECE.globals.scale, root: PIECE.globals.root };
   },
   lane: ch => ({ hits: PIECE.drums[ch].hits, rotate: PIECE.drums[ch].rotate,
                  len: laneLen(PIECE.drums[ch]), pattern: (DRUM_PAT[ch] || []).join("") }),

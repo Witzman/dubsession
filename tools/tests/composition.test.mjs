@@ -109,6 +109,8 @@ const exported = [
   'rideWaypoint', 'rideValue', 'rideVector', 'rideMix', 'rideGeometric',
   'rideName', 'throwPosition', 'VOX', 'VOX_KEYS',
   'RIDE_RHYTHM', 'rhythmWaypoint', 'rhythmAt', 'rotateMix',
+  'RIDE_MELODY', 'MELODY_OFFSET', 'melodyOffsets', 'melodyAt', 'melodyApply',
+  'transposeDegrees', 'degreeOf',
 ];
 const L = new Function(`${region}\n; return { ${exported.join(', ')} };`)();
 ok(typeof L.compositionAt === 'function', 'the region evaluates and exports the layer');
@@ -1538,6 +1540,93 @@ group('the ride');
          'and it arrives, and it starts where it started');
       ok(L.rotateMix(2, 14, 0.5, 16) === 0, 'the same two positions the other way round meet at the same place');
       ok(L.rotateMix(0, 6, 0.5, 12) === 3, 'a lane with its own length rotates in its own length');
+    }
+  }
+
+  /* 9. MELODY — DEGREES, NEVER SEMITONES. The claim is that every position is
+     in the piece's own mode, and that the contract still judges the result.
+     Both are asked of the notes. */
+  {
+    ok(Object.keys(L.RIDE_MELODY).join(',') === '4,5,6,7',
+       'melody belongs to the pitched voices only', 'lead, sub, stab, pad');
+    let notes = 0, off = 0, rootMoved = 0, refused = 0, positions = 0;
+    const firstOff = [];
+    for (let i = 0; i < 24; i++) {
+      const seed = seedOf(i), piece = L.draw(seed);
+      const sc = L.SCALE_STEPS[piece.globals.scale] || L.SCALE_STEPS[0];
+      const pcs = sc.map(x => (x + piece.globals.root) % 12);
+      for (const ch of [4, 5, 6, 7]) {
+        const base = piece.chords[ch];
+        if (!base || !base.length) continue;
+        for (let lap = 0; lap <= 1; lap++) for (let p = 0; p <= 16; p++) {
+          const pos = p * L.RIDE_SPAN / 16;
+          positions++;
+          const offs = L.melodyAt(seed, ch, base.length, pos, lap);
+          const ev = L.melodyApply(base, offs, piece.globals.root, piece.globals.scale, ch === 5);
+          for (const e of ev) for (const n of e.notes) {
+            notes++;
+            if (pcs.indexOf(((n % 12) + 12) % 12) === -1) {
+              off++;
+              if (firstOff.length < 3) firstOff.push(`ch${ch} note ${n} at ${pos.toFixed(2)}`);
+            }
+          }
+          // L2 as a rule, not a repair: the bass downbeat never moves
+          if (ch === 5) {
+            const a = base.find(e => e.step === 0), b = ev.find(e => e.step === 0);
+            if (a && b && a.notes[0] !== b.notes[0]) rootMoved++;
+          }
+          // and the contract is asked about the result, exactly as the page asks
+          const probe = Object.assign({}, piece, { chords: Object.assign({}, piece.chords) });
+          probe.chords[ch] = ev;
+          const left = L.quiz(probe, L.CONTRACT).filter(v => ['L2', 'L4', 'L-PAD', 'F3'].indexOf(v.fence) !== -1);
+          if (left.length) refused++;
+        }
+      }
+    }
+    ok(off === 0, 'EVERY NOTE OF EVERY POSITION IS IN THE PIECE\'S OWN MODE',
+       off ? firstOff.join(' | ') : `${notes} notes over ${positions} positions`);
+    ok(rootMoved === 0, 'the bass states the root on the downbeat at every position — L2 is a rule, not a repair');
+    ok(refused > 0, 'AND THE CONTRACT REALLY DOES REFUSE SOME OF THEM — the quiz gate is not decoration',
+       `${refused} of ${positions} positions would break a fence and are walked back`);
+
+    // position 0 is the written line, note for note
+    {
+      let drift = 0;
+      for (let i = 0; i < 12; i++) {
+        const seed = seedOf(i), piece = L.draw(seed);
+        for (const ch of [4, 5, 6, 7]) {
+          const base = piece.chords[ch];
+          if (!base || !base.length) continue;
+          const ev = L.melodyApply(base, L.melodyAt(seed, ch, base.length, 0, 0),
+                                   piece.globals.root, piece.globals.scale, ch === 5);
+          for (let k = 0; k < base.length; k++)
+            if (base[k].notes.join() !== ev[k].notes.join()) drift++;
+        }
+      }
+      ok(drift === 0, 'position 0 is the line as it was written, note for note');
+    }
+
+    // A CHORD MOVES AS A CHORD. One offset per event, so the voicing is
+    // carried rather than re-voiced: the intervals inside an event survive.
+    {
+      const seed = seedOf(2), piece = L.draw(seed);
+      const base = piece.chords[6];
+      let broken = 0;
+      for (let p = 1; p <= 8; p++) {
+        const ev = L.melodyApply(base, L.melodyAt(seed, 6, base.length, p * 0.5, 1),
+                                 piece.globals.root, piece.globals.scale, false);
+        for (let k = 0; k < base.length; k++) {
+          const a = base[k].notes, b = ev[k].notes;
+          if (a.length !== b.length) broken++;
+          // the chord keeps its shape in DEGREES, which is what moving in
+          // degrees means — semitone spacing may change with the mode, and
+          // that is the mode doing its job.
+          const dA = a.map(n => L.degreeOf(n, piece.globals.root, L.SCALE_STEPS[piece.globals.scale]));
+          const dB = b.map(n => L.degreeOf(n, piece.globals.root, L.SCALE_STEPS[piece.globals.scale]));
+          for (let j = 1; j < dA.length; j++) if (dA[j] - dA[0] !== dB[j] - dB[0]) broken++;
+        }
+      }
+      ok(broken === 0, 'a chord moves as a chord — the voicing travels with it, in degrees');
     }
   }
 

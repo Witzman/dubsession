@@ -1,5 +1,31 @@
 # Changelog
 
+## 2026-09-20 — material is a dimension: every channel rides, jumps and throws
+
+- **Push a control and the material travels.** Sound, rhythm and melody are
+  continuous controls, per channel, exactly like a filter is. Half-way between
+  two kicks is a kick; half-way between two hat lanes is a hat lane; half-way
+  between two basslines is a bassline in the same key. Push it back and the
+  piece you started with returns, note for note.
+- **A jump is the other gesture.** The dice for one channel: it lands somewhere
+  unrelated, it is the only thing that may swap a recipe — the 909 for the
+  boom, the dubstab for the rhodes, the sub's wave — and where it lands becomes
+  the start of a new dimension to ride from.
+- **A throw sets a target and a length in bars.** 1, 4, 8, 16, 32 or 64, per
+  channel, and it glides there unattended while your hands are somewhere else.
+  Every bar of the glide travels the same distance.
+- **Nothing ever changes the bar you are hearing.** Every landing happens on a
+  bar line before that bar is scheduled, and a slow generation can never
+  overwrite something you asked for later.
+- **A channel offers only what it has material for.** The sub has no timbre to
+  ride and says `jump only`; the kick's pattern is a template, so its rhythm is
+  a jump. A control that can do nothing is drawn dead.
+- **A pinned step outranks a ride passing through it**, and a melody that would
+  break the piece's own contract stops where the genre stops and says so.
+- **A roll now reaches the voices.** Taking a new seed changed the patterns and
+  left the SOUND behind: 31 of 38 drawn voice numbers never reached the engine,
+  so a boom kick could be drawn while a 909 kept playing.
+
 ## 2026-09-20 — four trajectories and six one-bar gestures can be fired
 
 - **Drop, buildup, phase-out and reverb-out are played from the surface.** Each
