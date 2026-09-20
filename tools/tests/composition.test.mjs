@@ -94,7 +94,12 @@ const exported = [
   // pattern table has never seen.
   'usePiece', 'writeBass', 'lanePat', 'laneStep', 'laneLen',
   'writeLead', 'quoteMotif', 'LEAD_QUOTES', 'LEAD_FROM',
-  'DEG_T', 'DEG_T5', 'degTableFor', 'SCALE_STEPS', 'countHits',
+  'DEG_T', 'DEG_T5', 'degTableFor', 'SCALE_STEPS', 'countHits', 'countFirings',
+  // #51 — THE PINS. `PINS` is the hand's table, `applyPins` is the overlay and
+  // `rebuildDerived` is the ONE place it is applied; everything else here is
+  // what a reader of `DRUM_PAT` is entitled to see afterwards.
+  'PINS', 'PIN_ON', 'pinAt', 'setPin', 'clearPins', 'pinCount', 'applyPins',
+  'pinsToText', 'pinsFromText', 'pinsFromQuery', 'mutFreeSteps',
 ];
 const L = new Function(`${region}\n; return { ${exported.join(', ')} };`)();
 ok(typeof L.compositionAt === 'function', 'the region evaluates and exports the layer');
@@ -893,10 +898,14 @@ for (let s = 0; s < 40; s++) {
     if (m.ghost[6] || m.dropped[6] || m.skip[6] !== undefined) stabMoved++;
     if (m.bassOctave && m.bassOctave.index === 0) badPitch++;
     if (m.skip[0] !== undefined) { pulls++; if (m.skip[0] !== 12) badPull++; if (b - lastPull < 8) badPull++; lastPull = b; }
-    // NOT `L.DRUM_PAT`: that export is the table as it stood when the region
-    // was evaluated, and `usePiece` REBINDS it, so it would be a different
-    // piece's lanes. And a ghost step is a BAR step while a lane may be 12 or
-    // 14 long, so the collision question is `laneStep`'s, not `[g.step]`'s.
+    // `L.lanePat(P.drums[ch])` AND NOT `L.DRUM_PAT`, for a reason that has
+    // changed and still holds: the export used to be the table as it stood
+    // when the region was evaluated, because `rebuildDerived` REBOUND it
+    // (#51 made it one object whose contents are replaced, so it is live
+    // now). What still holds is that this asks about the DRAWN lane, and
+    // `DRUM_PAT` carries the hand's pins on top of it. And a ghost step is a
+    // BAR step while a lane may be 12 or 14 long, so the collision question
+    // is `laneStep`'s, not `[g.step]`'s.
     for (const ch of [0, 3]) {
       const pat = L.lanePat(P.drums[ch]);
       for (const g of (m.ghost[ch] || [])) if (pat[L.laneStep(pat, b * 16 + g.step)]) badGhost++;
@@ -1016,6 +1025,181 @@ if (anyLead) {
   ok(JSON.stringify(anyLead.chords[4]) === JSON.stringify(m),
      'and a quote never writes back into the material it quotes');
 }
+
+/* -- 9. THE PINS — THE HAND ON THE SHEET ---------------------------------
+   ADDED 2026-09-20 (#51 / #58 step 4). The seam is one sentence: a pin is an
+   overlay applied in `rebuildDerived` and nowhere else, so it reaches the
+   scheduler, the fingerprint, the silence reasons and the sheet together and
+   cannot drift. Everything below is that sentence, asked from the outside.
+
+   THE ORDER IS THE POINT: DRAW, QUIZ, THEN OVERLAY. The 2000-seed
+   zero-violation run above is a statement about what the DICE may do. A
+   player who pins eight kick hits has not violated F1, they have played — so
+   the last check in this section is that same run with pins in force.
+   ------------------------------------------------------------------------ */
+group('the pins — what the hand put there, and what it outranks');
+
+L.clearPins();
+L.usePiece(SHIPPED);
+
+// The overlay is a no-op that is not merely equal but IDENTICAL when nothing
+// is pinned: a page nobody has touched derives exactly what it derived before
+// pins existed. The digest above is the other half of this claim.
+const drawnKick = L.lanePat(SHIPPED.drums[0]);
+ok(L.applyPins(0, drawnKick) === drawnKick,
+   'with nothing pinned the overlay hands back the same array, not a copy of it');
+
+L.setPin(3, 1, 1);
+ok(L.pinCount() === 1 && L.pinAt(3, 1) === 1, 'a pin is set, and it is read back where it was set');
+ok(L.DRUM_PAT[3][1] !== L.PIN_ON,
+   'and the pattern table has NOT moved yet — the overlay is applied in one place',
+   `DRUM_PAT[3] = ${L.DRUM_PAT[3].join('')}`);
+L.rebuildDerived();
+ok(L.DRUM_PAT[3][1] === L.PIN_ON, 'and `rebuildDerived` is that place',
+   `DRUM_PAT[3] = ${L.DRUM_PAT[3].join('')}`);
+
+// The URL token, readable, because these URLs are meant to be sent to a person
+L.setPin(0, 5, 0);
+const token = L.pinsToText();
+ok(token === '0:-----.----------,3:-x--------------',
+   'the pins write themselves as a token a person can read', token);
+L.clearPins();
+L.pinsFromText(token);
+ok(L.pinsToText() === token && L.pinCount() === 2, 'and the token reads back as the pins it was');
+L.pinsFromText('0:xxxx,9:xxxx,nonsense,3:qq');
+ok(L.pinsToText() === '0:xxxx------------',
+   'a token nobody can parse is dropped, not guessed at', L.pinsToText());
+L.clearPins();
+ok(L.pinsFromQuery('?seed=dub&pins=1:--x-------------').  /* the query, never the path */
+     constructor === Object && L.pinAt(1, 2) === 1 && L.pinCount() === 1,
+   'and `?pins=` on the URL arrives as the same table');
+L.clearPins(); L.rebuildDerived();
+
+/* A PINNED ON CELL FIRES WHERE CHANCE WOULD HAVE THINNED IT. This is the
+   whole of "a pin outranks the manifest": the hit is not part of the drawn
+   pattern to be let through, so the odds are not asked. */
+const thinMv = { phrase: 8, section: 32, bars: 256,
+                 sections: [{ at: 0, event: ['chance', 3, 0.5], why: 'x' }] };
+const thinBar = 12;
+const thinC = L.compositionAt(SEED, P, thinMv, thinBar, AUTO);
+const hatPat = L.DRUM_PAT[3];
+let thinnedStep = -1;
+for (let st = 0; st < hatPat.length; st++)
+  if (hatPat[st] && !L.stepFires(SEED, 3, thinC.key[3], st, thinC.chance[3])) { thinnedStep = st; break; }
+ok(thinnedStep >= 0, 'chance 0.5 thins at least one hat step to aim at', `lane step ${thinnedStep}`);
+const beforeFp = L.fingerprint(thinC, SEED).split(' ')[3];
+L.setPin(3, thinnedStep, 1); L.rebuildDerived();
+const afterFp = L.fingerprint(L.compositionAt(SEED, P, thinMv, thinBar, AUTO), SEED).split(' ')[3];
+ok(beforeFp[2 + thinnedStep] === '.' && afterFp[2 + thinnedStep] === 'x',
+   'a pinned ON cell fires where chance had thinned it away',
+   `${beforeFp} -> ${afterFp}`);
+ok(L.countHits(3) === L.lanePat(SHIPPED.drums[3]).reduce((a, b) => a + b, 0),
+   'and a pinned step the lane already drew is still ONE hit, not two',
+   `${L.countHits(3)} hits`);
+
+// CHANCE 0 IS NOT A SILENCE WHEN A PIN IS IN IT, and the row must not hatch as
+// one: a channel that sounds while the surface says it is silent is the fault
+// rule 1 exists to prevent, wearing the other face.
+const zeroMv = { phrase: 8, section: 32, bars: 256,
+                 sections: [{ at: 0, event: ['chance', 3, 0], why: 'x' }] };
+ok(!L.compositionAt(SEED, P, zeroMv, 8, AUTO).silent[3],
+   'chance 0 with a pin in the lane is NOT reported as a silence',
+   L.compositionAt(SEED, P, zeroMv, 8, AUTO).silent[3] || 'no reason given, because it is not silent');
+L.clearPins(); L.rebuildDerived();
+ok((L.compositionAt(SEED, P, zeroMv, 8, AUTO).silent[3] || '').indexOf('chance 0') === 0,
+   'and with the pin released it is the sentence it always was',
+   L.compositionAt(SEED, P, zeroMv, 8, AUTO).silent[3]);
+
+/* A PINNED OFF CELL NEVER FIRES — not under chance 1, and not under a tier 3
+   ghost either. A hole you cut that the machine can still sound is not a hole. */
+const kickStep = L.DRUM_PAT[0].indexOf(1);
+L.setPin(0, kickStep, 0); L.rebuildDerived();
+const offFp = L.fingerprint(L.compositionAt(SEED, P, MOVE, 12, NOMUT), SEED).split(' ')[0];
+ok(offFp[2 + kickStep] === '.', 'a pinned OFF cell does not fire, with chance at 1',
+   `${offFp} — step ${kickStep} cut`);
+ok(L.mutFreeSteps(0, 2, 12).indexOf(kickStep) === -1,
+   'and tier 3 is not offered it as a free step — a ghost there would be the machine playing where the hand said never',
+   `free steps: ${L.mutFreeSteps(0, 2, 12).join(',') || 'none'}`);
+
+/* A PIN DOES NOT OUTRANK THE ARRANGEMENT. A channel that has left is silent,
+   pins or not — otherwise "the generator draws around it" would mean "the
+   generator is off". The MARK stays, because the sheet has to be able to
+   answer which part of what you hear is yours. */
+const leftMv = { phrase: 8, section: 32, bars: 256,
+                 sections: [{ at: 0, event: ['leave', 0, 4], why: 'x' }] };
+L.setPin(0, kickStep, 1); L.rebuildDerived();
+const leftC = L.compositionAt(SEED, P, leftMv, 40, AUTO);
+ok(leftC.present[0] <= 0 && L.fingerprint(leftC, SEED).split(' ')[0] === '0:-',
+   'a channel the arrangement has rested stays silent with pins set',
+   `present ${leftC.present[0]}, fingerprint ${L.fingerprint(leftC, SEED).split(' ')[0]}`);
+ok(L.DRUM_PAT[0][kickStep] === L.PIN_ON,
+   'and the pin is still in the table — the arrangement stops it sounding, it does not erase it');
+
+/* A PIN SURVIVES A ROLL. The owner's "for ever": `usePiece` rebinds the piece
+   and rebuilds everything derived from it, which is exactly what a new seed
+   does, and the hand's table is not the piece's. */
+const rolled = L.draw(0x5EED01);
+L.usePiece(rolled);
+ok(L.DRUM_PAT[0][kickStep] === L.PIN_ON && L.pinCount() === 1,
+   'a pin survives a new piece — `usePiece` rebinds and the overlay goes back on',
+   `seed 5eed01, DRUM_PAT[0] = ${L.DRUM_PAT[0].join('')}`);
+L.clearPins(); L.usePiece(SHIPPED);
+
+/* A LANE ON ITS OWN CYCLE: the pin is pinned to the LANE'S step, so the column
+   it appears in moves every bar. That is the polymeter, and it is the one
+   thing about a pin a player would otherwise file as a bug. */
+let polyPiece = null;
+for (let i = 0; i < 4000 && !polyPiece; i++) {
+  const pc = L.draw(seedOf(i));
+  if (!pc.empty[3] && L.lanePat(pc.drums[3]).length !== 16) polyPiece = pc;
+}
+ok(polyPiece !== null, 'a piece with a hat lane on its own cycle exists to ask about',
+   polyPiece ? `lane length ${L.lanePat(polyPiece.drums[3]).length}` : 'none in 4000 draws');
+if (polyPiece) {
+  L.usePiece(polyPiece);
+  const len = L.DRUM_PAT[3].length;
+  let free = 0; while (free < len && L.DRUM_PAT[3][free]) free++;
+  L.setPin(3, free, 1); L.rebuildDerived();
+  const cols = [0, 1, 2].map(b => {
+    const line = L.fingerprint(L.compositionAt(SEED, polyPiece, MOVE, b, NOMUT), SEED).split(' ')[3].slice(2);
+    const out = [];
+    for (let s = 0; s < 16; s++) if (L.laneStep(L.DRUM_PAT[3], b * 16 + s) === free) out.push(s);
+    return out.join('/') + (out.every(s => line[s] === 'x') ? '' : ' MISSED');
+  });
+  ok(cols.join(' ').indexOf('MISSED') === -1 && cols[0] !== cols[1],
+     `a pin on a ${len}-step lane is pinned to the lane's step and moves across the bar`,
+     `lane step ${free} appears at columns ${cols.join(', ')} in bars 1, 2, 3`);
+  L.clearPins(); L.usePiece(SHIPPED); L.rebuildDerived();
+}
+
+/* AND THE ORDER, WHICH IS THE WHOLE SPEC: DRAW, QUIZ, THEN OVERLAY. The
+   2000-seed run again, with the hand all over the kit. If the fences ever saw
+   a pin this is red — a player pinning eight kick hits would be reported as a
+   contract violation, and §5.2 says a violation is a reportable incident. */
+L.pinsFromText('0:xxxxxxxxxxxxxxxx,1:xxxxxxxx........,3:................');
+let pinnedQuizFails = 0, pinnedRepairs = 0, inForce = 0;
+const firstPinnedQuiz = [];
+for (let i = 0; i < DRAWS; i++) {
+  const sd = seedOf(i);
+  const pc = L.draw(sd);
+  if (pc.violations.length) pinnedRepairs++;
+  const q = L.quiz(pc, L.CONTRACT);
+  if (q.length) { pinnedQuizFails++; if (firstPinnedQuiz.length < 3) firstPinnedQuiz.push(sd.toString(16) + ':' + q.map(v => v.fence).join('+')); }
+  // and the pins really were in force for every one of them
+  L.usePiece(pc);
+  if (L.DRUM_PAT[0] && L.DRUM_PAT[0].every(x => x === L.PIN_ON)) inForce++;
+}
+ok(pinnedQuizFails === 0 && pinnedRepairs === 0,
+   `${DRAWS} drawn pieces with 24 cells pinned and the quiz still finds no violation`,
+   pinnedQuizFails ? `${pinnedQuizFails} failed, e.g. ${firstPinnedQuiz.join(' ')}` : `${DRAWS} clean, ${pinnedRepairs} repairs`);
+ok(inForce === DRAWS, 'and the pins were on the pattern table for every one of those draws',
+   `${inForce} of ${DRAWS} pieces carried the overlay`);
+
+L.clearPins();
+L.usePiece(SHIPPED);
+ok(L.pinCount() === 0 && L.DRUM_PAT[0].join('') === '1000100010001000',
+   '`release pins` puts the lane back exactly as it was drawn', L.DRUM_PAT[0].join(''));
+
 
 console.log(`\n${checks - failures}/${checks} checks passed`);
 if (PROVE_RED) {

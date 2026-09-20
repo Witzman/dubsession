@@ -2549,7 +2549,13 @@ function compositionAt(seed, piece, movement, bar, opts) {
     // surface reads this rather than guessing.
     if (piece.empty[ch]) out.silent[ch] = "no material — " + piece.empty[ch].split(".")[0];
     else if (v <= 0) out.silent[ch] = "left the arrangement at bar " + (pr.at + 1) + ", over " + pr.bars + " bars";
-    else if (p <= 0) out.silent[ch] = "chance 0 — the pattern is intact, nothing is being let through";
+    // CHANCE 0 AND A PIN IS NOT A SILENCE, and the row must not hatch as one.
+    // `chance` is what the manifest and the schedule say about the pattern; a
+    // pinned step is not in the pattern to be thinned and fires anyway [#51].
+    // Routed through `countFirings`, which already knows that, this is the
+    // same sentence it always was for a channel nobody has touched.
+    else if (p <= 0 && countFirings(seed, ch, out.key[ch], p) === 0)
+      out.silent[ch] = "chance 0 — the pattern is intact, nothing is being let through";
     else if (p < 1 && countFirings(seed, ch, out.key[ch], p) === 0)
       // A SILENCE THAT CARRIES NO REASON IS THE ONE THING THIS INSTRUMENT
       // REFUSES TO PRODUCE [G rule 1]. On a channel with one hit in the bar —
@@ -3810,7 +3816,14 @@ function pinsFromQuery(search) {
    hits)` cannot express [0,5,10], so the kick carries `steps` and this reads
    them when they are there.
    ========================================================================= */
-let DRUM_PAT = {};
+/* ONE TABLE, FOR EVER, AND ITS CONTENTS ARE REPLACED — it is not rebound.
+   `let DRUM_PAT = {}` with `DRUM_PAT = {}` in `rebuildDerived` left every
+   holder of the reference reading the table as it stood when they took it:
+   the engine's own export at the bottom of `createEngine`, and the test
+   harness's, which had a comment warning readers off it. A pin lands in this
+   table, so a second stale copy of it is exactly the drift #51's seam exists
+   to prevent. `const`, and the keys are cleared in place. */
+const DRUM_PAT = {};
 
 /* NOT "ONCE AT MODULE SCOPE" — ONCE PER PIECE. The seed changes at runtime,
    on a bar line, while the transport runs, so everything derived from `PIECE`
@@ -3819,7 +3832,7 @@ let DRUM_PAT = {};
    side does the rest (the faders, the transport's tempo, the engine's echo,
    and the modulator rows). */
 function rebuildDerived() {
-  DRUM_PAT = {};
+  for (const k of Object.keys(DRUM_PAT)) delete DRUM_PAT[k];
   // THE PIN OVERLAY LANDS HERE AND NOWHERE ELSE [#51]. The draw and the quiz
   // have already run on `PIECE.drums`; this is the step where a drawn lane
   // becomes the table the scheduler, the fingerprint, the silence reasons and
