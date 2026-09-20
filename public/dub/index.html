@@ -104,6 +104,25 @@
   .fire-micros button { padding: 7px 4px; font-size: 11px; }
   #fires button.is-wait { border-style: dashed; border-color: var(--time); color: var(--time); }
   #fires button.is-landed { border-color: var(--hot); color: var(--hot); }
+  /* --- THE RIDE. One row per channel: the name, the dimension itself, where
+     it is, and how long a throw takes. Ugly and honest until #69 builds the
+     station; the grammar rule it does keep is that a control which can do
+     nothing is DEAD and says why. --- */
+  #rides { margin: 12px 0 16px; border-top: 1px solid var(--line); padding-top: 10px; }
+  #ridestate { color: var(--dim); font-size: 12px; }
+  .ride-row { display: grid; grid-template-columns: 92px minmax(0, 1fr) 104px 84px;
+              gap: 8px; align-items: center; padding: 2px 0; }
+  .ride-nm { font-size: 11px; color: var(--dim); font-style: normal; }
+  .ride-v { font-size: 11px; color: var(--dim); font-style: normal; text-align: right;
+            font-variant-numeric: tabular-nums; }
+  .ride-row.is-moving .ride-v { color: var(--time); }
+  .ride-row.is-dead { opacity: .45; }
+  .ride-row select { border: 1px solid var(--line); background: var(--panel);
+                     color: var(--ink); font: inherit; font-size: 11px; padding: 4px 2px; }
+  .ride-row input[type=range] { min-width: 0; }
+  @media (max-width: 700px) {
+    .ride-row { grid-template-columns: 78px minmax(0, 1fr) 84px 72px; }
+  }
   /* `.row` — a 150 px label beside a slider beside a 78 px readout — WAS THE
      WHOLE OF THE PAGE BELOW THE SHEET, and §2 of the grammar rejects it by
      name: it is the website-with-sliders. Every one of those rows is now a
@@ -604,6 +623,11 @@
     </div>
   </section>
 
+  <section id="rides" aria-label="ride the sound">
+    <div class="fire-head"><b>RIDE</b><span id="ridestate">the sound is a dimension — push it and it travels</span></div>
+    <div id="ridelist"></div>
+  </section>
+
   <div id="bars">bar — · step —</div>
   <div id="steps"></div>
 
@@ -1004,7 +1028,12 @@
    sharing a coordinate simply always agree. On the entry, check 5 catches it.
    --------------------------------------------------------------------------- */
 const D = { FRAME:0x4652, DRUM:0x4452, NOTE:0x4E54, VOX:0x5658,
-            SPACE:0x5350, MOD:0x4D44, FORM:0x464D, MORPH:0x4D50 };
+            SPACE:0x5350, MOD:0x4D44, FORM:0x464D, MORPH:0x4D50,
+            // #67's own domain, and NOT D.MORPH: a ride's waypoints are drawn
+            // from the same ranges as the piece, but they are not the piece
+            // and #28 has not spent its coordinates yet. Two dimensions
+            // sharing a domain would draw the same path from one seed.
+            RIDE:0x5244 };
 
 // Reserved coordinates: allocated, not yet spent. They are in check 5's
 // uniqueness set so a later commit cannot quietly take one.
@@ -4380,6 +4409,151 @@ function mutationsAt(seed, piece, movement, C, auto, manual) {
   return M;
 }
 
+
+/* ---------------------------------------------------------------------------
+   4b-quater. THE RIDE — MATERIAL AS A DIMENSION  [#67, #68, #64 §5]
+   ---------------------------------------------------------------------------
+   "Generation is a dimension, not an event." A material control is continuous
+   like a filter is: push it and the sound TRAVELS, through positions that are
+   each a legal piece of this genre, and push it back and the old one returns.
+
+   WHAT SPACE DOES IT TRAVEL THROUGH, AND WHY THAT ONE  [#64 §9 Q4/Q5]
+   -------------------------------------------------------------------
+   The fork the issue names is: interpolate the DRAWN PARAMETERS before the
+   writers run, or the WRITTEN MATERIAL after them. For SOUND the question does
+   not arise and that is exactly why sound is proved first: there is no written
+   material for timbre at all. `P("hatDecay")` is read at NOTE TIME, once per
+   hit, so a voice number is a parameter for its whole life. `repair` and
+   `quiz` exist because a drawn PIECE can be invalid; a voice number cannot be,
+   because every position between two draws of one field is inside that
+   field's own declared range — and a range is convex. There is nothing for the
+   contract to refuse. Rhythm and melody are the hard fork and they are argued
+   where they are built.
+
+   THE SPACE is the box of one channel's drawn voice numbers. THE DIMENSION is
+   a path through it: waypoint 0 is the piece exactly as it was drawn, and
+   waypoints 1..RIDE_SPAN are further draws of the same fields from this
+   piece's own seed on D.RIDE. So the ride is deterministic (the same seed
+   rides the same path), reversible (position 0 IS the drawn piece, returned
+   exactly and not approximately), and legal at every position by construction.
+
+   DISTANCE IS THE CONTROL, NOT A SECOND ONE  [#64 §5]. Subtle, large and a new
+   idea are how far you pushed: 0.2 is a nudge of this kick, 1 is a different
+   kick, 4 is four draws away. The dice remains the other gesture — a JUMP,
+   which is the only thing that may move a NAME, because a recipe is not a
+   number: `kickEngine`, `stabEngine`, `rimWave` and `subWave` are absent from
+   every list below on purpose.
+
+   HZ AND SECONDS RIDE GEOMETRICALLY, SHARES RIDE LINEARLY. Half-way between
+   1200 Hz and 5000 Hz is 2449 Hz and not 3100: an octave is a ratio, and a
+   linear sweep over a frequency or a decay spends most of its travel at the
+   top end and reads as having arrived early. Mixes, shares, Q, drive and cents
+   are already linear in what they do, so they ride linearly. The unit on the
+   table decides it, and the four rows whose unit was never declared are named
+   here rather than guessed at.
+
+   NOTHING IN THIS BLOCK TOUCHES THE ENGINE OR THE CLOCK. The state that rides,
+   the bar line it lands on and the races between them are section 6b's.
+   --------------------------------------------------------------------------- */
+
+// How far out the control reaches. Four waypoints is a judgement, not a
+// measurement: it is far enough that the far end is a different instrument and
+// near enough that every position on the way is reachable with one hand.
+const RIDE_SPAN = 4;
+
+// GLIDE LENGTHS ARE BARS AND NEVER SECONDS [#64 §5]. 0 is not a length — it is
+// "the hand's own speed", the default gesture, where the next bar realizes
+// wherever the control is now.
+const RIDE_LENGTHS = [0, 1, 4, 8, 16, 32, 64];
+
+/* WHICH DRAWN NUMBERS BELONG TO WHICH CHANNEL'S SOUND. Measured from the table
+   above, not assumed: the four `pool` rows are names and are jumps, the four
+   `fixed` rows are not drawn at all and would be the same at every waypoint,
+   and what is left is 29 numbers over eight channels.
+
+   CHANNEL 5 HAS AN EMPTY LIST AND THAT IS THE MEASUREMENT, NOT AN OMISSION.
+   The sub's only drawn voice field is `subWave`, a name. It has no sound
+   dimension to ride and its control must therefore look dead [#64 §2] rather
+   than move something that changes nothing.
+
+   BOTH ENGINES' NUMBERS ARE IN THE KICK'S AND THE STAB'S LISTS. A number the
+   current recipe does not read is harmless — it is read at note time or not at
+   all — and carrying it means a jump between recipes lands in a ridden
+   position rather than resetting one. */
+const RIDE_SOUND = {
+  0: ["kickSweepStart", "kickSweepTime", "kickSubMix", "kickClickDecay", "boomDecay", "boomDrive"],
+  1: ["rimDecay", "rimNoise", "rimNoiseDecay"],
+  2: ["clapQ", "clapBody"],
+  3: ["hatDecay", "hatQ"],
+  4: ["leadAttack", "leadTail", "leadTone", "leadDetune"],
+  5: [],
+  6: ["stabDrive", "stabDetune", "stabHold", "stabSubShare", "rhodesIndex", "rhodesTone", "rhodesBark"],
+  7: ["padBreath", "padFoundation"],
+  R: ["rumbleTop", "rumbleDecay"]
+};
+
+// The four rows that ARE a frequency or a time and whose `unit` says `-`.
+// Named here because the alternative is inferring a unit from a range, which
+// is how 0.03 seconds becomes a share.
+const RIDE_GEOMETRIC = { leadAttack: 1, leadTail: 1, leadTone: 1, boomDecay: 1 };
+const rideGeometric = k => !!RIDE_GEOMETRIC[k]
+  || (VOX[k] && (VOX[k].unit === "Hz" || VOX[k].unit === "s"));
+
+const RIDE_FIELD_I = VOX_KEYS.reduce((o, k, i) => (o[k] = i, o), {});
+
+/* ONE WAYPOINT. Waypoint 0 is the piece's own value and is returned
+   unchanged — not redrawn, which would only be equal by luck. Every other
+   waypoint is `drawRange` over the SAME `STYLE.vox` entry, so a waypoint
+   cannot leave the range the manifest declares for that field, and a
+   quantised field stays on its own steps. */
+function rideWaypoint(seed, key, n, base) {
+  if (n <= 0) return base;
+  return drawRange(seed, D.RIDE, RIDE_FIELD_I[key], n, STYLE.vox[key]);
+}
+
+/* ONE POSITION. `t === 0` returns the lower waypoint IDENTICALLY — the whole
+   claim "push it back and the old one returns" is this line, and a mix that
+   computed `a + (b - a) * 0` would return `a` for these values but is not
+   required to for all of them. */
+function rideMix(key, a, b, t) {
+  if (!(t > 0)) return a;
+  if (t >= 1) return b;
+  const v = (rideGeometric(key) && a > 0 && b > 0)
+    ? a * Math.pow(b / a, t)
+    : a + (b - a) * t;
+  const q = STYLE.vox[key] && STYLE.vox[key].q;
+  return q ? Math.round(v / q) * q : v;
+}
+
+function rideValue(seed, key, base, pos) {
+  const p = Math.max(0, Math.min(RIDE_SPAN, pos));
+  const i = Math.floor(p), t = p - i;
+  const a = rideWaypoint(seed, key, i, base);
+  return t === 0 ? a : rideMix(key, a, rideWaypoint(seed, key, i + 1, base), t);
+}
+
+/* THE WHOLE CHANNEL AT ONE POSITION, AS ONE OBJECT. It is built whole and
+   applied whole: half a vector from one position and half from another is the
+   partial application #64 §4 forbids, and the cheapest way not to have one is
+   never to hold half of it. */
+function rideVector(seed, vox, ch, pos) {
+  const out = {};
+  for (const k of (RIDE_SOUND[ch] || []))
+    out[k] = rideValue(seed, k, (vox && vox[k] !== undefined) ? vox[k] : VOX[k].def, pos);
+  return out;
+}
+
+/* A THROW'S POSITION AT A GIVEN BAR. `done` is bars since it started, and the
+   arrival is EXACT on the last one rather than within a rounding error of it:
+   a throw that ends at 3.9999 has not arrived, and the surface would have to
+   lie about it. Linear in position, which is linear in the ride's own
+   distance — the per-parameter curve is `rideMix`'s and applies underneath. */
+function throwPosition(from, to, bars, done) {
+  if (!(bars > 0) || done >= bars) return to;
+  if (done <= 0) return from;
+  return from + (to - from) * (done / bars);
+}
+
 /* ==== COMPOSITION LAYER END ==== */
 
 /* ---------------------------------------------------------------------------
@@ -4430,6 +4604,180 @@ const HOLDS = emptyHolds();
 // scheduler's bar boundary, so an event can never redraw a bar in flight.
 function emptyFires() { return { seq: 0, pending: { macro: null, micros: [], release: false }, events: [] }; }
 const FIRES = emptyFires();
+
+/* ---------------------------------------------------------------------------
+   4f. THE RIDE'S STATE — CANDIDATE, PENDING, CURRENT  [#67, #64 §4]
+   ---------------------------------------------------------------------------
+   The path and the interpolation are pure and live in the composition layer.
+   What lives here is the part that can go wrong in time:
+
+     user action -> generate candidate -> validate -> schedule -> bar line -> current
+
+   THE BAR LINE IS THE ONLY PLACE IT LANDS, and it is the same bar line a seed
+   and a fired gesture land on — `tick`'s `T.step % 16 === 0`, before the step
+   is scheduled. Nothing here owns a clock; there is no `setTimeout` musical
+   timing and no animation frame in this block.
+
+   FOUR THINGS THAT MUST NOT HAPPEN, and each is a test in
+   `bin/browser/p67-ride.mjs` rather than a hope:
+
+     - the bar already sounding changing because a generation finished. It
+       cannot: nothing is written to the engine outside `promoteRides`.
+     - PARTIAL APPLICATION. `rideVector` is built whole and `landRide` writes
+       it in one synchronous loop with nothing awaited inside it.
+     - A STALE CANDIDATE overwriting newer intent because it was asked for
+       first and finished last. Every request takes the next number off
+       `RIDE.seq`; a candidate that arrives older than what is already queued
+       or already landed is DROPPED and counted.
+     - the surface's copy and the engine's disagreeing. `p02.ride()` prints
+       both, and the harness compares against `p02.vox().engine`, which is
+       what the oscillators actually read.
+
+   GENERATION IS REQUESTED ONE BAR AHEAD. For sound it is arithmetic and would
+   land synchronously, but the pipeline is built for the generators that are
+   not — rhythm and melody redraw material — so the shape is the slow one from
+   the start. `RIDE.delayMs` makes generation slow ON PURPOSE, and it is a
+   test door: it is the only way to prove the staleness rules do anything.
+   --------------------------------------------------------------------------- */
+const RIDE = {
+  seq: 0,
+  lanes: {},
+  delayMs: 0,        // test door: a generator that takes its time
+  dropped: 0,        // stale candidates refused, since the page loaded
+  landings: 0,
+  log: []            // the last 64 landings, with the scheduler step each got
+};
+const rideKey = (ch, dim) => ch + ":" + (dim || "sound");
+function rideLane(ch, dim) {
+  const k = rideKey(ch, dim);
+  return RIDE.lanes[k] || (RIDE.lanes[k] = {
+    ch: ch, dim: dim || "sound",
+    pos: 0,            // where the ENGINE is — landed, sounding
+    want: 0,           // where the hand has asked for
+    bars: 0,           // glide length; 0 is the hand's own speed
+    from: 0,           // a throw in flight: where it started
+    at: null,          // ...and the bar it started on
+    seq: 0, landedSeq: 0,
+    asked: null,       // the position a generation is in flight FOR
+    candidate: null, inflight: 0
+  });
+}
+// EVERY LANE IS NEW MATERIAL'S ZERO. A new piece is drawn, not ridden to, so a
+// position on the old piece's path means nothing on the new one's — and the
+// new piece's own numbers are what `rebuild` has just pushed into the engine.
+function rideReset() { RIDE.lanes = {}; }
+
+function rideBar() { return Math.floor(T.step / 16); }
+
+/* WHERE A LANE SHOULD SIT AT A GIVEN BAR. With no throw in flight that is
+   simply where the hand is; with one, it is the glide's own position, and the
+   glide is over BARS. */
+function rideTargetAt(L, bar) {
+  if (!L.bars || L.at === null) return L.want;
+  return throwPosition(L.from, L.want, L.bars, bar - L.at);
+}
+
+/* THE CANDIDATE. `pos` is where it is FOR, `seq` is when it was asked for, and
+   `values` is the whole channel. Validation is here and not at the landing:
+   a candidate that carries a number outside its own declared range is a
+   generator defect, and landing it would put the fault in the audio instead
+   of in the report. */
+function rideValidate(values) {
+  for (const k of Object.keys(values)) {
+    const v = values[k], spec = STYLE.vox[k];
+    if (!isFinite(v)) return k + " is not a number";
+    if (spec && spec.range && (v < spec.range[0] - 1e-9 || v > spec.range[1] + 1e-9))
+      return k + " " + v + " is outside its drawn range [" + spec.range + "]";
+  }
+  return null;
+}
+
+function generateRide(L, pos) {
+  const seq = ++RIDE.seq;
+  L.seq = seq;
+  const make = () => {
+    L.inflight--;
+    // ASKED FIRST, FINISHED LAST, AND THE COMPARISON IS AGAINST THE NEWEST
+    // REQUEST — not against what has already ARRIVED. Measured 2026-09-20 with
+    // `RIDE.delayMs` at 2600: comparing against the arrived candidate alone
+    // let the slow first candidate land for one bar because the newer one was
+    // still in flight, which is exactly the "stale candidate overwriting newer
+    // user intent" #64 §4 names. `L.seq` is the last thing the hand asked for.
+    if (seq < L.seq || seq <= L.landedSeq) { RIDE.dropped++; return; }
+    const values = rideVector(SEED, PIECE.vox, L.ch, pos);
+    const bad = rideValidate(values);
+    if (bad) { RIDE.dropped++; say("ride on channel " + L.ch + " refused: " + bad, true); return; }
+    L.candidate = { seq: seq, pos: pos, values: values };
+  };
+  L.inflight++;
+  L.asked = pos;
+  // The delay is a TEST DOOR and never a musical timer: at 0 the candidate
+  // exists before this function returns.
+  if (RIDE.delayMs > 0) setTimeout(make, RIDE.delayMs); else make();
+}
+
+/* THE LANDING. One synchronous loop, every value of one position, or nothing.
+   `engine.set` is the same door `rebuild` and a measurement render use. */
+function landRide(L) {
+  const c = L.candidate;
+  if (!c) return false;
+  L.candidate = null;
+  if (c.seq < L.landedSeq) { RIDE.dropped++; return false; }
+  if (engine) for (const k of Object.keys(c.values)) engine.set("p." + k, c.values[k]);
+  L.pos = c.pos; L.landedSeq = c.seq; RIDE.landings++;
+  // THE STEP IT LANDED ON, RECORDED RATHER THAN CLAIMED. `T.step` is the
+  // SCHEDULER's pointer, so a landing at `step % 16 === 0` is a landing before
+  // the first step of a bar was scheduled — which is the invariant, and it is
+  // not observable from outside the page: sampling `p02.vox()` from a harness
+  // reads the pointer somewhere in the middle of a tick's burst.
+  RIDE.log.push({ step: T.step, bar: Math.floor(T.step / 16), ch: L.ch, dim: L.dim, pos: L.pos });
+  if (RIDE.log.length > 64) RIDE.log.shift();
+  if (L.at !== null && L.pos === L.want) L.at = null;      // the throw arrived
+  return true;
+}
+
+/* THE BAR LINE. Land what is ready, then ask for the bar after this one — so
+   a generator that takes a whole bar still has one, and a ride still lands
+   every bar rather than every other one. */
+function promoteRides(bar) {
+  let changed = false;
+  for (const k of Object.keys(RIDE.lanes)) {
+    const L = RIDE.lanes[k];
+    if (landRide(L)) changed = true;
+    const next = rideTargetAt(L, bar + 1);
+    // ASK ONCE PER POSITION. A generator slower than a bar would otherwise be
+    // re-asked at every bar line, and each new request would invalidate the
+    // one in flight — measured 2026-09-20 at `delayMs` 2600: four candidates
+    // drawn, four refused as stale, and NOTHING EVER LANDED. A staleness rule
+    // that starves the thing it protects is a livelock, not a safeguard.
+    const asked = (L.candidate && L.candidate.pos === next) || (L.inflight > 0 && L.asked === next);
+    if (next !== L.pos && !asked) generateRide(L, next);
+  }
+  if (changed) paintRides();
+  return changed;
+}
+
+/* THE HAND. Moving the control is a RIDE: it cancels any throw in flight,
+   because a hand on a control outranks a schedule exactly as `holds` does. */
+function requestRide(ch, pos, dim) {
+  const L = rideLane(ch, dim);
+  L.want = clamp(pos, 0, RIDE_SPAN);
+  L.from = L.pos; L.at = null;
+  if (!L.bars) generateRide(L, L.want);         // lands on the next bar line
+  else { L.at = rideBar() + 1; generateRide(L, rideTargetAt(L, L.at)); }
+  paintRides();
+  return L;
+}
+
+/* THE THROW. A target and a length in bars, then it glides there unattended.
+   It decides only WHEN it arrives, never WHAT changes [#64 §5]. */
+function setRideLength(ch, bars, dim) {
+  const L = rideLane(ch, dim);
+  L.bars = RIDE_LENGTHS.indexOf(bars) === -1 ? 0 : bars;
+  if (L.bars && L.want !== L.pos) { L.from = L.pos; L.at = rideBar() + 1; }
+  paintRides();
+  return L;
+}
 
 /* ---------------------------------------------------------------------------
    4d. THE VOICE PARAMETERS — THE NUMBERS INSIDE THE VOICES, DECLARED ONCE
@@ -6635,6 +6983,11 @@ function applySeed(v, spoken) {
   // only handed to the engine's dice. Everything derived from the piece is
   // rebuilt with it, before anything repaints.
   setPiece(SEED);
+  // EVERY RIDE GOES BACK TO ITS OWN ZERO, and the zero it goes back to is the
+  // NEW piece's drawn sound, which `rebuild` has just pushed into the engine.
+  // A position on the old piece's path names nothing on this one's: the
+  // waypoints are drawn from the seed [#67].
+  rideReset();
   if (engine) engine.set("seed", SEED);
   ui("seedline").textContent = "seed " + SEED;
   ui("seedin_v").textContent = String(SEED);
@@ -6768,6 +7121,7 @@ function tick() {
       applySeed(v, `seed ${v} — a different piece, from this bar.`);
     }
     if (T.step % 16 === 0) promoteFires(Math.floor(T.step / 16));
+    if (T.step % 16 === 0) promoteRides(Math.floor(T.step / 16));
     engine.scheduleStep(T.step, T.nextT, stepDur);
     uiQueue.push({ step: T.step, at: T.nextT });
     T.nextT += stepDur;
@@ -7273,6 +7627,67 @@ function leadWait(C, bar) {
    LOCK is emitted immediately after `move` because it is a value of `move`,
    and the reason line is last because it is the bar pane's tail in the bar
    pane's own track. */
+/* --- THE RIDE'S SURFACE, AND IT IS HONEST BEFORE IT IS GOOD ---------------
+   #68 says controls may stay ugly until step 5 and #69 owns the station. This
+   is one row per channel: where the sound is now, where the hand has asked
+   for, and how long it takes to get there. It is deliberately NOT a second
+   copy of the state — every number printed here is read back out of `RIDE`
+   and out of the engine, never remembered locally. */
+function rideRowsOf() {
+  return CHANNELS.map(c => ({ ch: c.ch, voice: c.voice,
+                              keys: (RIDE_SOUND[c.ch] || []).length }));
+}
+function buildRides() {
+  const box = ui("ridelist");
+  if (!box) return;
+  box.innerHTML = rideRowsOf().map(r => {
+    // A CONTROL THAT DOES NOTHING LOOKS DEAD [#64 §2]. The sub's only drawn
+    // voice field is a NAME, so the sub has no sound to ride and says so
+    // instead of offering a slider that moves nothing.
+    const dead = r.keys === 0;
+    return `<div class="ride-row${dead ? " is-dead" : ""}" id="rider${r.ch}">`
+      + `<i class="ride-nm">${r.ch} ${r.voice}</i>`
+      + `<input type="range" id="ride${r.ch}" min="0" max="${RIDE_SPAN}" step="any" value="0"`
+      + ` aria-label="ride the sound of channel ${r.ch}"${dead ? " disabled" : ""}>`
+      + `<i class="ride-v" id="ridev${r.ch}">${dead ? "no sound to ride" : "as drawn"}</i>`
+      + `<select id="ridelen${r.ch}" aria-label="glide length for channel ${r.ch}"${dead ? " disabled" : ""}>`
+      + RIDE_LENGTHS.map(b => `<option value="${b}">${b ? b + " bars" : "hand"}</option>`).join("")
+      + `</select></div>`;
+  }).join("");
+}
+function rideWord(L) {
+  if (!L) return "as drawn";
+  const at = L.pos.toFixed(2);
+  if (L.at !== null && L.want !== L.pos) return `${at} → ${L.want.toFixed(2)}`;
+  if (L.pos === 0 && L.want === 0) return "as drawn";
+  return at;
+}
+function paintRides() {
+  for (const r of rideRowsOf()) {
+    if (!r.keys) continue;
+    const L = RIDE.lanes[rideKey(r.ch, "sound")];
+    const v = ui("ridev" + r.ch);
+    if (v) v.textContent = rideWord(L);
+    // THE CONTROL FOLLOWS THE STATE. A ride asked for through `p02.rideTo` —
+    // a measurement, and from #69 a macro — is the same ride a finger asks
+    // for, and a slider left behind is the surface and the engine disagreeing
+    // about one value, which is the thing this project refuses.
+    const el = ui("ride" + r.ch);
+    if (el && L && document.activeElement !== el && parseFloat(el.value) !== L.want)
+      el.value = String(L.want);
+    const row = ui("rider" + r.ch);
+    if (row) row.classList.toggle("is-moving", !!(L && (L.want !== L.pos || L.candidate)));
+  }
+}
+function wireRides() {
+  for (const r of rideRowsOf()) {
+    if (!r.keys) continue;
+    const el = ui("ride" + r.ch), len = ui("ridelen" + r.ch);
+    if (el) el.addEventListener("input", () => requestRide(r.ch, parseFloat(el.value), "sound"));
+    if (len) len.addEventListener("change", () => setRideLength(r.ch, parseFloat(len.value), "sound"));
+  }
+}
+
 function buildChannels() {
   const box = ui("chans");
   box.innerHTML = channelHead();
@@ -8821,6 +9236,31 @@ window.p02 = {
     compositionAt(seed === undefined ? SEED : seed, PIECE, movement || MOVEMENT, bar, opts),
     seed === undefined ? SEED : seed),
   seek: bar => seek(bar),
+  /* THE RIDE, AS THE SURFACE HAS IT AND AS THE STATE HAS IT. `pos` is what
+     has LANDED and is sounding; `want` is what the hand asked for; `slider` is
+     what the control shows. Three places for one value to be wrong in, and
+     only the first one is audible. `dropped` counts the stale candidates the
+     staleness rule refused — a rig that never sees it rise has not tested it. */
+  ride: () => ({
+    span: RIDE_SPAN, lengths: RIDE_LENGTHS, seq: RIDE.seq,
+    dropped: RIDE.dropped, landings: RIDE.landings, delayMs: RIDE.delayMs,
+    bar: Math.floor(T.step / 16),
+    lanes: Object.keys(RIDE.lanes).reduce((o, k) => {
+      const L = RIDE.lanes[k];
+      o[k] = { ch: L.ch, dim: L.dim, pos: L.pos, want: L.want, bars: L.bars,
+               at: L.at, from: L.from, seq: L.seq, landedSeq: L.landedSeq,
+               inflight: L.inflight, candidate: L.candidate ? L.candidate.pos : null,
+               slider: ui("ride" + L.ch) ? parseFloat(ui("ride" + L.ch).value) : null };
+      return o;
+    }, {}),
+    fields: RIDE_SOUND, log: RIDE.log.slice()
+  }),
+  // the same doors a finger goes through, so a measurement rides what a hand
+  // would have ridden and not a number it worked out for itself.
+  rideTo: (ch, pos) => requestRide(ch, pos, "sound"),
+  rideLength: (ch, bars) => setRideLength(ch, bars, "sound"),
+  rideVector: (ch, pos) => rideVector(SEED, PIECE.vox, ch, pos),
+  rideDelay: ms => { RIDE.delayMs = ms | 0; return RIDE.delayMs; },
   /* THE DRAWN VOICE NUMBERS, TWICE, AND THIS IS THE #67 DOOR. `piece` is what
      the DRAW wrote; `engine` is what the oscillators actually read at note
      time. `set("p.<k>", v)` is the only path between them. A measurement that
@@ -8843,6 +9283,8 @@ wireFaders();
 wireHand();
 wireFires();
 wireMix();
+buildRides();
+wireRides();
 buildSections();
 buildSteps();
 buildVoices();
