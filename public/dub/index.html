@@ -4583,6 +4583,77 @@ function rideVector(seed, vox, ch, pos, lap) {
   return out;
 }
 
+/* --- RHYTHM IS THE SECOND DIMENSION, AND IT IS A DIFFERENT KIND OF SPACE ---
+   #67 §"A channel has more than one dimension". Sound is numbers in a box and
+   every point in the box is a sound. A rhythm is POSITIONS IN A LANE, and
+   half-way between two sets of positions is not obviously a lane at all — the
+   fork #64 §9 Q4 names. The answer here, and it is the reason the euclid
+   lanes are where rhythm is proved first:
+
+   THE SPACE IS (hits, rotate) AND EUCLID IS WHAT MAKES EVERY POSITION LEGAL.
+   A lane is not stored as sixteen booleans; it is `rotated(euclid(len, hits),
+   rotate)`, and `euclid` distributes any number of hits over any lane length
+   as evenly as arithmetic allows. So an intermediate lane is not a crossfade
+   between two patterns — there is no such thing — it is the SAME generator at
+   an intermediate count. Five hits between four and six is a lane in exactly
+   the sense that four and six are.
+
+   ROTATION TAKES THE SHORT WAY ROUND. A lane is a circle: from 14 to 2 is four
+   steps forward through the bar line, not twelve steps backwards through the
+   middle of it, and the twelve-step version audibly walks the hit across the
+   whole bar to arrive where it could have got to in four.
+
+   HITS ARE AN INTEGER AND THE RIDE IS NOT SMOOTH — IT MOVES IN STEPS. That is
+   not the staircase #64 §4 forbids: the staircase it forbids is a CONTINUOUS
+   quantity landing in visible jumps, and a hit count has no values between 4
+   and 5 to land on. What must not happen is a lane changing inside a bar, and
+   that is the same bar line everything else lands on.
+
+   THE KICK IS NOT HERE. `drums.kick` is a POOL OF TEMPLATES — four on the
+   floor, the leaning four, a broken three, a halftime two — and the manifest
+   says why: "No euclid can say this, which is why the kick is a template". A
+   template is a recipe, so the kick's rhythm is a JUMP, exactly as its engine
+   is. THE PITCHED VOICES ARE NOT HERE EITHER: their onsets are written by
+   `writeBass` and `writeLead` per candidate step, which is the other half of
+   the fork and belongs with #47.
+   ------------------------------------------------------------------------- */
+
+// The euclid lanes: rim, clap, hats. The kick is a template and the pitched
+// voices are written, not placed.
+const RIDE_RHYTHM = { 1: true, 2: true, 3: true };
+
+// Coordinates on D.RIDE, kept clear of the voice fields' 0..37 by a wide gap.
+const RIDE_DRUM_F = ch => 100 + (ch | 0) * 4;
+
+/* ONE RHYTHM WAYPOINT. Both fields are POOLS in the manifest — the rim's
+   position is a pool "and the reason is measured" — so a waypoint is a draw
+   from the pool the piece itself was drawn from, and a ride can only ever
+   visit positions the style allows. */
+function rhythmWaypoint(seed, ch, n, base, lap) {
+  if (!lap && n <= 0) return { hits: base.hits, rotate: base.rotate };
+  const L = STYLE.drums.lanes[ch], i = (lap | 0) * RIDE_LAP + n;
+  return { hits: drawPool(seed, D.RIDE, RIDE_DRUM_F(ch), i, L.hits),
+           rotate: drawPool(seed, D.RIDE, RIDE_DRUM_F(ch) + 1, i, L.rotate) };
+}
+
+/* THE SHORT WAY ROUND A LANE OF `len` STEPS. */
+function rotateMix(a, b, t, len) {
+  const n = len || 16;
+  let d = ((b - a) % n + n) % n;
+  if (d > n / 2) d -= n;                     // the other way is shorter
+  return ((Math.round(a + d * t) % n) + n) % n;
+}
+
+function rhythmAt(seed, ch, base, pos, lap, len) {
+  const p = Math.max(0, Math.min(RIDE_SPAN, pos));
+  const i = Math.floor(p), t = p - i;
+  const a = rhythmWaypoint(seed, ch, i, base, lap);
+  if (t === 0) return a;
+  const b = rhythmWaypoint(seed, ch, i + 1, base, lap);
+  return { hits: Math.round(a.hits + (b.hits - a.hits) * t),
+           rotate: rotateMix(a.rotate, b.rotate, t, len) };
+}
+
 /* A THROW'S POSITION AT A GIVEN BAR. `done` is bars since it started, and the
    arrival is EXACT on the last one rather than within a rounding error of it:
    a throw that ends at 3.9999 has not arrived, and the surface would have to
@@ -4692,6 +4763,12 @@ function rideLane(ch, dim) {
   const k = rideKey(ch, dim);
   return RIDE.lanes[k] || (RIDE.lanes[k] = {
     ch: ch, dim: dim || "sound",
+    // WHERE POSITION 0 IS, CAPTURED WHEN THE LANE IS FIRST TOUCHED. Sound
+    // reads `PIECE.vox`, which nothing writes; RHYTHM writes `PIECE.drums`,
+    // so the drawn lane has to be kept or "push it back and the old one
+    // returns" would return whatever the last landing left behind.
+    base: (dim === "rhythm" && PIECE.drums[ch])
+      ? { hits: PIECE.drums[ch].hits, rotate: PIECE.drums[ch].rotate } : null,
     pos: 0,            // where the ENGINE is — landed, sounding
     want: 0,           // where the hand has asked for
     bars: 0,           // glide length; 0 is the hand's own speed
@@ -4710,6 +4787,58 @@ function rideLane(ch, dim) {
 function rideReset() { RIDE.lanes = {}; }
 
 function rideBar() { return Math.floor(T.step / 16); }
+
+/* THE DIMENSIONS, AND WHAT EACH ONE MEANS BY "generate" AND "land". The
+   pipeline above is the same for all of them — that is the point of it — and
+   what differs is three functions: what a channel HAS, how a position becomes
+   a candidate, and where a landed candidate is written.
+
+   TEMPORAL CLASS, DECLARED PER DIMENSION AND NOT ASSUMED [#64 §4]:
+     sound   MATERIAL. Every value is read at note time, so it COULD land now;
+             it does not, because a kick that changes timbre half-way through
+             a bar is the tear rule 5 forbids at a smaller scale. One bar, one
+             kick sound.
+     rhythm  MATERIAL. It rewrites the pattern table every reader indexes, so
+             it may only be written when no step of the bar has been scheduled.
+   Neither is texture: nothing here is a filter under a hand. */
+const RIDE_DIMS = {
+  sound: {
+    has: ch => ((RIDE_SOUND[ch] || []).length + (RIDE_NAMES[ch] || []).length) > 0,
+    rides: ch => (RIDE_SOUND[ch] || []).length > 0,
+    make: (L, pos) => rideVector(SEED, PIECE.vox, L.ch, pos, L.lap),
+    validate: rideValidate,
+    land: (v) => { if (engine) for (const k of Object.keys(v)) engine.set("p." + k, v[k]); }
+  },
+  rhythm: {
+    has: ch => !!RIDE_RHYTHM[ch],
+    rides: ch => !!RIDE_RHYTHM[ch],
+    make: (L, pos) => rhythmAt(SEED, L.ch, L.base, pos, L.lap,
+                               PIECE.drums[L.ch] ? laneLen(PIECE.drums[L.ch]) : 16),
+    validate: (v, L) => {
+      const spec = STYLE.drums.lanes[L.ch];
+      const len = PIECE.drums[L.ch] ? laneLen(PIECE.drums[L.ch]) : 16;
+      if (!(v.hits >= 1)) return "a ride may not empty a lane: hits " + v.hits;
+      if (v.hits > len) return "hits " + v.hits + " will not fit a " + len + "-step lane";
+      if (!(v.rotate >= 0 && v.rotate < len)) return "rotate " + v.rotate + " is off the lane";
+      if (spec.hits.pool.indexOf(v.hits) === -1 && v.hits !== L.base.hits)
+        return "hits " + v.hits + " is not a count this style draws";
+      return null;
+    },
+    /* THE PATTERN TABLE IS REBUILT THE WAY A NEW PIECE REBUILDS IT, through
+       `rebuildDerived` — which is also where the PIN OVERLAY lands. So a pin
+       outranks a ride for free and by construction [#64 §9 Q3]: the ride
+       writes the lane, `applyPins` writes the hand's cells over it, and the
+       scheduler only ever sees the result. */
+    land: (v, L) => {
+      const d = PIECE.drums[L.ch];
+      if (!d) return;
+      d.hits = v.hits; d.rotate = v.rotate;
+      rebuildDerived();
+      if (engine) engine.recompose();
+      if (surfaceBuilt) { buildBarSheet(); lastHeadStep = -1; repaintSheet(); }
+    }
+  }
+};
 
 /* WHERE A LANE SHOULD SIT AT A GIVEN BAR. With no throw in flight that is
    simply where the hand is; with one, it is the glide's own position, and the
@@ -4753,8 +4882,9 @@ function generateRide(L, pos) {
     // still in flight, which is exactly the "stale candidate overwriting newer
     // user intent" #64 §4 names. `L.seq` is the last thing the hand asked for.
     if (seq < L.seq || seq <= L.landedSeq) { RIDE.dropped++; return; }
-    const values = rideVector(SEED, PIECE.vox, L.ch, pos, L.lap);
-    const bad = rideValidate(values);
+    const dim = RIDE_DIMS[L.dim];
+    const values = dim.make(L, pos);
+    const bad = dim.validate(values, L);
     if (bad) { RIDE.dropped++; say("ride on channel " + L.ch + " refused: " + bad, true); return; }
     L.candidate = { seq: seq, pos: pos, lap: L.lap, values: values };
   };
@@ -4772,7 +4902,7 @@ function landRide(L) {
   if (!c) return false;
   L.candidate = null;
   if (c.seq < L.landedSeq) { RIDE.dropped++; return false; }
-  if (engine) for (const k of Object.keys(c.values)) engine.set("p." + k, c.values[k]);
+  RIDE_DIMS[L.dim].land(c.values, L);
   L.pos = c.pos; L.landedSeq = c.seq; L.lapLanded = c.lap; RIDE.landings++;
   // THE STEP IT LANDED ON, RECORDED RATHER THAN CLAIMED. `T.step` is the
   // SCHEDULER's pointer, so a landing at `step % 16 === 0` is a landing before
@@ -4842,7 +4972,8 @@ function jumpRide(ch, dim) {
   L.want = 0; L.from = 0; L.at = null;
   generateRide(L, 0);
   paintRides();
-  say("channel " + ch + " jumped — a different sound from the next bar, and a new dimension to ride from it.");
+  say("channel " + ch + "'s " + (dim || "sound") + " jumped — somewhere unrelated from the next bar, "
+    + "and a new dimension to ride from there.");
   return L;
 }
 
@@ -7705,37 +7836,44 @@ function leadWait(C, bar) {
    and the reason line is last because it is the bar pane's tail in the bar
    pane's own track. */
 /* --- THE RIDE'S SURFACE, AND IT IS HONEST BEFORE IT IS GOOD ---------------
-   #68 says controls may stay ugly until step 5 and #69 owns the station. This
-   is one row per channel: where the sound is now, where the hand has asked
-   for, and how long it takes to get there. It is deliberately NOT a second
-   copy of the state — every number printed here is read back out of `RIDE`
-   and out of the engine, never remembered locally. */
+   #68 says controls may stay ugly until step 5 and #69 owns the station. One
+   row per CHANNEL PER DIMENSION, because a channel does not have one material
+   control: a drum lane has rhythm and a pitched voice has melody as well, and
+   a row that pretended otherwise would be the flattening #64 §5 was corrected
+   for. It is deliberately NOT a second copy of the state — every number
+   printed here is read back out of `RIDE` and out of the engine. */
+const RIDE_DIM_ORDER = ["sound", "rhythm"];
 function rideRowsOf() {
-  return CHANNELS.map(c => ({ ch: c.ch, voice: c.voice,
-                              keys: (RIDE_SOUND[c.ch] || []).length,
-                              names: (RIDE_NAMES[c.ch] || []).length }));
+  const out = [];
+  for (const c of CHANNELS) for (const dim of RIDE_DIM_ORDER) {
+    const D = RIDE_DIMS[dim];
+    if (!D.has(c.ch)) continue;              // a channel offers what it has material for
+    out.push({ ch: c.ch, voice: c.voice, dim: dim,
+               rides: D.rides(c.ch), id: dim + "_" + c.ch });
+  }
+  return out;
 }
 function buildRides() {
   const box = ui("ridelist");
   if (!box) return;
   box.innerHTML = rideRowsOf().map(r => {
     // A CONTROL THAT DOES NOTHING LOOKS DEAD [#64 §2]. The sub's only drawn
-    // voice field is a NAME, so the sub has no sound to ride and says so
+    // voice field is a NAME, so it has a dice and no dimension, and it says so
     // instead of offering a slider that moves nothing.
-    const dead = r.keys === 0;                 // nothing to RIDE; it may still jump
-    return `<div class="ride-row${dead && !r.names ? " is-dead" : ""}" id="rider${r.ch}">`
-      + `<i class="ride-nm">${r.ch} ${r.voice}</i>`
-      + `<input type="range" id="ride${r.ch}" min="0" max="${RIDE_SPAN}" step="any" value="0"`
-      + ` aria-label="ride the sound of channel ${r.ch}"${dead ? " disabled" : ""}>`
-      + `<i class="ride-v" id="ridev${r.ch}">${dead ? "jump only" : "as drawn"}</i>`
-      + `<select id="ridelen${r.ch}" aria-label="glide length for channel ${r.ch}"${dead ? " disabled" : ""}>`
+    const dead = !r.rides;
+    return `<div class="ride-row" id="rider_${r.id}">`
+      + `<i class="ride-nm">${r.ch} ${r.voice} <b>${r.dim}</b></i>`
+      + `<input type="range" id="ride_${r.id}" min="0" max="${RIDE_SPAN}" step="any" value="0"`
+      + ` aria-label="ride the ${r.dim} of channel ${r.ch}"${dead ? " disabled" : ""}>`
+      + `<i class="ride-v" id="ridev_${r.id}">${dead ? "jump only" : "as drawn"}</i>`
+      + `<select id="ridelen_${r.id}" aria-label="glide length for channel ${r.ch} ${r.dim}"${dead ? " disabled" : ""}>`
       + RIDE_LENGTHS.map(b => `<option value="${b}">${b ? b + " bars" : "hand"}</option>`).join("")
       + `</select>`
-      // THE DICE, PER CHANNEL. It is alive wherever the channel has anything
-      // drawn at all — the sub has no numbers to ride and still has a wave to
-      // land on, so its row is half dead and half alive rather than gone.
-      + `<button class="vx" id="ridejump${r.ch}"${(r.keys + r.names) ? "" : " disabled"}`
-      + ` title="throw the dice at channel ${r.ch}'s sound: somewhere unrelated,`
+      // THE DICE, PER CHANNEL PER DIMENSION. It is the only gesture that may
+      // move a NAME, and on a lane it is the only one that may reach a count
+      // the ride is not allowed to travel to.
+      + `<button class="vx" id="ridejump_${r.id}"`
+      + ` title="throw the dice at channel ${r.ch}'s ${r.dim}: somewhere unrelated,`
       + ` on the next bar, and a new dimension to ride from there">jump</button>`
       + `</div>`;
   }).join("");
@@ -7751,30 +7889,32 @@ function rideWord(L, dead) {
 }
 function paintRides() {
   for (const r of rideRowsOf()) {
-    if (!r.keys && !r.names) continue;
-    const L = RIDE.lanes[rideKey(r.ch, "sound")];
-    const v = ui("ridev" + r.ch);
-    if (v) v.textContent = rideWord(L, !r.keys);
-    if (!r.keys) continue;
+    const L = RIDE.lanes[rideKey(r.ch, r.dim)];
+    const v = ui("ridev_" + r.id);
+    if (v) v.textContent = rideWord(L, !r.rides);
+    const row = ui("rider_" + r.id);
+    if (row) {
+      row.classList.toggle("is-dead", !r.rides);
+      row.classList.toggle("is-moving", !!(L && r.rides && (L.want !== L.pos || L.candidate)));
+    }
+    if (!r.rides) continue;
     // THE CONTROL FOLLOWS THE STATE. A ride asked for through `p02.rideTo` —
     // a measurement, and from #69 a macro — is the same ride a finger asks
     // for, and a slider left behind is the surface and the engine disagreeing
     // about one value, which is the thing this project refuses.
-    const el = ui("ride" + r.ch);
+    const el = ui("ride_" + r.id);
     if (el && L && document.activeElement !== el && parseFloat(el.value) !== L.want)
       el.value = String(L.want);
-    const row = ui("rider" + r.ch);
-    if (row) row.classList.toggle("is-moving", !!(L && (L.want !== L.pos || L.candidate)));
   }
 }
 function wireRides() {
   for (const r of rideRowsOf()) {
-    const jump = ui("ridejump" + r.ch);
-    if (jump && (r.keys + r.names)) jump.addEventListener("click", () => jumpRide(r.ch, "sound"));
-    if (!r.keys) continue;
-    const el = ui("ride" + r.ch), len = ui("ridelen" + r.ch);
-    if (el) el.addEventListener("input", () => requestRide(r.ch, parseFloat(el.value), "sound"));
-    if (len) len.addEventListener("change", () => setRideLength(r.ch, parseFloat(len.value), "sound"));
+    const jump = ui("ridejump_" + r.id);
+    if (jump) jump.addEventListener("click", () => jumpRide(r.ch, r.dim));
+    if (!r.rides) continue;
+    const el = ui("ride_" + r.id), len = ui("ridelen_" + r.id);
+    if (el) el.addEventListener("input", () => requestRide(r.ch, parseFloat(el.value), r.dim));
+    if (len) len.addEventListener("change", () => setRideLength(r.ch, parseFloat(len.value), r.dim));
   }
 }
 
@@ -9340,18 +9480,29 @@ window.p02 = {
       o[k] = { ch: L.ch, dim: L.dim, pos: L.pos, want: L.want, bars: L.bars, lap: L.lap,
                at: L.at, from: L.from, seq: L.seq, landedSeq: L.landedSeq,
                inflight: L.inflight, candidate: L.candidate ? L.candidate.pos : null,
-               slider: ui("ride" + L.ch) ? parseFloat(ui("ride" + L.ch).value) : null };
+               slider: ui("ride_" + L.dim + "_" + L.ch)
+                 ? parseFloat(ui("ride_" + L.dim + "_" + L.ch).value) : null };
       return o;
     }, {}),
     fields: RIDE_SOUND, names: RIDE_NAMES, log: RIDE.log.slice()
   }),
   // the same doors a finger goes through, so a measurement rides what a hand
   // would have ridden and not a number it worked out for itself.
-  rideTo: (ch, pos) => requestRide(ch, pos, "sound"),
-  rideLength: (ch, bars) => setRideLength(ch, bars, "sound"),
+  rideTo: (ch, pos, dim) => requestRide(ch, pos, dim || "sound"),
+  rideLength: (ch, bars, dim) => setRideLength(ch, bars, dim || "sound"),
   rideVector: (ch, pos, lap) => rideVector(SEED, PIECE.vox, ch, pos,
     lap === undefined ? ((RIDE.lanes[ch + ":sound"] || {}).lap || 0) : lap),
-  rideJump: ch => jumpRide(ch, "sound"),
+  rideJump: (ch, dim) => jumpRide(ch, dim || "sound"),
+  // what a rhythm position IS, asked of the pure layer — the lane's own
+  // (hits, rotate), not the pattern the table ended up with after the pins.
+  rhythmAt: (ch, pos, lap) => {
+    const L = RIDE.lanes[rideKey(ch, "rhythm")];
+    const base = L ? L.base : { hits: PIECE.drums[ch].hits, rotate: PIECE.drums[ch].rotate };
+    return rhythmAt(SEED, ch, base, pos, lap === undefined ? (L ? L.lap : 0) : lap,
+                    laneLen(PIECE.drums[ch]));
+  },
+  lane: ch => ({ hits: PIECE.drums[ch].hits, rotate: PIECE.drums[ch].rotate,
+                 len: laneLen(PIECE.drums[ch]), pattern: (DRUM_PAT[ch] || []).join("") }),
   rideDelay: ms => { RIDE.delayMs = ms | 0; return RIDE.delayMs; },
   /* THE DRAWN VOICE NUMBERS, TWICE, AND THIS IS THE #67 DOOR. `piece` is what
      the DRAW wrote; `engine` is what the oscillators actually read at note

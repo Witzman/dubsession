@@ -108,6 +108,7 @@ const exported = [
   'RIDE_SPAN', 'RIDE_LENGTHS', 'RIDE_SOUND', 'RIDE_NAMES', 'RIDE_LAP',
   'rideWaypoint', 'rideValue', 'rideVector', 'rideMix', 'rideGeometric',
   'rideName', 'throwPosition', 'VOX', 'VOX_KEYS',
+  'RIDE_RHYTHM', 'rhythmWaypoint', 'rhythmAt', 'rotateMix',
 ];
 const L = new Function(`${region}\n; return { ${exported.join(', ')} };`)();
 ok(typeof L.compositionAt === 'function', 'the region evaluates and exports the layer');
@@ -1476,6 +1477,70 @@ group('the ride');
       ok(L.RIDE_LAP > L.RIDE_SPAN * 2, 'and the stride is wide enough that two laps cannot share one',
          `stride ${L.RIDE_LAP}, span ${L.RIDE_SPAN}`);
     }
+  /* 8. RHYTHM — THE OTHER KIND OF SPACE. Sound is numbers in a box; a rhythm
+     is positions in a lane, and the claim that makes an in-between legal is
+     that a lane IS `rotated(euclid(len, hits), rotate)` and euclid distributes
+     any count evenly. So this asks what every position actually produces. */
+  {
+    ok(Object.keys(L.RIDE_RHYTHM).join(',') === '1,2,3',
+       'rhythm rides the euclid lanes — the kick is a template and is a jump');
+    let illegal = 0, emptied = 0, offlane = 0; const firstBad = [];
+    let distinct = new Set();
+    for (let i = 0; i < 24; i++) {
+      const seed = seedOf(i), piece = L.draw(seed);
+      for (const ch of [1, 2, 3]) {
+        if (piece.empty[ch]) continue;
+        const base = { hits: piece.drums[ch].hits, rotate: piece.drums[ch].rotate };
+        const len = L.laneLen(piece.drums[ch]);
+        for (let lap = 0; lap <= 2; lap++) for (let p = 0; p <= 40; p++) {
+          const pos = p * L.RIDE_SPAN / 40;
+          const r = L.rhythmAt(seed, ch, base, pos, lap, len);
+          if (!(r.hits >= 1)) { emptied++; if (firstBad.length < 3) firstBad.push(`ch${ch} hits ${r.hits} at ${pos}`); }
+          if (r.hits > len) illegal++;
+          if (!(r.rotate >= 0 && r.rotate < len)) offlane++;
+          // and the lane it makes is a real lane of the right size
+          const pat = L.lanePat({ hits: r.hits, rotate: r.rotate, len: len === 16 ? 0 : len });
+          if (pat.length !== len) illegal++;
+          if (pat.reduce((a, x) => a + x, 0) !== Math.min(r.hits, len)) illegal++;
+          if (ch === 3) distinct.add(pat.join(''));
+        }
+      }
+    }
+    ok(emptied === 0, 'NO POSITION OF A RHYTHM RIDE EMPTIES A LANE', emptied ? firstBad.join(' | ') : '24 seeds x 3 laps x 41 positions');
+    ok(illegal === 0, 'every position is a lane of the right length with the hits it claims');
+    ok(offlane === 0, 'and the rotation never leaves the lane');
+    ok(distinct.size > 3, 'the hats actually travel through different lanes', `${distinct.size} distinct patterns`);
+
+    // POSITION 0 IS THE DRAWN LANE, and a lap is a different path.
+    {
+      const seed = seedOf(5), piece = L.draw(seed);
+      let drift = 0, sameLap = 0;
+      for (const ch of [1, 2, 3]) {
+        const base = { hits: piece.drums[ch].hits, rotate: piece.drums[ch].rotate };
+        const at0 = L.rhythmAt(seed, ch, base, 0, 0, 16);
+        if (at0.hits !== base.hits || at0.rotate !== base.rotate) drift++;
+        for (let n = 0; n <= L.RIDE_SPAN; n++) {
+          const a = L.rhythmWaypoint(seed, ch, n, base, 0), b = L.rhythmWaypoint(seed, ch, n, base, 1);
+          if (a.hits === b.hits && a.rotate === b.rotate) sameLap++;
+        }
+      }
+      ok(drift === 0, 'position 0 of a rhythm is the lane as it was drawn');
+      ok(sameLap <= 3, 'and a jump is a different path here too',
+         `${sameLap} of 15 waypoints coincided — pools are small, so some collision is arithmetic, not a shared coordinate`);
+    }
+
+    // THE SHORT WAY ROUND. From 14 to 2 is four steps forward over the bar
+    // line, not twelve backwards through the middle of the bar.
+    {
+      ok(L.rotateMix(14, 2, 0.5, 16) === 0, 'a rotation takes the short way round',
+         `14 -> 2 passes through ${L.rotateMix(14, 2, 0.5, 16)}, not 8`);
+      ok(L.rotateMix(14, 2, 1, 16) === 2 && L.rotateMix(14, 2, 0, 16) === 14,
+         'and it arrives, and it starts where it started');
+      ok(L.rotateMix(2, 14, 0.5, 16) === 0, 'the same two positions the other way round meet at the same place');
+      ok(L.rotateMix(0, 6, 0.5, 12) === 3, 'a lane with its own length rotates in its own length');
+    }
+  }
+
     // A JUMP CANNOT EMPTY A CHANNEL: it draws voice fields, and whether a
     // channel sounds at all is the composition's. [#68]
     {
