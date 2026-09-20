@@ -105,8 +105,9 @@ const exported = [
   // #67 — the ride. The path, the interpolation and the throw's schedule are
   // pure; the bar line they land on and the races are section 6b's and are
   // measured in a browser, not here.
-  'RIDE_SPAN', 'RIDE_LENGTHS', 'RIDE_SOUND', 'rideWaypoint', 'rideValue',
-  'rideVector', 'rideMix', 'rideGeometric', 'throwPosition', 'VOX', 'VOX_KEYS',
+  'RIDE_SPAN', 'RIDE_LENGTHS', 'RIDE_SOUND', 'RIDE_NAMES', 'RIDE_LAP',
+  'rideWaypoint', 'rideValue', 'rideVector', 'rideMix', 'rideGeometric',
+  'rideName', 'throwPosition', 'VOX', 'VOX_KEYS',
 ];
 const L = new Function(`${region}\n; return { ${exported.join(', ')} };`)();
 ok(typeof L.compositionAt === 'function', 'the region evaluates and exports the layer');
@@ -1328,6 +1329,7 @@ group('the ride');
         const v = L.rideVector(seed, piece.vox, ch, pos);
         for (const k of Object.keys(v)) {
           const r = L.STYLE.vox[k].range;
+          if (!r) continue;                       // a name: checked against its pool below
           if (!(v[k] >= r[0] - 1e-9 && v[k] <= r[1] + 1e-9)) {
             outside++;
             if (firstOut.length < 3) firstOut.push(`${k} ${v[k]} outside [${r}] at ${pos.toFixed(2)}`);
@@ -1348,6 +1350,9 @@ group('the ride');
       const v = L.rideVector(seed, piece.vox, ch, 0);
       for (const k of Object.keys(v)) if (v[k] !== piece.vox[k]) drift++;
     }
+    // ...including the names, which lap 0 does not touch at all
+    for (const ch of Object.keys(L.RIDE_NAMES)) for (const k of L.RIDE_NAMES[ch])
+      if (L.rideName(seed, k, piece.vox[k], 0) !== piece.vox[k]) drift++;
   }
   ok(drift === 0, 'position 0 returns the drawn piece bit for bit', `${RIDE_SEEDS} seeds`);
 
@@ -1357,11 +1362,11 @@ group('the ride');
     const seed = seedOf(3), piece = L.draw(seed);
     const a = L.rideVector(seed, piece.vox, 0, 2), b = L.rideVector(seed, piece.vox, 0, 2);
     const same = Object.keys(a).every(k => a[k] === b[k]);
-    const isWaypoint = Object.keys(a).every(k =>
-      a[k] === L.rideWaypoint(seed, k, 2, piece.vox[k]));
+    const isWaypoint = L.RIDE_SOUND[0].every(k =>
+      a[k] === L.rideWaypoint(seed, k, 2, piece.vox[k], 0));
     ok(same && isWaypoint, 'an integer position IS a waypoint, and the path is a fact about the seed');
     const other = L.rideVector(seedOf(4), L.draw(seedOf(4)).vox, 0, 2);
-    ok(Object.keys(a).some(k => a[k] !== other[k]), 'and a different seed rides a different path');
+    ok(L.RIDE_SOUND[0].some(k => a[k] !== other[k]), 'and a different seed rides a different path');
   }
 
   // 4. MONOTONE BETWEEN WAYPOINTS. A ride that overshoots and comes back is
@@ -1429,6 +1434,56 @@ group('the ride');
     ok(Math.abs(per - 0.25) < 1e-12, 'and every bar of it travels the same distance',
        `${per} of 2 per bar over 8 bars`);
     ok(L.throwPosition(2, 0, 4, 2) === 1, 'a throw downward is the same schedule backwards');
+  }
+
+  /* 7. THE JUMP. A recipe is not a number: every `pool` row in the voice table
+     is a jump field and no `pool` row is ridable. A jump is a LAP, and a lap
+     is a different path — not the same path entered at another point. */
+  {
+    const pools = L.VOX_KEYS.filter(k => L.STYLE.vox[k].pool);
+    const named = Object.keys(L.RIDE_NAMES).reduce((a, ch) => a.concat(L.RIDE_NAMES[ch]), []);
+    const ridden = Object.keys(L.RIDE_SOUND).reduce((a, ch) => a.concat(L.RIDE_SOUND[ch]), []);
+    ok(pools.every(k => named.indexOf(k) !== -1) && named.every(k => pools.indexOf(k) !== -1),
+       'every recipe in the voice table is a jump field, and only recipes are',
+       named.join(', '));
+    ok(named.every(k => ridden.indexOf(k) === -1), 'and no recipe is ridable');
+
+    let illegal = 0, moved = 0;
+    for (let i = 0; i < 12; i++) {
+      const seed = seedOf(i), piece = L.draw(seed);
+      for (let lap = 1; lap <= 6; lap++) {
+        for (const ch of Object.keys(L.RIDE_NAMES)) for (const k of L.RIDE_NAMES[ch]) {
+          const v = L.rideName(seed, k, piece.vox[k], lap);
+          if (L.STYLE.vox[k].pool.indexOf(v) === -1) illegal++;
+          if (v !== piece.vox[k]) moved++;
+        }
+      }
+    }
+    ok(illegal === 0, 'a jumped recipe is always one the engine has', '12 seeds x 6 laps');
+    ok(moved > 0, 'and the dice does move it', `${moved} of the drawn recipes changed`);
+
+    // A LAP IS A DIFFERENT PATH. Waypoint 1 of lap 1 must not be waypoint 1 of
+    // lap 0 — otherwise a jump would only rename the place you were already in.
+    {
+      const seed = seedOf(7), piece = L.draw(seed);
+      let same = 0, tried = 0;
+      for (const ch of Object.keys(L.RIDE_SOUND)) for (const k of L.RIDE_SOUND[ch])
+        for (let n = 0; n <= L.RIDE_SPAN; n++) {
+          tried++;
+          if (L.rideWaypoint(seed, k, n, piece.vox[k], 1) === L.rideWaypoint(seed, k, n, piece.vox[k], 0)) same++;
+        }
+      ok(same === 0, 'a lap is a different path, waypoint for waypoint', `${tried} waypoints compared`);
+      ok(L.RIDE_LAP > L.RIDE_SPAN * 2, 'and the stride is wide enough that two laps cannot share one',
+         `stride ${L.RIDE_LAP}, span ${L.RIDE_SPAN}`);
+    }
+    // A JUMP CANNOT EMPTY A CHANNEL: it draws voice fields, and whether a
+    // channel sounds at all is the composition's. [#68]
+    {
+      const seed = seedOf(9), piece = L.draw(seed);
+      const touched = Object.keys(L.rideVector(seed, piece.vox, 0, 0, 3));
+      ok(touched.every(k => L.VOX[k] !== undefined),
+         'a jump touches voice fields only — it cannot empty a channel', touched.join(', '));
+    }
   }
 }
 

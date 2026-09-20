@@ -110,7 +110,7 @@
      nothing is DEAD and says why. --- */
   #rides { margin: 12px 0 16px; border-top: 1px solid var(--line); padding-top: 10px; }
   #ridestate { color: var(--dim); font-size: 12px; }
-  .ride-row { display: grid; grid-template-columns: 92px minmax(0, 1fr) 104px 84px;
+  .ride-row { display: grid; grid-template-columns: 92px minmax(0, 1fr) 104px 84px 58px;
               gap: 8px; align-items: center; padding: 2px 0; }
   .ride-nm { font-size: 11px; color: var(--dim); font-style: normal; }
   .ride-v { font-size: 11px; color: var(--dim); font-style: normal; text-align: right;
@@ -119,9 +119,18 @@
   .ride-row.is-dead { opacity: .45; }
   .ride-row select { border: 1px solid var(--line); background: var(--panel);
                      color: var(--ink); font: inherit; font-size: 11px; padding: 4px 2px; }
+  /* A BUTTON LOOKS LIKE A BUTTON. `jump` without a border read as a word in a
+     row of words in the first screenshot of this section. */
+  .ride-row button { font-size: 11px; padding: 5px 4px; min-height: 32px;
+                     border: 1px solid var(--line); background: var(--panel); color: var(--ink); }
+  /* The iPad is a target (#59, #43), and a 32 px target is not one under a
+     finger. The desk's own rule is 44. */
+  @media (pointer: coarse) {
+    .ride-row button, .ride-row select { min-height: 44px; }
+  }
   .ride-row input[type=range] { min-width: 0; }
   @media (max-width: 700px) {
-    .ride-row { grid-template-columns: 78px minmax(0, 1fr) 84px 72px; }
+    .ride-row { grid-template-columns: 70px minmax(0, 1fr) 76px 68px 52px; }
   }
   /* `.row` — a 150 px label beside a slider beside a 78 px readout — WAS THE
      WHOLE OF THE PAGE BELOW THE SHEET, and §2 of the grammar rejects it by
@@ -4499,16 +4508,42 @@ const RIDE_GEOMETRIC = { leadAttack: 1, leadTail: 1, leadTone: 1, boomDecay: 1 }
 const rideGeometric = k => !!RIDE_GEOMETRIC[k]
   || (VOX[k] && (VOX[k].unit === "Hz" || VOX[k].unit === "s"));
 
+/* THE NAMES, AND THEY ARE JUMPS. A recipe is not a number: there is no
+   position half-way between a 909 and a boom, between a triangle and a square,
+   or between an FM ratio of 4 and one of 14. Every `pool` row in the voice
+   table is here and no `pool` row is in `RIDE_SOUND` above. `rhodesRatio` is a
+   pool of numbers and is still a recipe — 4, 7 and 14 are three different
+   instruments and 5.5 is none of them. */
+const RIDE_NAMES = {
+  0: ["kickEngine"], 1: ["rimWave"], 2: [], 3: [], 4: [],
+  5: ["subWave"], 6: ["stabEngine", "rhodesRatio"], 7: [], R: []
+};
+
 const RIDE_FIELD_I = VOX_KEYS.reduce((o, k, i) => (o[k] = i, o), {});
+
+/* THE LAP. A JUMP is the other way to move [#64 §5]: it lands somewhere
+   unrelated rather than travelling there, and what it lands on becomes the new
+   zero of a NEW path. `lap` is how many times this channel has been thrown the
+   dice, and it is the high digits of the waypoint index, so lap 1's waypoints
+   are nowhere near lap 0's. A stride far larger than RIDE_SPAN means two laps
+   can never share a waypoint. */
+const RIDE_LAP = 1024;
 
 /* ONE WAYPOINT. Waypoint 0 is the piece's own value and is returned
    unchanged — not redrawn, which would only be equal by luck. Every other
    waypoint is `drawRange` over the SAME `STYLE.vox` entry, so a waypoint
    cannot leave the range the manifest declares for that field, and a
    quantised field stays on its own steps. */
-function rideWaypoint(seed, key, n, base) {
-  if (n <= 0) return base;
-  return drawRange(seed, D.RIDE, RIDE_FIELD_I[key], n, STYLE.vox[key]);
+function rideWaypoint(seed, key, n, base, lap) {
+  if (!lap && n <= 0) return base;          // lap 0, position 0 IS the piece
+  return drawRange(seed, D.RIDE, RIDE_FIELD_I[key], (lap | 0) * RIDE_LAP + n, STYLE.vox[key]);
+}
+
+/* A NAME AT A LAP. At lap 0 it is the piece's own — the dice has not been
+   thrown at this channel, so nothing about its recipe has changed. */
+function rideName(seed, key, base, lap) {
+  if (!lap) return base;
+  return drawPool(seed, D.RIDE, RIDE_FIELD_I[key], (lap | 0) * RIDE_LAP, STYLE.vox[key]);
 }
 
 /* ONE POSITION. `t === 0` returns the lower waypoint IDENTICALLY — the whole
@@ -4525,21 +4560,26 @@ function rideMix(key, a, b, t) {
   return q ? Math.round(v / q) * q : v;
 }
 
-function rideValue(seed, key, base, pos) {
+function rideValue(seed, key, base, pos, lap) {
   const p = Math.max(0, Math.min(RIDE_SPAN, pos));
   const i = Math.floor(p), t = p - i;
-  const a = rideWaypoint(seed, key, i, base);
-  return t === 0 ? a : rideMix(key, a, rideWaypoint(seed, key, i + 1, base), t);
+  const a = rideWaypoint(seed, key, i, base, lap);
+  return t === 0 ? a : rideMix(key, a, rideWaypoint(seed, key, i + 1, base, lap), t);
 }
 
 /* THE WHOLE CHANNEL AT ONE POSITION, AS ONE OBJECT. It is built whole and
    applied whole: half a vector from one position and half from another is the
    partial application #64 §4 forbids, and the cheapest way not to have one is
    never to hold half of it. */
-function rideVector(seed, vox, ch, pos) {
+function rideVector(seed, vox, ch, pos, lap) {
   const out = {};
+  const base = k => (vox && vox[k] !== undefined) ? vox[k] : VOX[k].def;
   for (const k of (RIDE_SOUND[ch] || []))
-    out[k] = rideValue(seed, k, (vox && vox[k] !== undefined) ? vox[k] : VOX[k].def, pos);
+    out[k] = rideValue(seed, k, base(k), pos, lap);
+  // The names come with the vector rather than beside it, so a landing is one
+  // object and cannot be half a recipe with the other half's numbers.
+  for (const k of (RIDE_NAMES[ch] || []))
+    out[k] = rideName(seed, k, base(k), lap);
   return out;
 }
 
@@ -4658,6 +4698,8 @@ function rideLane(ch, dim) {
     from: 0,           // a throw in flight: where it started
     at: null,          // ...and the bar it started on
     seq: 0, landedSeq: 0,
+    lap: 0,            // how many times the dice was thrown at this channel
+    lapLanded: 0,      // ...and which lap the engine is actually playing
     asked: null,       // the position a generation is in flight FOR
     candidate: null, inflight: 0
   });
@@ -4685,6 +4727,13 @@ function rideTargetAt(L, bar) {
 function rideValidate(values) {
   for (const k of Object.keys(values)) {
     const v = values[k], spec = STYLE.vox[k];
+    // A NAME IS VALIDATED AGAINST ITS POOL, NOT AGAINST A RANGE. A recipe that
+    // is not in the pool has no voice to play it, and the engine would say so
+    // in `silences` one bar later with the sound already gone.
+    if (spec && spec.pool) {
+      if (spec.pool.indexOf(v) === -1) return k + " " + v + " is not one of its recipes";
+      continue;
+    }
     if (!isFinite(v)) return k + " is not a number";
     if (spec && spec.range && (v < spec.range[0] - 1e-9 || v > spec.range[1] + 1e-9))
       return k + " " + v + " is outside its drawn range [" + spec.range + "]";
@@ -4704,13 +4753,13 @@ function generateRide(L, pos) {
     // still in flight, which is exactly the "stale candidate overwriting newer
     // user intent" #64 §4 names. `L.seq` is the last thing the hand asked for.
     if (seq < L.seq || seq <= L.landedSeq) { RIDE.dropped++; return; }
-    const values = rideVector(SEED, PIECE.vox, L.ch, pos);
+    const values = rideVector(SEED, PIECE.vox, L.ch, pos, L.lap);
     const bad = rideValidate(values);
     if (bad) { RIDE.dropped++; say("ride on channel " + L.ch + " refused: " + bad, true); return; }
-    L.candidate = { seq: seq, pos: pos, values: values };
+    L.candidate = { seq: seq, pos: pos, lap: L.lap, values: values };
   };
   L.inflight++;
-  L.asked = pos;
+  L.asked = pos; L.askedLap = L.lap;
   // The delay is a TEST DOOR and never a musical timer: at 0 the candidate
   // exists before this function returns.
   if (RIDE.delayMs > 0) setTimeout(make, RIDE.delayMs); else make();
@@ -4724,7 +4773,7 @@ function landRide(L) {
   L.candidate = null;
   if (c.seq < L.landedSeq) { RIDE.dropped++; return false; }
   if (engine) for (const k of Object.keys(c.values)) engine.set("p." + k, c.values[k]);
-  L.pos = c.pos; L.landedSeq = c.seq; RIDE.landings++;
+  L.pos = c.pos; L.landedSeq = c.seq; L.lapLanded = c.lap; RIDE.landings++;
   // THE STEP IT LANDED ON, RECORDED RATHER THAN CLAIMED. `T.step` is the
   // SCHEDULER's pointer, so a landing at `step % 16 === 0` is a landing before
   // the first step of a bar was scheduled — which is the invariant, and it is
@@ -4750,8 +4799,13 @@ function promoteRides(bar) {
     // one in flight — measured 2026-09-20 at `delayMs` 2600: four candidates
     // drawn, four refused as stale, and NOTHING EVER LANDED. A staleness rule
     // that starves the thing it protects is a livelock, not a safeguard.
-    const asked = (L.candidate && L.candidate.pos === next) || (L.inflight > 0 && L.asked === next);
-    if (next !== L.pos && !asked) generateRide(L, next);
+    const asked = (L.candidate && L.candidate.pos === next && L.candidate.lap === L.lap)
+               || (L.inflight > 0 && L.asked === next && L.askedLap === L.lap);
+    // A JUMP CHANGES NOTHING ABOUT THE POSITION AND EVERYTHING ABOUT THE
+    // PLACE: lap 1 position 0 and lap 0 position 0 are different sounds, so
+    // the lap is part of "is the engine where it should be", not only the
+    // position.
+    if ((next !== L.pos || L.lapLanded !== L.lap) && !asked) generateRide(L, next);
   }
   if (changed) paintRides();
   return changed;
@@ -4766,6 +4820,29 @@ function requestRide(ch, pos, dim) {
   if (!L.bars) generateRide(L, L.want);         // lands on the next bar line
   else { L.at = rideBar() + 1; generateRide(L, rideTargetAt(L, L.at)); }
   paintRides();
+  return L;
+}
+
+/* THE JUMP — THE OTHER GESTURE [#64 §5]. The dice for ONE channel: it lands
+   somewhere unrelated rather than travelling there, it is the only thing that
+   may move a NAME, and where it lands becomes the zero of a new path, so the
+   control comes back to 0 and the hand rides on from the new place.
+
+   IT CANNOT EMPTY A CHANNEL, and that answers half of #68's question here: a
+   voice number and a recipe are all this gesture touches, while whether a
+   channel sounds at all is the composition's (`present`, `empty`) and belongs
+   to the global roll. The other half — a RHYTHM jump that draws a lane with no
+   hits — is decided where rhythm is built.
+
+   IT LANDS ON A BAR LINE like everything else. A jump is not an excuse to cut
+   the bar that is playing. */
+function jumpRide(ch, dim) {
+  const L = rideLane(ch, dim);
+  L.lap++;
+  L.want = 0; L.from = 0; L.at = null;
+  generateRide(L, 0);
+  paintRides();
+  say("channel " + ch + " jumped — a different sound from the next bar, and a new dimension to ride from it.");
   return L;
 }
 
@@ -7635,7 +7712,8 @@ function leadWait(C, bar) {
    and out of the engine, never remembered locally. */
 function rideRowsOf() {
   return CHANNELS.map(c => ({ ch: c.ch, voice: c.voice,
-                              keys: (RIDE_SOUND[c.ch] || []).length }));
+                              keys: (RIDE_SOUND[c.ch] || []).length,
+                              names: (RIDE_NAMES[c.ch] || []).length }));
 }
 function buildRides() {
   const box = ui("ridelist");
@@ -7644,30 +7722,40 @@ function buildRides() {
     // A CONTROL THAT DOES NOTHING LOOKS DEAD [#64 §2]. The sub's only drawn
     // voice field is a NAME, so the sub has no sound to ride and says so
     // instead of offering a slider that moves nothing.
-    const dead = r.keys === 0;
-    return `<div class="ride-row${dead ? " is-dead" : ""}" id="rider${r.ch}">`
+    const dead = r.keys === 0;                 // nothing to RIDE; it may still jump
+    return `<div class="ride-row${dead && !r.names ? " is-dead" : ""}" id="rider${r.ch}">`
       + `<i class="ride-nm">${r.ch} ${r.voice}</i>`
       + `<input type="range" id="ride${r.ch}" min="0" max="${RIDE_SPAN}" step="any" value="0"`
       + ` aria-label="ride the sound of channel ${r.ch}"${dead ? " disabled" : ""}>`
-      + `<i class="ride-v" id="ridev${r.ch}">${dead ? "no sound to ride" : "as drawn"}</i>`
+      + `<i class="ride-v" id="ridev${r.ch}">${dead ? "jump only" : "as drawn"}</i>`
       + `<select id="ridelen${r.ch}" aria-label="glide length for channel ${r.ch}"${dead ? " disabled" : ""}>`
       + RIDE_LENGTHS.map(b => `<option value="${b}">${b ? b + " bars" : "hand"}</option>`).join("")
-      + `</select></div>`;
+      + `</select>`
+      // THE DICE, PER CHANNEL. It is alive wherever the channel has anything
+      // drawn at all — the sub has no numbers to ride and still has a wave to
+      // land on, so its row is half dead and half alive rather than gone.
+      + `<button class="vx" id="ridejump${r.ch}"${(r.keys + r.names) ? "" : " disabled"}`
+      + ` title="throw the dice at channel ${r.ch}'s sound: somewhere unrelated,`
+      + ` on the next bar, and a new dimension to ride from there">jump</button>`
+      + `</div>`;
   }).join("");
 }
-function rideWord(L) {
-  if (!L) return "as drawn";
+function rideWord(L, dead) {
+  if (!L) return dead ? "jump only" : "as drawn";
+  const lap = L.lap ? ` · jump ${L.lap}` : "";
+  if (dead) return L.lap ? `jump ${L.lap}` : "jump only";
   const at = L.pos.toFixed(2);
-  if (L.at !== null && L.want !== L.pos) return `${at} → ${L.want.toFixed(2)}`;
-  if (L.pos === 0 && L.want === 0) return "as drawn";
-  return at;
+  if (L.at !== null && L.want !== L.pos) return `${at} → ${L.want.toFixed(2)}${lap}`;
+  if (L.pos === 0 && L.want === 0) return "as drawn" + lap;
+  return at + lap;
 }
 function paintRides() {
   for (const r of rideRowsOf()) {
-    if (!r.keys) continue;
+    if (!r.keys && !r.names) continue;
     const L = RIDE.lanes[rideKey(r.ch, "sound")];
     const v = ui("ridev" + r.ch);
-    if (v) v.textContent = rideWord(L);
+    if (v) v.textContent = rideWord(L, !r.keys);
+    if (!r.keys) continue;
     // THE CONTROL FOLLOWS THE STATE. A ride asked for through `p02.rideTo` —
     // a measurement, and from #69 a macro — is the same ride a finger asks
     // for, and a slider left behind is the surface and the engine disagreeing
@@ -7681,6 +7769,8 @@ function paintRides() {
 }
 function wireRides() {
   for (const r of rideRowsOf()) {
+    const jump = ui("ridejump" + r.ch);
+    if (jump && (r.keys + r.names)) jump.addEventListener("click", () => jumpRide(r.ch, "sound"));
     if (!r.keys) continue;
     const el = ui("ride" + r.ch), len = ui("ridelen" + r.ch);
     if (el) el.addEventListener("input", () => requestRide(r.ch, parseFloat(el.value), "sound"));
@@ -9247,19 +9337,21 @@ window.p02 = {
     bar: Math.floor(T.step / 16),
     lanes: Object.keys(RIDE.lanes).reduce((o, k) => {
       const L = RIDE.lanes[k];
-      o[k] = { ch: L.ch, dim: L.dim, pos: L.pos, want: L.want, bars: L.bars,
+      o[k] = { ch: L.ch, dim: L.dim, pos: L.pos, want: L.want, bars: L.bars, lap: L.lap,
                at: L.at, from: L.from, seq: L.seq, landedSeq: L.landedSeq,
                inflight: L.inflight, candidate: L.candidate ? L.candidate.pos : null,
                slider: ui("ride" + L.ch) ? parseFloat(ui("ride" + L.ch).value) : null };
       return o;
     }, {}),
-    fields: RIDE_SOUND, log: RIDE.log.slice()
+    fields: RIDE_SOUND, names: RIDE_NAMES, log: RIDE.log.slice()
   }),
   // the same doors a finger goes through, so a measurement rides what a hand
   // would have ridden and not a number it worked out for itself.
   rideTo: (ch, pos) => requestRide(ch, pos, "sound"),
   rideLength: (ch, bars) => setRideLength(ch, bars, "sound"),
-  rideVector: (ch, pos) => rideVector(SEED, PIECE.vox, ch, pos),
+  rideVector: (ch, pos, lap) => rideVector(SEED, PIECE.vox, ch, pos,
+    lap === undefined ? ((RIDE.lanes[ch + ":sound"] || {}).lap || 0) : lap),
+  rideJump: ch => jumpRide(ch, "sound"),
   rideDelay: ms => { RIDE.delayMs = ms | 0; return RIDE.delayMs; },
   /* THE DRAWN VOICE NUMBERS, TWICE, AND THIS IS THE #67 DOOR. `piece` is what
      the DRAW wrote; `engine` is what the oscillators actually read at note
