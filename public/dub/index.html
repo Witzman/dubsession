@@ -48,12 +48,18 @@
     margin: 0; padding: 24px 16px; background: var(--bg); color: var(--ink);
     font: 13px/1.5 ui-monospace, SFMono-Regular, Menlo, monospace;
   }
-  /* THE PAGE IS AS WIDE AS THE GRID NEEDS, AND NOTHING ELSE IS.
-     `the channels` is a grid of eleven columns and wants the room; every other
+  /* THE PAGE IS AS WIDE AS THE INSTRUMENT NEEDS, AND NOTHING ELSE IS.
+     The nine-channel station wants the room; every other
      block keeps the 720 px measure it has always had. The narrow measure is
      applied BY EXCLUSION rather than by a class, so a block added later
      inherits it without having to know this rule exists. */
-  main { max-width: 1240px; margin: 0 auto; }
+  main { max-width: 1240px; margin: 0 auto; display: flex; flex-direction: column; }
+  main > h1 { order: 1; } main > .top { order: 2; }
+  main > #movenow { order: 3; } main > #status { order: 4; }
+  main > #piecebar { order: 5; } main > #fires { order: 6; }
+  main > #chanbox { order: 7; } main > #bars { order: 8; }
+  main > #steps { order: 9; } main > #barbox { order: 10; }
+  main > #drawers { order: 11; } main > #perf { order: 12; }
   /* THE MEASURE, AND THE THREE THINGS IT DOES NOT APPLY TO. Prose is read, so
      it is capped at a line length a person can read. THE SHEET IS NOT READ, IT
      IS PLAYED: the bar pane and the desk are
@@ -104,12 +110,8 @@
   .fire-micros button { padding: 7px 4px; font-size: 11px; }
   #fires button.is-wait { border-style: dashed; border-color: var(--time); color: var(--time); }
   #fires button.is-landed { border-color: var(--hot); color: var(--hot); }
-  /* --- THE RIDE. One row per channel: the name, the dimension itself, where
-     it is, and how long a throw takes. Ugly and honest until #69 builds the
-     station; the grammar rule it does keep is that a control which can do
-     nothing is DEAD and says why. --- */
-  #rides { margin: 12px 0 16px; border-top: 1px solid var(--line); padding-top: 10px; }
-  #ridestate { color: var(--dim); font-size: 12px; }
+  /* A MATERIAL RAIL names the ride, its position and the length of its glide.
+     A control which can do nothing is DEAD and says why. */
   .ride-row { display: grid; grid-template-columns: 116px minmax(0, 1fr) 104px 84px 58px;
               gap: 8px; align-items: center; padding: 2px 0; }
   .ride-nm { font-size: 11px; color: var(--dim); font-style: normal; white-space: nowrap; }
@@ -222,55 +224,10 @@
   td { padding: 2px 8px 2px 0; color: var(--ink); vertical-align: top; }
   td.n { color: var(--hot); text-align: right; }
   td.why { color: var(--dim); }
-  /* --- PANE 2, THE DESK — channel x parameter  (surface-grammar §2, §3) -----
-     THE SAME NINE ROWS, THE SAME ORDER, THE SAME NAME COLUMN AS THE BAR. Two
-     panes of ONE sheet, never two grids that happen to look alike: `#chans` is
-     a FLAT grid exactly as `#barsheet` is, its first track is the same 104 px
-     and its last is the same `minmax(150px, 210px)`, so the channel names and
-     the reason lines line up down the page across both panes.
-
-     A ROW IS `display: contents`. The element is kept — `#ch0` is what carries
-     `hushed`, `silent` and `frozen`, and three painters address it by id — but
-     it does not generate a box, so its eleven cells are placed directly in the
-     one grid. A per-row grid of its own is the thing `channel-grid.md` §3
-     proved drifts.
-
-     WHAT WAS HERE BEFORE: `.row`'s successor — a 150 px label beside a slider
-     beside a 78 px readout, folded into twelve tracks. §2 rejects that format
-     by name, and the value that could be moved is ONE OBJECT now: a `.strip`,
-     the same widget the drawers use, with the number printed inside it.
-     --------------------------------------------------------------------- */
-  #chanbox { margin: 16px 0 8px; }
-  #chans {
-    display: grid; align-items: center; row-gap: 2px; column-gap: 6px;
-    /* EVERY WIDTH HERE IS A MEASUREMENT. The first and last tracks are the bar
-       pane's own, to the pixel, because the two panes are one sheet. `in` is
-       five characters; `m · s` is two 26 px latches and their gap; `phr` is one
-       digit and a release; LOCK is four letters. Everything else is `fr`,
-       because a strip is the only cell on the row whose width is worth
-       spending on. */
-    grid-template-columns:
-      104px                 /* channel — the bar pane's name column, to the px */
-      minmax(0, 2fr)        /* fader */
-      74px                  /* in */
-      62px                  /* m · s */
-      minmax(0, 1fr)        /* chance */
-      66px                  /* phr */
-      minmax(0, 1fr)        /* move */
-      52px                  /* LOCK */
-      minmax(0, 1fr)        /* echo */
-      minmax(0, 1fr)        /* room */
-      minmax(150px, 210px); /* why it is not sounding — the bar pane's tail */
-  }
-  .chan { display: contents; }
-  /* THE SPINE. One header, at the top, in the same eleven tracks as every row,
-     so a name sits over its column and cannot drift from it. */
-  .ghead i { font-style: normal; color: var(--dim); font-size: 11px; letter-spacing: .07em;
-             padding-bottom: 4px; border-bottom: 1px solid var(--line); align-self: stretch; }
+  /* --- SHARED CHANNEL CONTROL PRIMITIVES -------------------------------- */
   .g-id { display: flex; align-items: center; gap: 6px; color: var(--ink);
           font-size: 12px; white-space: nowrap; min-width: 0; }
   .g-id .nm { overflow: hidden; text-overflow: ellipsis; }
-  .ghead .g-id { display: block; }
   .g-in { color: var(--dim); font-size: 11px; font-style: normal; white-space: nowrap; }
   .g-mix { display: flex; align-items: center; gap: 4px; }
   /* M AND S. Two latches wearing the page's one latch look rather than a third
@@ -289,9 +246,7 @@
      release. It keeps its track either way: state changes ink, never layout. */
   .vcell { display: flex; align-items: center; gap: 3px; min-width: 0; }
   .vcell .strip { flex: 1; min-width: 0; }
-  /* THE VERB'S NAME LIVES IN THE COLUMN HEADER, printed once instead of
-     forty-five times. It comes back into the cell only where there are no
-     columns left to name. */
+  /* Verb names sit with their controls inside the channel disclosure. */
   .vcell .vl { display: none; font-style: normal; color: var(--dim); font-size: 11px;
                letter-spacing: .06em; }
   /* A WAY BACK OUT IS NOT A CONTROL YOU AIM AT, so it has no edge (§7.1: only
@@ -303,16 +258,13 @@
   .vx:disabled, .vx:disabled:hover, .rel:disabled, .rel:disabled:hover {
     color: var(--inert); border: 0; background: transparent; cursor: default; }
   .rel { font-size: 10px; letter-spacing: .06em; min-width: 24px; }
-  /* LOCK IS A VALUE OF `move`, NOT A SECOND CONTROL, so it has no name of its
-     own in the header: it sits in the track immediately right of `move`, under
-     that word, and says what it is on its own face. */
+  /* LOCK is a value of `move`, not a second control. */
   .vk { width: 100%; padding: 4px 2px; font-size: 10px; line-height: 1.2;
         min-height: 24px; background: transparent; letter-spacing: .04em; }
   .vk[aria-pressed="true"], .vk[aria-pressed="true"]:hover {
     background: var(--ink); color: var(--bg); border-color: var(--ink); }
-  /* THE TAIL SAYS WHY THE ROW IS NOT SOUNDING, in the bar pane's own tail
-     column and drawn the same way, because it answers the same question. */
-  .cwhy, .ghead .g-why { color: var(--dim); font-size: 11px; line-height: 1.25;
+  /* The channel says why it is not sounding. */
+  .cwhy { color: var(--dim); font-size: 11px; line-height: 1.25;
           display: flex; align-items: center; padding-left: 8px; }
   .cwhy:empty::before { content: "\00a0"; }
   .desk-foot { display: flex; align-items: baseline; gap: 14px; flex-wrap: wrap;
@@ -488,23 +440,8 @@
      is exempt from `main`'s 720 px cap as a whole, and everything inside it
      that is prose takes the cap back explicitly. */
   #sections { margin-top: 14px; max-width: 720px; }
-  /* THE IPAD, AND EVERY DESKTOP UNDER 1201. THE SAME LAYOUT, NOT A SECOND ONE:
-     the same eleven columns in the same order, and only the track widths move.
-     A layout that differs between the two targets is two sets of muscle memory
-     for one instrument (§3). MEASURED at 1024 with a touch pointer: the four
-     `fr` cells come out 72 px and the strips inside them 52 px, which holds
-     `0.85` with its 7 px right inset; the first and last tracks resolve to the
-     same 104 px and 210 px the bar pane above gets, which is what makes the
-     two panes one sheet rather than two grids. */
+  /* THE DRAWERS FOLD WITHOUT CHANGING THEIR READING ORDER. */
   @media (max-width: 1200px) {
-    #chans {
-      grid-template-columns:
-        104px minmax(0, 1.6fr) 66px 60px minmax(0, 1fr) 58px minmax(0, 1fr)
-        48px minmax(0, 1fr) minmax(0, 1fr) minmax(150px, 210px);
-      column-gap: 5px;
-    }
-    .vk { font-size: 9px; letter-spacing: 0; padding: 4px 1px; }
-    .mx { min-width: 26px; padding: 3px 4px; }
     /* FOUR CELLS ACROSS STOPS BEING FOUR CELLS ACROSS at the width the drawers
        need it, and the spines tighten with them. */
     .grid4 { grid-template-columns: repeat(2, minmax(0, 1fr)); }
@@ -513,51 +450,10 @@
     .spine .rule { flex: 0 0 20px; }
     .spine .moved { width: 140px; letter-spacing: .04em; }
   }
-  /* THE STACKED FORM. PHONE IS NOT A TARGET — the two are 1280 desktop and
-     1024 with a touch pointer — but a page that scrolls sideways is one defect
-     too many (#43), and eleven columns cannot survive under about 860 px: the
-     four `fr` tracks fall under 40 px and a grid track narrower than its cell
-     does not wrap, it OVERFLOWS into its neighbour. So below that the row goes
-     back to being its own box and folds, with the same cells in the same
-     order, and the column names come back into the cells because there are no
-     columns left for a header to point at.
-
-     THE NUMBER IS MEASURED, NOT GUESSED, AND IT IS NOT THE ONE ANYBODY WOULD
-     HAVE PICKED: the eleven columns survive to 901 px and fail at 861, where
-     the `chance` cell wants 44 px in a 42 px track. A grid track narrower than
-     its cell does not wrap, it OVERFLOWS into its neighbour, and nothing but
-     asking the browser for `scrollWidth` against `clientWidth` on every cell
-     finds it — it was found that way here, one pixel sweep at a time. */
+  /* FIRE WRAPS BEFORE ITS LABELS COLLIDE. */
   @media (max-width: 900px) {
     .fire-macros { grid-template-columns: repeat(2, minmax(0, 1fr)); }
     .fire-micros { grid-template-columns: repeat(3, minmax(0, 1fr)); }
-    #chans { display: block; max-width: 660px; }
-    .chan {
-      display: grid; align-items: center;
-      grid-template-columns: repeat(4, minmax(0, 1fr));
-      grid-template-areas:
-        "id id mix mix"
-        "fad fad fad in"
-        "chance chance phrase phrase"
-        "move move move lock"
-        "delay delay reverb reverb"
-        "why why why why";
-      column-gap: 6px; row-gap: 3px;
-      border-top: 1px solid var(--line); padding: 7px 0 6px;
-    }
-    .chan:first-of-type { border-top: 0; }
-    .g-id { grid-area: id; } .g-fad { grid-area: fad; } .g-in { grid-area: in; }
-    .g-mix { grid-area: mix; justify-self: end; } .g-chance { grid-area: chance; }
-    .g-phrase { grid-area: phrase; } .g-move { grid-area: move; }
-    .g-lock { grid-area: lock; } .g-delay { grid-area: delay; }
-    .g-reverb { grid-area: reverb; } .g-why { grid-area: why; padding-left: 0; }
-    .ghead { display: none; }
-    .vcell { display: block; }
-    .vcell .vl { display: block; }
-    .vcell .strip { display: block; }
-    /* the `×` goes back beside the name it releases, because a block cell has
-       no row to sit at the end of */
-    .vcell .vx { float: right; margin-top: -18px; position: relative; }
   }
   @media (max-width: 560px) {
     .fire-macros { grid-template-columns: minmax(0, 1fr); }
@@ -575,7 +471,7 @@
   }
   @media (pointer: coarse), (hover: none) {
     /* A FINGER IS ONE OF THE TWO POINTERS THIS IS PLAYED WITH. Every latch on
-       the desk grows to a finger; the strip and the named steps grow with
+       the station grows to a finger; the strip and the named steps grow with
        them; nothing else about any of them changes. */
     .mx { padding: 6px 6px; min-height: 30px; }
     .vk { padding: 8px 2px; min-height: 30px; }
@@ -589,6 +485,125 @@
     button.sm { padding: 9px 13px; }
     summary.spine { min-height: 50px; }
     .fire-unit button, .fire-micros button, .fire-unit select { min-height: 44px; }
+  }
+  /* THE STATION. The old channel-by-parameter spreadsheet put nine musicians
+     down the page and five identical sliders across it. The ride mechanic now
+     exists, so each musician gets one vertical strip and every musical verb
+     gets its own silhouette: rail, meter, dial, plane, latch or disclosure. */
+  #chanbox { margin: 16px 0 22px; }
+  #chans { display: grid; grid-template-columns: repeat(9, minmax(0, 1fr));
+           gap: 6px; align-items: stretch; }
+  #chans .chan { display: flex; flex-direction: column; min-width: 0;
+                 border: 1px solid var(--line); padding: 7px; background: #100e0c; }
+  .chan-head { display: flex; justify-content: space-between; align-items: center;
+               gap: 4px; min-height: 32px; border-bottom: 1px solid var(--line);
+               padding-bottom: 6px; }
+  .chan-head .g-id { gap: 4px; min-width: 0; text-transform: uppercase;
+                     letter-spacing: .06em; }
+  .chan-head .slot { color: var(--time); min-width: 12px; }
+  .chan-head .nm { overflow: hidden; text-overflow: ellipsis; }
+  .chan-head .g-rel { display: none; }
+  .chan-head .g-mix { gap: 2px; }
+  .chan-head .mx { min-width: 25px; padding: 4px; }
+
+  .g-rides { min-height: 160px; padding: 8px 0 6px; border-bottom: 1px solid var(--line); }
+  .ride-row { display: block; padding: 0 0 8px; }
+  .ride-head { display: flex; justify-content: space-between; gap: 4px; align-items: baseline; }
+  .ride-nm { text-transform: uppercase; letter-spacing: .09em; }
+  .ride-v { max-width: 72px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .ride-row > input[type=range] { display: block; width: 100%; height: 18px;
+                                  margin: 2px 0 3px; accent-color: var(--time); }
+  .ride-actions { display: grid; grid-template-columns: minmax(0, 1fr) auto; gap: 3px; }
+  .ride-row select { width: 100%; min-width: 0; height: 26px; padding: 1px;
+                     background: transparent; }
+  .ride-row .ride-die { min-height: 26px; padding: 2px 5px; border: 1px solid var(--line);
+                        background: var(--panel); font-size: 10px; text-transform: uppercase; }
+  .ride-none { color: var(--inert); font-size: 10px; padding-top: 22px; }
+
+  .chan-controls { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr));
+                   gap: 7px 5px; padding: 8px 0; min-width: 0; }
+  .control { min-width: 0; }
+  .control-name { display: block; color: var(--dim); font-style: normal; font-size: 9px;
+                  letter-spacing: .12em; text-transform: uppercase; margin-bottom: 3px; }
+  .level-control .strip { height: 50px; background: linear-gradient(90deg,
+      transparent 0 48%, var(--line) 48% 52%, transparent 52%); }
+  .level-control .strip .fill { height: 5px; }
+  .level-control .strip .v { right: 4px; top: 10px; transform: none; }
+  .density-control .vcell { display: block; }
+  .density-control .vl, .density-control .vx { display: none; }
+  .density-control .strip { height: 50px; border: 0; border-bottom: 1px solid var(--line);
+    background: repeating-linear-gradient(90deg, transparent 0 8%, var(--line) 8% 10%); }
+  .density-control .strip .fill { height: 100%; opacity: .34;
+    background: repeating-linear-gradient(90deg, var(--ink) 0 8%, transparent 8% 10%); }
+  .density-control .strip .v { right: 3px; top: 8px; transform: none; }
+  .density-control .strip.is-dead { border: 1px dotted var(--inert); background: none; }
+  .tone-control { min-height: 74px; }
+  .tone-fixed { display: grid; place-items: center; width: 100%; max-width: 52px;
+                aspect-ratio: 1;
+                margin: 0 auto; border: 1px dotted var(--inert); border-radius: 50%;
+                color: var(--inert); font-size: 9px; text-align: center; }
+  .tone-control .unit { display: block; }
+  .tone-control .unit > .t { display: none; }
+  .tone-control .unit .strip { width: 52px; height: 52px; margin: 0 auto;
+      border-radius: 50%; background: conic-gradient(var(--ink) var(--dial, 50%), var(--line) 0); }
+  .tone-control .unit .strip::after { content: ""; position: absolute; inset: 7px;
+      border-radius: 50%; background: var(--bg); pointer-events: none; }
+  .tone-control .unit .strip .fill { display: none; }
+  .tone-control .unit .strip .v { z-index: 1; inset: 0; display: grid; place-items: center;
+                                  transform: none; font-size: 9px; text-align: center; }
+  .tone-control .unit .why { display: none; }
+  #d_voices, #d_movers { display: none; }
+  .space-control { min-height: 74px; }
+  .spacepad { position: relative; width: 100%; max-width: 58px; height: 58px; margin: 0 auto;
+              border: 1px solid var(--line); touch-action: none; cursor: crosshair;
+              background: linear-gradient(90deg, transparent 49%, var(--line) 50%, transparent 51%),
+                          linear-gradient(transparent 49%, var(--line) 50%, transparent 51%); }
+  .spacepad:focus { outline: 1px solid var(--hot); outline-offset: 2px; }
+  .spacepad.is-dead { border-style: dotted; border-color: var(--inert); cursor: default; }
+  .spacepad .vcell { display: none; }
+  .space-axis { position: absolute; color: var(--dim); font-size: 8px; pointer-events: none; }
+  .echo-axis { left: 3px; bottom: 1px; }
+  .room-axis { left: 2px; top: 2px; writing-mode: vertical-rl; transform: rotate(180deg); }
+  .space-dot { position: absolute; width: 8px; height: 8px; border: 1px solid var(--hot);
+               border-radius: 50%; transform: translate(-50%, 50%); left: 0; bottom: 0;
+               pointer-events: none; }
+  .space-clear { position: absolute; right: 1px; top: 1px; border: 0; background: transparent;
+                 color: var(--dim); padding: 1px 3px; font-size: 8px; }
+  .channel-deep { border-top: 1px solid var(--line); padding-top: 5px; }
+  .channel-deep summary { font-size: 9px; color: var(--dim); overflow-wrap: anywhere; }
+  .deep-grid { display: grid; gap: 5px; padding-top: 5px; }
+  .deep-grid .vcell .vl { display: block; }
+  .deep-grid .vcell .vx { float: right; margin-top: -20px; position: relative; }
+  .deep-grid .g-in { color: var(--dim); font-size: 9px; font-style: normal; }
+  .voice-detail { display: grid; gap: 6px; }
+  .voice-detail .unit .t { color: var(--dim); font-size: 9px; }
+  .voice-detail .unit .why { display: none; }
+  .voice-detail .strip { height: 34px; }
+  .mod-detail { display: grid; gap: 6px; }
+  .mod-detail .unit .t, .mod-detail .unit .why { color: var(--dim); font-size: 9px; }
+  .mod-detail .strip { height: 34px; }
+  .cwhy { min-height: 32px; padding: 5px 0 0; margin-top: auto; border-top: 1px solid var(--line);
+          font-size: 9px; line-height: 1.25; }
+  .chan.hushed { opacity: .55; }
+  .desk-foot { margin-top: 8px; }
+
+  @media (max-width: 1100px) {
+    #chans { gap: 4px; }
+    #chans .chan { padding: 5px; }
+    .chan-head .nm { font-size: 10px; }
+    .g-rides { min-height: 175px; }
+    .ride-v { max-width: 54px; font-size: 9px; }
+    .ride-row .ride-die { padding: 2px 3px; }
+    .spacepad { width: 100%; max-width: 52px; height: 58px; }
+  }
+  @media (pointer: coarse), (hover: none) {
+    .chan-head { flex-wrap: wrap; }
+    .chan-head .g-id, .chan-head .g-mix { width: 100%; }
+    .chan-head .g-mix { display: grid; grid-template-columns: 1fr 1fr; }
+    .chan-head .mx { min-width: 44px; min-height: 44px; }
+    .ride-actions { grid-template-columns: minmax(44px, 1fr) 44px; }
+    .ride-row select, .ride-row .ride-die { min-width: 44px; min-height: 44px; }
+    .channel-deep summary { min-height: 44px; display: flex; align-items: center; }
   }
   /* THE ONE LINE THAT MUST BE READ, so it is ink and not an accent. */
   #status { color: var(--ink); min-height: 1.5em; margin: 8px 0 0; }
@@ -633,11 +648,6 @@
     </div>
   </section>
 
-  <section id="rides" aria-label="ride the sound">
-    <div class="fire-head"><b>RIDE</b><span id="ridestate">material is a dimension — push it and it travels; jump lands somewhere unrelated</span></div>
-    <div id="ridelist"></div>
-  </section>
-
   <div id="bars">bar — · step —</div>
   <div id="steps"></div>
 
@@ -659,27 +669,14 @@
     <div id="barsheet"></div>
   </section>
 
-  <!-- ============================================== PANE 2 — THE DESK ===
-       THE SAME NINE ROWS, THE SAME ORDER, THE SAME NAME COLUMN as the bar
-       above it. Two panes of ONE sheet, never two grids that happen to look
-       alike: the first track and the last are the bar pane's own, so a
-       channel is one place on the page and its reason line is one column.
-
-       It is a `<section>` and not a `<fieldset>` any more. §2: a fieldset
-       with a legend is not a unit of an instrument — the unit is the row and
-       the spine — and the legend was the only thing saying which latency
-       this block carries, which is a caption's job.
-
-       THE LATENCY IS SAID ONCE, AT THE TOP, and it is carried by POSITION
-       (§7.2): the fader and the two latches beside it land NOW, and every
-       composition verb on the row — including the two sends, because they
-       come through the hand's bar-rate door — lands ON THE BAR.
-       =================================================================== -->
-  <section id="chanbox">
-    <div class="pane-head"><b>THE DESK</b>
-      <span class="pane-note">nine channels, the same nine rows · fader,
-        <b>M</b> and <b>S</b> land now · chance, phrase, move, LOCK and the two
-        sends land <i class="t">on the bar</i></span></div>
+  <!-- THE STATION. Nine musicians under one clock. Material rails, faders,
+       density meters, tone dials and space planes are different objects
+       because they have different musical consequences. Slower controls are
+       one tap into their own channel, never in a global parameter table. -->
+  <section id="chanbox" aria-label="performance station">
+    <div class="pane-head"><b>THE STATION</b>
+      <span class="pane-note">nine musicians under one clock · material and space
+        land <i class="t">on the bar</i> · level, tone and mute land now</span></div>
     <div id="chans"></div>
     <div class="desk-foot">
       <button id="reset" class="sm">faders back to the manifest</button>
@@ -739,7 +736,7 @@
 
     <details class="drawer" id="d_room">
       <summary class="spine" id="sp_room">
-        <span class="nmx">room · 8</span><span class="rule"></span>
+        <span class="nmx">room · 7</span><span class="rule"></span>
         <span class="moved" id="mv_room">at the manifest</span>
         <span class="digest" id="dg_room"></span>
         <span class="refuse" id="rf_room" hidden></span>
@@ -843,7 +840,7 @@
          =================================================================== -->
     <details class="drawer" id="d_voices">
       <summary class="spine" id="sp_voices">
-        <span class="nmx">voices · 9</span><span class="rule"></span>
+        <span class="nmx">voices · 7</span><span class="rule"></span>
         <span class="moved" id="mv_voices">at the recipe</span>
         <span class="digest" id="dg_voices"></span>
         <span class="refuse" id="rf_voices" hidden></span>
@@ -7743,9 +7740,7 @@ function paintSpan(spanEl, tickEl, inp, mod, base, now) {
 function verbCell(ch, v, dead) {
   const id = v.p + "_" + ch;
   const d = dead ? " disabled" : "";
-  // The label is NOT in the cell: it is the column header, printed once. It is
-  // still emitted, because below 860 px there are no columns left to name and
-  // the cell has to say what it is again.
+  // The label belongs to this shaped control, alongside its value.
   return `<div class="vcell g-${v.p}">`
     + `<i class="vl">${v.label}</i>`
     + `<label class="strip${dead ? " is-dead" : ""}" id="hc_${id}"${dead ? ' data-dead="1"' : ""}>`
@@ -7757,30 +7752,6 @@ function verbCell(ch, v, dead) {
     + `</label>`
     + `<button class="vx" id="hx_${id}" title="release ${v.label} on channel ${ch}"`
     + ` aria-label="release ${v.label} on channel ${ch}" disabled>×</button>`
-    + `</div>`;
-}
-
-/* THE COLUMN NAMES, PRINTED ONCE. The header is a `.chan` like every other
-   row — `display: contents`, eleven cells, the same eleven tracks — so a name
-   cannot drift from its column, and the reason line gets a name too, which it
-   never had while it was a loose third line under a block. `lock` is
-   deliberately blank: LOCK is a value of `move` and not a column of its own,
-   and being the one cell on the row with nothing written over it is the whole
-   of that distinction.
-
-   THE HEADER WORDS ARE SHORTER THAN THE ARIA LABELS, ON PURPOSE. `echo` over
-   a 72 px track; "echo send channel 6" into a screen reader. Two audiences,
-   two lengths, one source. */
-const COL_WORD = { chance: "chance", phrase: "phr", move: "move",
-                   delay: "echo", reverb: "room" };
-function channelHead() {
-  return `<div class="chan ghead" id="chhead">`
-    + `<i class="g-id">channel</i>`
-    + `<i class="g-fad">fader</i><i class="g-in">in</i>`
-    + `<i class="g-mix">m · s</i>`
-    + VERBS.map(v => `<i class="g-${v.p}">${COL_WORD[v.p]}</i>`
-        + (v.p === "move" ? `<i class="g-lock"></i>` : "")).join("")
-    + `<i class="g-why">why it is not sounding</i>`
     + `</div>`;
 }
 
@@ -7969,23 +7940,10 @@ function leadWait(C, bar) {
   return phase >= cyc ? (cyc * 2 - phase) : null;
 }
 
-/* ONE CHANNEL IS ONE ROW OF THE SHEET, and its eleven cells are placed
-   directly in `#chans`' one grid — the row element is `display: contents`, so
-   it still exists to carry `hushed`, `silent` and `frozen` and to be addressed
-   by id, and it generates no box of its own. A per-row grid is what
-   `channel-grid.md` §3 proved drifts.
-
-   THE ORDER IS THE MOCKUP'S, AND IT IS THE ORDER OF THE COLUMNS:
-     channel · fader · in · m s · chance · phr · move · LOCK · echo · room · why
-   LOCK is emitted immediately after `move` because it is a value of `move`,
-   and the reason line is last because it is the bar pane's tail in the bar
-   pane's own track. */
-/* --- THE RIDE'S SURFACE, AND IT IS HONEST BEFORE IT IS GOOD ---------------
-   #68 says controls may stay ugly until step 5 and #69 owns the station. One
-   row per CHANNEL PER DIMENSION, because a channel does not have one material
-   control: a drum lane has rhythm and a pitched voice has melody as well, and
-   a row that pretended otherwise would be the flattening #64 §5 was corrected
-   for. It is deliberately NOT a second copy of the state — every number
+/* --- MATERIAL RAILS -------------------------------------------------------
+   One rail per CHANNEL PER DIMENSION, because a channel does not have one
+   material control: a drum lane has rhythm and a pitched voice has melody as
+   well. It is deliberately NOT a second copy of the state — every number
    printed here is read back out of `RIDE` and out of the engine. */
 const RIDE_DIM_ORDER = ["sound", "rhythm", "melody"];
 function rideRowsOf() {
@@ -7998,30 +7956,37 @@ function rideRowsOf() {
   }
   return out;
 }
-function buildRides() {
-  const box = ui("ridelist");
-  if (!box) return;
-  box.innerHTML = rideRowsOf().map(r => {
+function rideControl(r) {
     // A CONTROL THAT DOES NOTHING LOOKS DEAD [#64 §2]. The sub's only drawn
     // voice field is a NAME, so it has a dice and no dimension, and it says so
     // instead of offering a slider that moves nothing.
     const dead = !r.rides;
     return `<div class="ride-row" id="rider_${r.id}">`
-      + `<i class="ride-nm">${r.ch} ${r.voice} <b>${r.dim}</b></i>`
+      + `<div class="ride-head"><i class="ride-nm"><b>${r.dim}</b></i>`
+      + `<i class="ride-v" id="ridev_${r.id}">${dead ? "jump only" : "as drawn"}</i></div>`
       + `<input type="range" id="ride_${r.id}" min="0" max="${RIDE_SPAN}" step="any" value="0"`
       + ` aria-label="ride the ${r.dim} of channel ${r.ch}"${dead ? " disabled" : ""}>`
-      + `<i class="ride-v" id="ridev_${r.id}">${dead ? "jump only" : "as drawn"}</i>`
+      + `<div class="ride-actions">`
       + `<select id="ridelen_${r.id}" aria-label="glide length for channel ${r.ch} ${r.dim}"${dead ? " disabled" : ""}>`
       + RIDE_LENGTHS.map(b => `<option value="${b}">${b ? b + " bars" : "hand"}</option>`).join("")
       + `</select>`
       // THE DICE, PER CHANNEL PER DIMENSION. It is the only gesture that may
       // move a NAME, and on a lane it is the only one that may reach a count
       // the ride is not allowed to travel to.
-      + `<button class="vx" id="ridejump_${r.id}"`
+      + `<button class="ride-die" id="ridejump_${r.id}"`
       + ` title="throw the dice at channel ${r.ch}'s ${r.dim}: somewhere unrelated,`
-      + ` on the next bar, and a new dimension to ride from there">jump</button>`
-      + `</div>`;
-  }).join("");
+      + ` on the next bar, and a new dimension to ride from there">dice</button>`
+      + `</div></div>`;
+}
+function buildRides() {
+  const rows = rideRowsOf();
+  for (const c of CHANNELS) {
+    const box = ui("rides_" + c.ch);
+    if (!box) continue;
+    const mine = rows.filter(r => r.ch === c.ch);
+    box.innerHTML = mine.length ? mine.map(rideControl).join("")
+      : '<div class="ride-none">no material to ride</div>';
+  }
 }
 function rideWord(L, dead) {
   if (!L) return dead ? "jump only" : "as drawn";
@@ -8068,7 +8033,7 @@ function wireRides() {
 
 function buildChannels() {
   const box = ui("chans");
-  box.innerHTML = channelHead();
+  box.innerHTML = "";
   for (const c of CHANNELS) {
     const ch = c.ch;
     const empty = !!PIECE.empty[ch];
@@ -8080,16 +8045,31 @@ function buildChannels() {
     const el = document.createElement("div");
     el.className = "chan";
     el.id = "ch" + ch;
+    const chance = VERBS.find(v => v.p === "chance");
+    const phrase = VERBS.find(v => v.p === "phrase");
+    const move = VERBS.find(v => v.p === "move");
+    const delay = VERBS.find(v => v.p === "delay");
+    const reverb = VERBS.find(v => v.p === "reverb");
     el.innerHTML =
       // THE ROW'S WAY BACK OUT SITS WITH THE ROW'S NAME. It releases the five
       // values this channel can hold at once, so it belongs in the cell that
       // says which channel that is; `release all` at the top does the page.
       // Disabled when there is nothing held — inert, reading nothing.
-      `<div class="g-id"><span class="nm">${ch} ${empty ? "—" : c.voice}</span>`
+      `<header class="chan-head"><div class="g-id"><span class="slot">${ch}</span>`
+      + `<span class="nm">${empty ? "—" : c.voice}</span>`
       + `<button class="vx rel g-rel" id="hr_${ch}"`
       + ` title="release every value you are holding on channel ${ch} — it goes`
       + ` back under the schedule on the next bar"`
       + ` aria-label="release channel ${ch}" disabled>rel</button></div>`
+      + `<span class="g-mix">`
+      + `<button class="mx mu" id="mu${ch}" aria-pressed="false"`
+      + ` title="mute channel ${ch}; its fader stays where the hand left it"${empty ? " disabled" : ""}>M</button>`
+      + `<button class="mx so" id="so${ch}" aria-pressed="false"`
+      + ` title="solo channel ${ch}; press again for the whole mix"${empty ? " disabled" : ""}>S</button>`
+      + `</span></header>`
+      + `<div class="g-rides" id="rides_${ch}"></div>`
+      + `<div class="chan-controls"><div class="control level-control">`
+      + `<i class="control-name">level</i>`
       // THE FADER IS A STRIP LIKE EVERY OTHER CONTINUOUS VALUE, and the number
       // printed inside it IS `lvl<ch>` — the element that used to sit in a
       // column of its own beside it. One value, one object, printed once.
@@ -8106,30 +8086,37 @@ function buildChannels() {
       + ` step="any" value="${lvl}" aria-label="fader channel ${ch}"${empty ? " disabled" : ""}>`
       + `<span class="fill"></span><span class="span" id="fadm${ch}" hidden></span>`
       + `<i class="tick" id="fadt${ch}" hidden></i>`
-      + `<i class="v n" id="lvl${ch}">${lvl.toFixed(3)}</i></label>`
+      + `<i class="v n" id="lvl${ch}">${lvl.toFixed(3)}</i></label></div>`
+      + `<div class="control density-control"><i class="control-name">density</i>`
+      + verbCell(ch, chance, dead) + `</div>`
+      + `<div class="control tone-control" id="tone_${ch}"><i class="control-name">tone</i>`
+      + `<span class="tone-fixed">${ch === 5 ? "no filter" : "fixed"}</span></div>`
+      + `<div class="control space-control"><i class="control-name">space</i>`
+      + `<div class="spacepad${dead ? " is-dead" : ""}" id="space_${ch}"`
+      + ` tabindex="${dead ? -1 : 0}" role="application"`
+      + ` aria-label="channel ${ch} space: left and right set echo, up and down set room"`
+      + `${dead ? ' aria-disabled="true"' : ""}>`
+      + `<span class="space-axis echo-axis">echo →</span>`
+      + `<span class="space-axis room-axis">room →</span>`
+      + verbCell(ch, delay, dead) + verbCell(ch, reverb, dead)
+      + `<i class="space-dot" id="spacedot_${ch}"></i>`
+      + `<button class="space-clear" id="spaceclear_${ch}" title="release echo and room"`
+      + `${dead ? " disabled" : ""}>rel</button></div></div></div>`
+      + `<details class="channel-deep"><summary>cycle · initiative</summary>`
+      + `<div class="deep-grid">` + verbCell(ch, phrase, dead) + verbCell(ch, move, dead)
+      + `<button class="vk g-lock" id="hk_${ch}" aria-pressed="false"`
+      + ` title="hold channel ${ch} on one bar for ever. Press again to release."`
+      + `${dead ? " disabled" : ""}>LOCK</button>`
+      + `<i class="g-in">input ${ch === "R" ? "—" : (INPUT_GAIN[ch] || 1).toFixed(3)}</i>`
+      + `<div class="voice-detail" id="voice_detail_${ch}"></div>`
+      + `<div class="mod-detail" id="mod_detail_${ch}"></div>`
+      + `</div></details>`
       // THE INPUT TRIM IS THE CHANNEL'S, NOT THE HAND'S: it is what the
       // manifest set this voice's gain to before the fader ever touched it,
       // and it never moves. A readout has no box (§7.1).
-      + `<i class="g-in">${ch === "R" ? "—" : (INPUT_GAIN[ch] || 1).toFixed(3)}</i>`
-      + `<span class="g-mix">`
-      + `<button class="mx mu" id="mu${ch}" aria-pressed="false"`
-      + ` title="mute channel ${ch}. NOT a fader at zero: the fader keeps the`
-      + ` position your hand set and the step is simply not scheduled, so`
-      + ` un-muting comes back to where you were."${empty ? " disabled" : ""}>M</button>`
-      + `<button class="mx so" id="so${ch}" aria-pressed="false"`
-      + ` title="solo channel ${ch}. One at a time — pressing another moves it,`
-      + ` pressing this one again clears it. The noise floor goes with it, because`
-      + ` a floor under a soloed voice is not that voice."${empty ? " disabled" : ""}>S</button>`
-      + `</span>`
       // LOCK is a value of `move` and not a second control, so it has no name
       // in the header: it sits in the track immediately right of `move`, under
       // that word, and says what it is on its own face.
-      + VERBS.map(v => verbCell(ch, v, dead)
-          + (v.p === "move"
-             ? `<button class="vk g-lock" id="hk_${ch}" aria-pressed="false"`
-               + ` title="hold channel ${ch} on one bar for ever. Press again to release."`
-               + `${dead ? " disabled" : ""}>LOCK</button>`
-             : "")).join("")
       + `<div class="cwhy g-why" id="why${ch}"${ch === "R"
           ? ' title="the rumble is a dark reverb on a copy of the kick: it has no pattern of its own, so none of the composition verbs applies to it">no pattern of its own · it follows the kick'
           : '>'}</div>`;
@@ -8236,6 +8223,69 @@ function wireHand() {
     releaseFires();
     say("released — everything is back under the schedule.");
   });
+}
+
+/* SPACE IS A PLANE, NOT TWO IDENTICAL SLIDERS. Horizontal travel is the
+   rhythmic echo; vertical travel is the room. The two hidden native ranges
+   remain the state and event doors, so this gesture cannot bypass the same
+   clamp, hold, bar-line landing or engine readback as the old cells. */
+function setSpaceFromPoint(ch, x, y) {
+  const echo = ui("hs_delay_" + ch), room = ui("hs_reverb_" + ch);
+  if (!echo || !room || echo.disabled || room.disabled) return;
+  const echoValue = clamp(x, 0, 1).toFixed(3);
+  const roomValue = clamp(y, 0, 1).toFixed(3);
+  echo.value = echoValue;
+  echo.dispatchEvent(new Event("input", { bubbles: true }));
+  // The echo event repaints every cell from engine/performance state. Write
+  // room AFTER that repaint or the old room value wins between the two axes
+  // of this one gesture.
+  room.value = roomValue;
+  room.dispatchEvent(new Event("input", { bubbles: true }));
+}
+function wireSpacePads() {
+  for (const c of CHANNELS) {
+    const ch = c.ch, pad = ui("space_" + ch);
+    if (!pad || pad.classList.contains("is-dead")) continue;
+    const point = e => {
+      const r = pad.getBoundingClientRect();
+      setSpaceFromPoint(ch, (e.clientX - r.left) / r.width,
+                           1 - (e.clientY - r.top) / r.height);
+    };
+    pad.addEventListener("pointerdown", e => {
+      pad.setPointerCapture(e.pointerId); point(e); e.preventDefault();
+    });
+    pad.addEventListener("pointermove", e => {
+      if (pad.hasPointerCapture(e.pointerId)) { point(e); e.preventDefault(); }
+    });
+    pad.addEventListener("keydown", e => {
+      const echo = ui("hs_delay_" + ch), room = ui("hs_reverb_" + ch);
+      let x = parseFloat(echo.value), y = parseFloat(room.value), used = true;
+      if (e.key === "ArrowLeft") x -= .05;
+      else if (e.key === "ArrowRight") x += .05;
+      else if (e.key === "ArrowDown") y -= .05;
+      else if (e.key === "ArrowUp") y += .05;
+      else used = false;
+      if (used) { setSpaceFromPoint(ch, x, y); e.preventDefault(); }
+    });
+    ui("spaceclear_" + ch).addEventListener("click", e => {
+      e.stopPropagation();
+      hand.release("delay", ch); hand.release("reverb", ch);
+    });
+  }
+}
+
+function paintSpace(ch) {
+  const pad = ui("space_" + ch), dot = ui("spacedot_" + ch);
+  const echo = ui("hs_delay_" + ch), room = ui("hs_reverb_" + ch);
+  if (!pad || !dot || !echo || !room || pad.classList.contains("is-dead")) return;
+  const x = clamp(parseFloat(echo.value), 0, 1);
+  const y = clamp(parseFloat(room.value), 0, 1);
+  dot.style.left = (x * 100).toFixed(1) + "%";
+  dot.style.bottom = (y * 100).toFixed(1) + "%";
+  pad.setAttribute("aria-valuetext", `echo ${x.toFixed(2)}, room ${y.toFixed(2)}`);
+  const clear = ui("spaceclear_" + ch);
+  if (clear) clear.disabled = hand.ask("delay", ch) === undefined
+                              && hand.ask("reverb", ch) === undefined;
 }
 
 /* M AND S, AND THEY LAND NOW. A mute is a mixer gesture, not an arrangement
@@ -8596,6 +8646,7 @@ function paintHand() {
     // line, and the hand can silence either of them
     if (ch === "R" || PIECE.empty[ch]) { paintWhy(ch, C); continue; }
     for (const v of VERBS) paintCell(ch, v, C, engC);
+    paintSpace(ch);
     paintWhy(ch, C);
     let n = 0;
     for (const v of VERBS) if (hand.ask(v.p, ch) !== undefined) n++;
@@ -8739,6 +8790,12 @@ function buildMods() {
   }
   ui("modrows").innerHTML = html;
 }
+function mountChannelMods() {
+  for (const r of MOD_ROWS) {
+    const unit = ui("ms_" + r.id), detail = ui("mod_detail_" + r.slot.channel);
+    if (unit && detail) detail.appendChild(unit);
+  }
+}
 
 /* WHAT THE ROW PRINTS IS THE EXCURSION, NOT THE MULTIPLIER, and that is the
    answer to two depths multiplying invisibly: the product is the thing on the
@@ -8808,7 +8865,7 @@ const VOICE_GROUPS = [
 function buildVoices() {
   let html = "";
   for (const g of VOICE_GROUPS) {
-    html += '<div class="sub">' + g[1] + '</div>';
+    html += '<div class="sub" data-hand="' + g[0] + '">' + g[1] + '</div>';
     for (const k of VOICE_KEYS) {
       const p = VOICE_PARAMS[k];
       if (p.hand !== g[0]) continue;
@@ -8824,6 +8881,27 @@ function buildVoices() {
     }
   }
   ui("voices").innerHTML = html;
+}
+
+/* The filters worth moving sit on their musicians, not in a remote drawer.
+   These are the existing controls themselves — moved, never mirrored — so
+   the number under the hand and the number the engine receives stay one. */
+function mountLiveToneControls() {
+  const main = { 3: "u_vhattone", 6: "u_stabcut", 7: "u_vpadtone" };
+  for (const c of CHANNELS) {
+    const slot = ui("tone_" + c.ch), unit = ui(main[c.ch]);
+    if (!slot || !unit) continue;
+    const fixed = slot.querySelector(".tone-fixed");
+    if (fixed) fixed.remove();
+    unit.classList.add("tone-unit");
+    slot.appendChild(unit);
+  }
+  for (const k of VOICE_KEYS) {
+    const p = VOICE_PARAMS[k];
+    if (p.id === "vhattone" || p.id === "vpadtone") continue;
+    const unit = ui("u_" + p.id), detail = ui("voice_detail_" + p.ch);
+    if (unit && detail) detail.appendChild(unit);
+  }
 }
 
 /* The figure a voice row prints is derived from the SAME base the engine
@@ -9166,7 +9244,15 @@ function outputs() {
   for (const [id, fmt] of pairs) {
     FMT[id] = fmt;
     const el = ui(id), out = ui(id + "_v");
-    const upd = () => { out.textContent = fmt(parseFloat(el.value)); setFill(el); };
+    const upd = () => {
+      const v = parseFloat(el.value);
+      out.textContent = fmt(v); setFill(el);
+      const tone = el.closest(".tone-control");
+      if (tone) {
+        const lo = parseFloat(el.min), hi = parseFloat(el.max);
+        tone.style.setProperty("--dial", ((v - lo) / (hi - lo) * 100).toFixed(1) + "%");
+      }
+    };
     el.addEventListener("input", upd); upd();
   }
   const dv = ui("dlydiv"), dvo = ui("dlydiv_v");
@@ -9529,7 +9615,8 @@ window.p02 = {
     // together, and a test has to be able to ask rather than infer it from a
     // modulator's sweep.
     dlyTrim: engine ? engine.cfg.dlyTrim : null,
-    revTrim: engine ? engine.cfg.revTrim : null
+    revTrim: engine ? engine.cfg.revTrim : null,
+    stabCut: engine ? engine.cfg.stabCut : null
   }),
   renderOffline,
   PIECE, INPUT_GAIN, MASTER_TRIM, BED_LEVEL, MOVEMENT, MOD_RATE_BARS, MOD_RATES, HOLD_PARAMS,
@@ -9695,6 +9782,7 @@ buildChannels();
 buildBarSheet();
 wireFaders();
 wireHand();
+wireSpacePads();
 wireFires();
 wireMix();
 buildRides();
@@ -9702,7 +9790,9 @@ wireRides();
 buildSections();
 buildSteps();
 buildVoices();
+mountLiveToneControls();
 buildMods();
+mountChannelMods();
 wireModRows();
 surfaceBuilt = true;
 ui("seedline").textContent = "seed " + SEED + (location.search.indexOf("seed=") === -1 ? " (the default piece)" : "");
