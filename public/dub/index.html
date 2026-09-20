@@ -2485,6 +2485,80 @@ function holdClamp(param, v) {
   return clamp(v, 0, 2);                    // delay, reverb: the send's range
 }
 
+/* FIRED GESTURES ARE INPUT, EXACTLY AS HOLDS ARE INPUT [#66].
+   ------------------------------------------------------------------------
+   The layer never starts, cancels or remembers one. It receives a timeline
+   whose entries already carry their bar, length and captured start values.
+   That is what keeps a seek and an offline render honest: bar N plus the same
+   inputs gives the same answer without playing bars 0..N-1 first.
+
+   A cancelled/replaced event has `until` and never lands. A completed LAND
+   event keeps applying its final state; a RETURN event applies nothing after
+   its last bar. There is one large macro at a time by the surface contract,
+   while up to two one-bar micro gestures may share a boundary. */
+const FIRE_MACROS = {
+  drop:       { label: "drop",       bars: 8,  end: "land" },
+  buildup:    { label: "buildup",    bars: 4,  end: "return" },
+  phaseout:   { label: "phase-out",  bars: 12, end: "land" },
+  reverbout:  { label: "reverb-out", bars: 8,  end: "return" }
+};
+const FIRE_MICROS = ["ghost-hat", "hats-out", "bass-octave", "stab-lean", "turnaround", "kick-ghost"];
+const fireTimeline = fires => Array.isArray(fires) ? fires : ((fires && fires.events) || []);
+const fireSmooth = x => { x = clamp(x, 0, 1); return x * x * (3 - 2 * x); };
+const fireCaptured = (e, group, key, fallback) =>
+  e.capture && e.capture[group] && e.capture[group][key] !== undefined
+    ? e.capture[group][key] : fallback;
+
+function applyFires(C, fires, holds) {
+  const events = fireTimeline(fires).slice().sort((a, b) => (a.at - b.at) || ((a.id || 0) - (b.id || 0)));
+  const info = { active: null, landed: [], micros: [], ratchet: null };
+  for (const e of events) {
+    if (!e || !Number.isFinite(e.at) || C.bar < e.at) continue;
+    if (e.kind === "micro") {
+      if (C.bar === e.at && FIRE_MICROS.indexOf(e.micro) !== -1) info.micros.push(e.micro);
+      continue;
+    }
+    const def = FIRE_MACROS[e.kind];
+    if (!def) continue;
+    const bars = Math.max(1, Math.round(e.bars || def.bars));
+    const naturalEnd = e.at + bars;
+    const stopped = Number.isFinite(e.until) ? Math.min(naturalEnd, e.until) : naturalEnd;
+    const active = C.bar < stopped;
+    const completed = !Number.isFinite(e.until) && C.bar >= naturalEnd;
+    if (!active && !(completed && def.end === "land")) continue;
+
+    const x = active ? fireSmooth((C.bar - e.at + 1) / bars) : 1;
+    if (active) info.active = { id: e.id, kind: e.kind, at: e.at, bars, end: def.end,
+                                progress: x, until: stopped };
+    else info.landed.push({ id: e.id, kind: e.kind, at: e.at, bars, end: def.end });
+
+    if (e.kind === "drop") {
+      for (const ch of [0, 5]) {
+        const from = fireCaptured(e, "present", ch, C.present[ch]);
+        C.present[ch] = from * (1 - x);
+        if (C.present[ch] <= 0)
+          C.silent[ch] = "the fired drop left the floor out — release all restores it";
+      }
+    } else if (e.kind === "phaseout") {
+      const from = fireCaptured(e, "present", 7, C.present[7]);
+      C.present[7] = from * (1 - x);
+      if (C.present[7] <= 0)
+        C.silent[7] = "the fired phase-out left the pad out — release all restores it";
+    } else if (e.kind === "reverbout") {
+      const wave = Math.sin(Math.PI * x);
+      const fromWet = fireCaptured(e, "reverb", 6, C.wet[6].reverb);
+      const fromPresent = fireCaptured(e, "present", 6, C.present[6]);
+      if (heldValue(holds, "reverb", 6) === undefined)
+        C.wet[6].reverb = clamp(fromWet + (1.35 - fromWet) * wave, 0, 2);
+      C.present[6] = fromPresent * (1 - 0.9 * wave);
+    } else if (e.kind === "buildup" && active) {
+      info.ratchet = { ch: 3, count: Math.min(4, 1 + Math.floor((C.bar - e.at) * 4 / bars)) };
+    }
+  }
+  C.fire = info;
+  return C;
+}
+
 /* The bar the WALK is read at. One function so the wrap lives in one place
    and `scheduleStateAt`'s rule and this one cannot drift apart. [#53] */
 function walkBar(movement, bar, auto) {
@@ -2525,7 +2599,7 @@ function compositionAt(seed, piece, movement, bar, opts) {
     // that IS sounding cannot vary. `held` is the third and newest: which of
     // the hand and the schedule owns each value right now, so the surface can
     // print "held by you" against "running" rather than guessing.
-    silent: {}, frozen: {}, held: {}, gesture: null
+    silent: {}, frozen: {}, held: {}, gesture: null, fire: null
   };
   for (const p of HOLD_PARAMS) out.held[p] = {};
   for (const ch of ALL_CHANNELS) out.wet[ch] = { delay: now.wet[ch].delay, reverb: now.wet[ch].reverb };
@@ -2635,9 +2709,14 @@ function compositionAt(seed, piece, movement, bar, opts) {
   // did. A control that does nothing must look dead [G rule 2].
   if (out.gesture && heldValue(holds, "delay", out.gesture.ch) !== undefined)
     out.gesture.heldBack = true;
+  // THE FIRED LAYER reads the resolved bar and writes a trajectory over it.
+  // It is explicit input, not state accumulated here; held sends still outrank
+  // it because the most recent hand must never be silently overruled.
+  applyFires(out, opts.fires, holds);
   // TIER 3 — the per-bar mutation. Last, because it READS the resolved bar
   // (what is present, what is silent) and writes over it for this bar only.
-  out.mut = opts.mutate === false ? MUT_NONE : mutationsAt(seed, piece, movement, out, auto);
+  out.mut = opts.mutate === false ? MUT_NONE
+                                  : mutationsAt(seed, piece, movement, out, auto, out.fire.micros);
   /* --- THE LEAD IS AN ARRANGEMENT DECISION, NOT A PATTERN. -----------------
      `piece.chords[4]` is the motif as written; this decides whether this bar
      has any of it and which QUOTE it takes.
@@ -4070,7 +4149,8 @@ function mutSectionStart(movement, bar, auto) {
 
 const MUT_NONE = {
   bar: -1, cap: MUT_CAP, fired: [], suppressed: [], ghost: {}, dropped: {},
-  skip: {}, bassOctave: null, hold: null, stabLean: 0, sig: "-", matSig: "-", text: ""
+  skip: {}, bassOctave: null, hold: null, stabLean: 0, ratchet: null,
+  sig: "-", matSig: "-", text: ""
 };
 
 // TIER 3 DOES NOT ANSWER THE `auto` SWITCH, and if that is ever to change it
@@ -4081,12 +4161,15 @@ const MUT_NONE = {
 // layer exists to end. Set this true and the default page is frozen again.
 const MUT_NEEDS_AUTO = false;
 
-function mutationsAt(seed, piece, movement, C, auto) {
+function mutationsAt(seed, piece, movement, C, auto, manual) {
   if (MUT_NEEDS_AUTO && !auto) return MUT_NONE;
   const bar = C.bar;
+  const forced = new Set(manual || []);
   const M = {
     bar, cap: MUT_CAP, fired: [], suppressed: [], ghost: {}, dropped: {},
-    skip: {}, bassOctave: null, hold: null, stabLean: 0, sig: "", matSig: "", text: ""
+    skip: {}, bassOctave: null, hold: null, stabLean: 0,
+    ratchet: C.fire && C.fire.ratchet ? C.fire.ratchet : null,
+    sig: "", matSig: "", text: ""
   };
   // A lane that is not sounding this bar is not a lane to mutate. A ghost on
   // a channel the arrangement has taken away would be the instrument putting
@@ -4100,10 +4183,10 @@ function mutationsAt(seed, piece, movement, C, auto) {
      not use, at a bit over half velocity. Never step 0: the downbeat is not
      an ornament. */
   const hatFree = mutFreeSteps(3, 0, bar);
-  if (on(3) && hatFree.length && mutRoll(seed, bar, 1, 0) < 0.12) {
+  if (on(3) && hatFree.length && (forced.has("ghost-hat") || mutRoll(seed, bar, 1, 0) < 0.12)) {
     const st = mutOne(seed, bar, 1, 1, hatFree);
     if (st !== 0) cand.push({
-      slot: 1, name: "ghost hat", sig: "1@" + st, material: true,
+      slot: 1, name: "ghost hat", sig: "1@" + st, material: true, manual: forced.has("ghost-hat"),
       why: "an extra hat on the 16th at step " + (st + 1) + ", at 55% velocity",
       apply: m => { (m.ghost[3] = m.ghost[3] || []).push({ step: st, velo: 0.55 }); }
     });
@@ -4117,10 +4200,11 @@ function mutationsAt(seed, piece, movement, C, auto) {
      recursion, and standing down after a suppressed drop costs a 6% event
      0.4% of the time. */
   const m2raw = b => b > 0 && mutRoll(seed, b, 2, 0) < 0.06;
-  if (on(3) && m2raw(bar) && !m2raw(bar - 1) && !mutSectionStart(movement, bar, auto)
-      && !cand.some(c => c.slot === 1))
+  if (on(3) && ((forced.has("hats-out"))
+      || (m2raw(bar) && !m2raw(bar - 1) && !mutSectionStart(movement, bar, auto)
+          && !cand.some(c => c.slot === 1))))
     cand.push({
-      slot: 2, name: "hats out", sig: "2", material: true,
+      slot: 2, name: "hats out", sig: "2", material: true, manual: forced.has("hats-out"),
       why: "the hat lane sits out this one bar",
       apply: m => { m.dropped[3] = true; }
     });
@@ -4132,13 +4216,14 @@ function mutationsAt(seed, piece, movement, C, auto) {
      touch, and it is an octave, which is the one interval that cannot change
      the harmony. */
   const take5 = piece.chords && piece.chords[5];
-  if (on(5) && take5 && take5.length && mutRoll(seed, bar, 3, 0) < 0.12) {
+  if (on(5) && take5 && take5.length
+      && (forced.has("bass-octave") || mutRoll(seed, bar, 3, 0) < 0.12)) {
     const idx = [];
     for (let e = 0; e < take5.length; e++) if (take5[e].step !== 0) idx.push(e);
     if (idx.length) {
       const e = mutOne(seed, bar, 3, 1, idx);
       cand.push({
-        slot: 3, name: "bass octave", sig: "3#" + e, material: true,
+        slot: 3, name: "bass octave", sig: "3#" + e, material: true, manual: forced.has("bass-octave"),
         why: "the bass note at step " + (take5[e].step + 1) + " jumps an octave",
         apply: m => { m.bassOctave = { index: e, degrees: sc.length }; }
       });
@@ -4150,10 +4235,11 @@ function mutationsAt(seed, piece, movement, C, auto) {
      figure and the figure does not move. The contour is SYMMETRIC about the
      written velocity on purpose: it leans the bar without making it louder,
      which is what keeps §6.4's 1 dB clause true. */
-  if (on(6) && mutRoll(seed, bar, 4, 0) < 0.20) {
+  if (on(6) && (forced.has("stab-lean") || mutRoll(seed, bar, 4, 0) < 0.20)) {
     const dir = mutRoll(seed, bar, 4, 1) < 0.5 ? -1 : 1;
     cand.push({
       slot: 4, name: "stab lean", sig: "4" + (dir < 0 ? "-" : "+"), material: false,
+      manual: forced.has("stab-lean"),
       why: dir < 0 ? "the stabs lean back across the bar" : "the stabs lean forward across the bar",
       apply: m => { m.stabLean = 8 * dir; }
     });
@@ -4170,8 +4256,9 @@ function mutationsAt(seed, piece, movement, C, auto) {
   if (on(3)) turnPool.push("stutter");
   if (on(5) && take5 && take5.length) turnPool.push("hold");
   let kind = null;
-  if (phraseEnd && turnPool.length && mutRoll(seed, bar, 5, 0) < 0.25
-      && !mutSectionStart(movement, bar + 1, auto)) {
+  if (phraseEnd && turnPool.length
+      && (forced.has("turnaround")
+          || (mutRoll(seed, bar, 5, 0) < 0.25 && !mutSectionStart(movement, bar + 1, auto)))) {
     kind = mutOne(seed, bar, 5, 1, turnPool);
     // NEVER TWO PULLS RUNNING. The previous phrase end is eight bars back, and
     // like M2's rule this asks the raw roll rather than replaying that bar.
@@ -4182,11 +4269,13 @@ function mutationsAt(seed, piece, movement, C, auto) {
   {
     if (kind === "pull") cand.push({
       slot: 5, name: "turnaround: beat four pulled", sig: "5p", material: true,
+      manual: forced.has("turnaround"),
       why: "the kick leaves beat four at the end of the phrase",
       apply: m => { m.skip[0] = 12; }
     });
     else if (kind === "stutter") cand.push({
       slot: 5, name: "turnaround: hat stutter", sig: "5s", material: true,
+      manual: forced.has("turnaround"),
       why: "the hats stutter over the bar line",
       apply: m => {
         const g = (m.ghost[3] = m.ghost[3] || []);
@@ -4198,6 +4287,7 @@ function mutationsAt(seed, piece, movement, C, auto) {
     });
     else if (kind === "hold") cand.push({
       slot: 5, name: "turnaround: bass held over", sig: "5h", material: true,
+      manual: forced.has("turnaround"),
       why: "the last bass note is held across the bar line",
       apply: m => { m.hold = { index: take5.length - 1, mult: 1.6 }; }
     });
@@ -4218,10 +4308,11 @@ function mutationsAt(seed, piece, movement, C, auto) {
   const K = [3, 5, 7][Math.min(2, Math.floor(rand01(seed, MUT + 6, 0, 9) * 3))];
   const kickFree = mutFreeSteps(0, 1, bar);
   const kp = ((bar % K) + K) % K;
-  if (on(0) && kickFree.length && mutRoll(seed, kp, 6, 0) < 0.10) {
+  if (on(0) && kickFree.length
+      && (forced.has("kick-ghost") || mutRoll(seed, kp, 6, 0) < 0.10)) {
     const st = mutOne(seed, kp, 6, 1, kickFree);
     cand.push({
-      slot: 6, name: "kick ghost", sig: "6@" + st, material: true,
+      slot: 6, name: "kick ghost", sig: "6@" + st, material: true, manual: forced.has("kick-ghost"),
       why: "a quiet kick at step " + (st + 1) + ", on a " + K + "-bar loop under the four",
       apply: m => { (m.ghost[0] = m.ghost[0] || []).push({ step: st, velo: 0.45 }); }
     });
@@ -4237,10 +4328,10 @@ function mutationsAt(seed, piece, movement, C, auto) {
      looking dead — a control that did nothing must never look like one that
      did. Two is a judgement and not a measurement: it is the first thing to
      move at the ear. */
-  cand.sort((a, b) => a.slot - b.slot);
+  cand.sort((a, b) => Number(!!b.manual) - Number(!!a.manual) || a.slot - b.slot);
   for (let i = 0; i < cand.length; i++) {
     const c = cand[i];
-    if (i < MUT_CAP) { c.apply(M); M.fired.push({ slot: c.slot, name: c.name, sig: c.sig, why: c.why, material: c.material }); }
+    if (i < MUT_CAP) { c.apply(M); M.fired.push({ slot: c.slot, name: c.name, sig: c.sig, why: c.why, material: c.material, manual: !!c.manual }); }
     else M.suppressed.push({ slot: c.slot, name: c.name, why: "two things were already happening" });
   }
   M.sig = M.fired.length ? M.fired.map(f => f.sig).join(",") : "-";
