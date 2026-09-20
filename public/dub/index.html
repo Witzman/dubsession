@@ -7394,9 +7394,12 @@ function paintHand() {
     // number and is already in the gain the engine writes.
     const fad = ui("fad" + ch);
     if (fad) {
-      // A ROLL REDRAWS THE MANIFEST AND DOES NOT MOVE THE FADERS — a slider is
-      // the owner's hand — so a fader that was at the old piece's level is
-      // away from the new one's, and this is where it finds that out.
+      // A ROLL REDRAWS THE MANIFEST AND DOES NOT MOVE THE FADERS — a slider
+      // is the owner's hand — so a fader left at the old piece's level would
+      // be away from the new one's, and this is where it would find that out.
+      // MEASURED 2026-09-20: it never fires today, because `STYLE.levels` is
+      // a fixed table and every seed draws the same nine numbers. It is here
+      // for the commit that opens them, not as a claim that they are open.
       paintFader(ch);
       paintSpan(ui("fadm" + ch), ui("fadt" + ch), fad, modOf(C, ch, "level"),
                 parseFloat(fad.value), faderReceived(ch, C));
