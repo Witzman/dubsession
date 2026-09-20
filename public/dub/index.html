@@ -50,17 +50,25 @@
   /* THE PAGE IS AS WIDE AS THE GRID NEEDS, AND NOTHING ELSE IS.
      `the channels` is a grid of eleven columns and wants the room; every other
      block keeps the 720 px measure it has always had. The narrow measure is
-     applied BY EXCLUSION rather than by a class, so a fieldset added later
+     applied BY EXCLUSION rather than by a class, so a block added later
      inherits it without having to know this rule exists. */
   main { max-width: 1240px; margin: 0 auto; }
-  /* THE MEASURE, AND THE TWO THINGS IT DOES NOT APPLY TO. Prose and a column
-     of controls are read, so they are capped at a line length a person can
-     read. THE SHEET IS NOT READ, IT IS PLAYED: the bar pane and the desk are
+  /* THE MEASURE, AND THE THREE THINGS IT DOES NOT APPLY TO. Prose is read, so
+     it is capped at a line length a person can read. THE SHEET IS NOT READ, IT
+     IS PLAYED: the bar pane and the desk are
      nine rows that have to line up across the page, and capping them would
      put sixteen steps in half the width available while the other half stays
      empty. Named rather than typed as a child index, so adding a pane does not
-     silently inherit a cap nobody meant it to have. */
-  main > *:not(#chanbox):not(#barbox) { max-width: 720px; }
+     silently inherit a cap nobody meant it to have.
+
+     `#drawers` IS THE THIRD, AND FOR THE SAME REASON. A spine is four fields
+     across one line and a drawer's contents are four cells across; both at
+     720 px of a 1240 px page would put the instrument in half the width while
+     the other half stayed empty, which is the fault #24 fixed on the sheet.
+     The exemption is named at the block, and every element INSIDE it that is
+     prose takes the cap back explicitly — `#sections` and `.foot .note`
+     rather than a positional rule nobody can see. */
+  main > *:not(#chanbox):not(#barbox):not(#drawers):not(#piecebar) { max-width: 720px; }
   h1 { font-size: 13px; font-weight: 400; color: var(--dim); margin: 0 0 20px; letter-spacing: .08em; }
   h1 b { color: var(--ink); font-weight: 400; }
   button {
@@ -82,17 +90,11 @@
     background: transparent; cursor: default;
   }
   .top { display: flex; gap: 10px; align-items: center; }
-  .row { display: flex; align-items: center; gap: 12px; margin: 6px 0; }
-  .row label { width: 150px; color: var(--dim); flex: none; }
-  .row input[type=range] { flex: 1; accent-color: var(--hot); }
-  .row select { flex: 1; font: inherit; background: var(--panel); color: var(--ink); border: 1px solid var(--line); padding: 4px; }
-  /* A TEXT FIELD WEARS THE PAGE, not the browser's white box. Left at the
-     default it is the brightest thing on a dark instrument and the eye goes to
-     it before the faders. */
-  .row input[type=text] { font: inherit; background: var(--panel); color: var(--hot);
-                          border: 1px solid var(--line); padding: 4px 6px; }
-  .row input[type=text]:focus { outline: none; border-color: var(--hot); }
-  .row output { width: 78px; text-align: right; color: var(--hot); flex: none; }
+  /* `.row` — a 150 px label beside a slider beside a 78 px readout — WAS THE
+     WHOLE OF THE PAGE BELOW THE SHEET, and §2 of the grammar rejects it by
+     name: it is the website-with-sliders. Every one of those rows is now a
+     `.unit` in a drawer's cell grid. The rules are deleted rather than left
+     unreferenced, because dead CSS reads as current CSS. */
   #bars { margin: 18px 0 8px; color: var(--dim); }
   /* --- THE SHEET. A row is the unit, not a fieldset, and the page is
      CHANNEL-MAJOR: the same nine names down the left of every pane, so a
@@ -250,20 +252,10 @@
   .vc.is-dead .vl, .vc.is-dead .vv { color: var(--inert); }
   .vc.is-dead .vs { accent-color: var(--inert); opacity: .3; pointer-events: none; }
   .cwhy { color: var(--dim); min-height: 1.4em; font-size: 12px; }   /* words, not time */
-  /* A MODULATOR ROW AND ITS REASON LINE. The line is RESERVED — min-height,
-     like `.cwhy` — so a row going dead changes ink and never layout. The dead
-     look is `.vc.is-dead`'s, not a fifth one: dotted edge, `--inert` ink, a
-     slider that cannot be moved. The edge is a border that is always there and
-     only changes colour, for the same reason. */
-  /* the edge sits in the gutter, so a row's label starts where every other
-     label on the page starts: a block that is indented by 9 px against the one
-     above it reads as a different kind of thing, and it is not one. */
-  .mslot { border-left: 1px solid transparent; padding-left: 8px; margin: 2px 0 6px -9px; }
-  .mslot.is-dead { border-left-color: var(--inert); border-left-style: dotted; }
-  .mslot.is-dead label, .mslot.is-dead output, .mslot.is-dead .mwhy { color: var(--inert); }
-  .mslot.is-dead input[type=range] { accent-color: var(--inert); opacity: .3; pointer-events: none; }
-  .mwhy { color: var(--dim); min-height: 1.4em; font-size: 12px; margin-left: 162px; }
-  .mwhy:empty::before { content: "\00a0"; }
+  /* A MODULATOR ROW IS A `.unit` IN THE MOVERS DRAWER NOW, and it wears the
+     same dead look as every other unit — `.unit.is-dead` and `.strip.is-dead`,
+     which is one vocabulary and not a second. The `.mslot`/`.mwhy` rules that
+     used to live here are gone with the row stack they styled. */
   /* a channel that is silent, or sounding but unable to vary, is marked where
      its name is as well as on its reason line: one colour, one meaning */
   .chan.silent .g-id, .chan.frozen .g-id { color: var(--dim); }
@@ -275,6 +267,146 @@
   summary:hover { color: var(--hot); }
   .src { color: var(--dim); font-size: 12px; margin: 6px 0 0; }
   .src b { color: var(--ink); font-weight: 400; }
+
+  /* ======================================================================
+     THE SEED BAR AND THE DRAWERS  (surface-grammar §5, §5.1, §5.2)
+     ====================================================================== */
+
+  /* THE PIECE, ON THE PLAY SURFACE. It keeps the page's reading measure: it
+     is one line of words and two buttons, and a line of words stretched to
+     1240 px is harder to read, not easier. */
+  .seedbar { display: flex; align-items: center; gap: 10px; flex-wrap: wrap;
+             border-top: 1px solid var(--line); margin-top: 18px; padding-top: 12px; }
+  .seedbar label { color: var(--dim); }
+  .seedbar input[type=text] { font: inherit; background: var(--panel); color: var(--hot);
+                              border: 1px solid var(--line); padding: 6px 8px;
+                              letter-spacing: .10em; width: 150px; }
+  .seedbar input[type=text]:focus { outline: none; border-color: var(--hot); }
+  .seedbar output { color: var(--hot); }
+  /* the words take the reading measure back; the row does not, so its
+     hairline meets the drawers' hairlines under it */
+  .seedbar .note { color: var(--dim); font-size: 12px; margin: 0; max-width: 520px; }
+  button.sm { padding: 6px 12px; font-size: 12px; }
+
+  #drawers { margin-top: 22px; }
+  /* A CLOSED DRAWER IS A SPINE: one line, a hairline, and four fields in a
+     fixed order, so the third one is a digest a player learns rather than a
+     rotating one they have to read. STATE CHANGES INK, NEVER LAYOUT — every
+     field keeps its track whether it has anything in it or not. */
+  .drawer { border-top: 1px solid var(--line); }
+  .drawer:last-child { border-bottom: 1px solid var(--line); }
+  summary.spine { display: flex; align-items: center; gap: 14px; cursor: pointer;
+                  padding: 11px 2px; min-height: 44px; list-style: none;
+                  color: var(--ink); }
+  summary.spine::-webkit-details-marker { display: none; }
+  summary.spine:hover { color: var(--ink); }
+  summary.spine:hover .nmx { color: var(--hot); }
+  summary.spine:focus-visible { outline: 1px solid var(--hot); outline-offset: -2px; }
+  .spine .nmx { color: var(--ink); letter-spacing: .16em; text-transform: uppercase;
+                width: 118px; flex: none; }
+  .spine .rule { flex: 0 0 48px; height: 1px; background: var(--line); }
+  /* FIELD 2 IS THE LOAD-BEARING ONE. It is the hand's mark, so it is the one
+     thing on a spine that gets --hot; a drawer nobody has touched says so in
+     --dim and gets no colour at all. */
+  .spine .moved { color: var(--hot); letter-spacing: .08em; width: 152px; flex: none;
+                  white-space: nowrap; }
+  .spine .moved.none { color: var(--dim); }
+  .spine .digest { color: var(--dim); letter-spacing: .04em; flex: 1; min-width: 0;
+                   white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  /* FIELD 4. A refusal inside a CLOSED drawer, shown before the gesture and
+     in the one look this page gives to `cannot apply`: dotted, --inert. */
+  .spine .refuse { color: var(--inert); border: 1px dotted var(--inert); padding: 2px 6px;
+                   font-size: 10px; letter-spacing: .10em; flex: none;
+                   text-transform: uppercase; white-space: nowrap; }
+  .spine .refuse[hidden] { display: none; }
+  .spine .plus { color: var(--dim); width: 16px; text-align: center; flex: none; }
+  .drawer[open] > summary.spine { border-bottom: 1px solid var(--line); }
+  .drawer[open] > summary.spine .nmx { color: var(--hot); }
+  /* A SPINE WHOSE EVERY CONTROL IS DEAD DRAWS DEAD AND DOES NOT OPEN. Walking
+     into a panel of nine `——` is the gesture this saves. */
+  .drawer.is-dead > summary.spine { cursor: default; }
+  .drawer.is-dead > summary.spine:hover .nmx { color: var(--inert); }
+  .drawer.is-dead .nmx, .drawer.is-dead .digest, .drawer.is-dead .plus { color: var(--inert); }
+
+  /* OPEN: downward, pushing what is under it, so the sheet above never moves.
+     The contents are drawn in the desk's cell grammar — a track with the
+     number printed inside it — and not in the `.row` stack this replaced. */
+  .drawer .body { background: var(--panel); padding: 14px 16px 16px; }
+  .grid4 { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 14px 16px; }
+  .grid4 .sub { grid-column: 1 / -1; color: var(--dim); font-size: 11px;
+                letter-spacing: .10em; margin-top: 2px; }
+  .grid4 .sub:first-child { margin-top: 0; }
+  .unit .t { color: var(--dim); font-size: 10px; letter-spacing: .14em;
+             text-transform: uppercase; margin-bottom: 4px;
+             display: flex; justify-content: space-between; gap: 6px; }
+  /* A READOUT HAS NO BOX (§7.1). This one sits beside its label because the
+     named steps under it have no room inside them for a number. */
+  .unit .t .ro { color: var(--ink); letter-spacing: .06em; text-transform: none; }
+  .unit .why { color: var(--dim); font-size: 10px; line-height: 1.35; margin-top: 4px;
+               min-height: 1.35em; }          /* RESERVED: a unit going dead changes ink, not layout */
+  .unit.is-dead .t, .unit.is-dead .t .ro { color: var(--inert); }
+  .unit.is-dead .why { color: var(--inert); }
+
+  /* THE STRIP. §2.1: a continuous value is ONE OBJECT — a track with the
+     number inside it — and the meter is a 3 px rule along the bottom rather
+     than a fill edge-to-edge, because the one number a hand aims at was
+     unreadable at one end of its own travel when the track filled.
+
+     THE MECHANISM IS STILL `<input type=range>`. It is laid over the track at
+     zero opacity, so the drag, the keyboard, the touch handling and the
+     `input` event every listener on this page is bound to are the browser's.
+     A hand-rolled drag widget is a second implementation of something that
+     already works. */
+  .strip { display: block; position: relative; height: 28px; cursor: pointer;
+           border: 1px solid var(--line); background: transparent; }
+  .strip input[type=range] { position: absolute; left: 0; top: 0; width: 100%; height: 100%;
+                             margin: 0; opacity: 0; cursor: inherit; }
+  .strip .fill { position: absolute; left: 0; bottom: 0; height: 3px; width: 0;
+                 background: var(--dim); pointer-events: none; }
+  .strip .v { position: absolute; right: 7px; top: 50%; transform: translateY(-50%);
+              color: var(--ink); pointer-events: none; }
+  .strip:focus-within { border-color: var(--hot); }
+  /* HELD BY THE HAND — away from what the manifest or the recipe said. The
+     edge, the meter and the number go --hot TOGETHER, which is one look and
+     not a second one. A strip cannot invert; §7.1 measured why. */
+  .strip.is-held { border-color: var(--hot); }
+  .strip.is-held .fill { background: var(--hot); height: 4px; }
+  .strip.is-held .v { color: var(--hot); }
+  /* CANNOT APPLY HERE — dotted, reading nothing, and the range under it is
+     disabled so it is not only drawn inert, it IS inert. */
+  .strip.is-dead { border-style: dotted; border-color: var(--inert); cursor: default; }
+  .strip.is-dead .fill { display: none; }
+  .strip.is-dead .v { color: var(--inert); }
+  .strip.is-dead input[type=range] { pointer-events: none; }
+
+  /* NAMED STEPS. The `<select>` is off the page but still in it: it holds the
+     value, the options and both `change` listeners. */
+  .offstage { position: absolute; width: 1px; height: 1px; opacity: 0;
+              pointer-events: none; clip-path: inset(50%); }
+  .steps { display: flex; }
+  .steps button { flex: 1; min-width: 0; padding: 6px 0; min-height: 28px;
+                  border: 1px solid var(--line); margin-left: -1px;
+                  background: transparent; color: var(--dim); font-size: 11px; }
+  .steps button:first-child { margin-left: 0; }
+  .steps button:hover { color: var(--hot); border-color: var(--hot); z-index: 1; }
+  .steps button[aria-pressed="true"],
+  .steps button[aria-pressed="true"]:hover {
+    background: var(--hot); color: var(--bg); border-color: var(--hot); z-index: 1; }
+  .unit.is-dead .steps button, .unit.is-dead .steps button:hover {
+    border-style: dotted; border-color: var(--inert); color: var(--inert);
+    background: transparent; cursor: default; }
+
+  .drawer .foot { display: flex; align-items: baseline; gap: 12px; flex-wrap: wrap;
+                  margin-top: 14px; border-top: 1px solid var(--line); padding-top: 12px; }
+  .drawer .foot .note { margin: 0; font-size: 12px; flex: 1; min-width: 240px; max-width: 720px; }
+  .drawer .foot em { color: var(--ink); font-style: normal; }
+  .seekrow { display: flex; align-items: flex-end; gap: 12px; max-width: 520px; }
+  .seekrow .unit { flex: 1; min-width: 0; }
+  /* THE TABLE IS READ, NOT PLAYED, so it carries the page's reading measure
+     while the four-up grids around it do not. Named per element: `#drawers`
+     is exempt from `main`'s 720 px cap as a whole, and everything inside it
+     that is prose takes the cap back explicitly. */
+  #sections { margin-top: 14px; max-width: 720px; }
   /* THE ONE-LINE FORM — one channel, one line, eleven columns, and the reason
      line under it. MEASURED: its tracks add up to 1160 px inside the
      fieldset, so it is asked for only from 1260 px of viewport upward. That is
@@ -341,30 +473,39 @@
        tall as the folded form it had just replaced \u2014 a blown-up phone. The
        column is capped and the spare width is left as spare width. */
     #chans { max-width: 660px; }
+    /* FOUR CELLS ACROSS STOPS BEING FOUR CELLS ACROSS at the same width the
+       desk folds at, so the page has one breakpoint story and not two. */
+    .grid4 { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+    .spine { gap: 10px; }
+    .spine .nmx { width: 104px; letter-spacing: .12em; }
+    .spine .rule { flex: 0 0 20px; }
+    .spine .moved { width: 140px; letter-spacing: .04em; }
   }
   @media (max-width: 560px) {
-    /* the NOW controls were laid out as a fixed 150 px label beside a fixed
-       78 px readout and pushed the page 236 px wider than a phone. They were
-       already doing that before the channels moved above them; the label goes
-       onto its own line rather than the page scrolling sideways. This one is
-       still a 560 px rule: the rows above are unaffected by the channel grid's
-       own breakpoint and there is no reason to move them. */
-    .row { flex-wrap: wrap; }
-    .row label { width: auto; flex: 1 0 100%; }
-    /* the reason line is indented to sit under its slider; with the label on
-       its own line there is no slider to sit under */
-    .mwhy { margin-left: 0; }
-    /* and the gutter goes: under 560 px there is no room to hang anything
-       outside the box, and #43 is already one sideways scroll too many. */
-    .mslot { margin-left: 0; padding-left: 0; }
-    .row output { width: 62px; }
-    .row input[type=range], .row select { min-width: 0; }
+    /* PHONE IS NOT A TARGET — the two are 1280 desktop and 1024 with a touch
+       pointer — but #43 is one sideways scroll too many, so the two blocks
+       that still have a fixed width here give it up rather than push the page
+       wider than the glass. */
+    .seedbar input[type=text] { width: 100%; }
+    /* THE SPINE'S FOUR FIELDS ONTO TWO LINES rather than the page scrolling
+       sideways. The order is unchanged, which is what a player learned. */
+    .grid4 { grid-template-columns: minmax(0, 1fr); }
+    .spine { flex-wrap: wrap; gap: 6px 10px; }
+    .spine .rule { display: none; }
+    .spine .digest { flex: 1 0 100%; order: 5; }
+    .seekrow { flex-wrap: wrap; }
   }
   @media (pointer: coarse), (hover: none) {
     .vc .vs { height: 24px; }
     .vc .vx, .vk { padding: 5px 8px; }
     .mx { padding: 5px 9px; }
     .rel { padding: 5px 8px !important; }
+    /* A FINGER IS ONE OF THE TWO POINTERS THIS IS PLAYED WITH. The strip and
+       the named steps grow; nothing else about them changes. */
+    .strip { height: 34px; }
+    .steps button { padding: 9px 0; min-height: 36px; }
+    button.sm { padding: 9px 13px; }
+    summary.spine { min-height: 50px; }
   }
   /* THE ONE LINE THAT MUST BE READ, so it is ink and not an accent. */
   #status { color: var(--ink); min-height: 1.5em; margin: 8px 0 0; }
@@ -434,151 +575,262 @@
   </fieldset>
 
   <!-- ===================================================================
-       THE PIECE. A different seed is a different piece — the whole state of
-       the arrangement is a pure function of (seed, bar, auto, holds) — so this
-       is the cheapest pattern switching on the page and the only one that
-       needs no second generator. It landed on a page RELOAD until now, which
-       took the audio context with it; here it lands on the next bar.
+       THE PIECE, AS ONE LINE. A different seed is a different piece — the
+       whole state of the arrangement is a pure function of (seed, bar, auto,
+       holds) — so this is the cheapest pattern switching on the page and the
+       only one that needs no second generator. It is ABOVE the drawers and
+       not inside one, because §5 keeps seed and roll on the play surface.
+       The pin count and `release pins` land here in the next step.
        =================================================================== -->
-  <fieldset>
-    <legend>the piece · LANDS ON THE BAR</legend>
-    <div class="row"><label>seed</label>
-      <input id="seedin" type="text" inputmode="text" spellcheck="false"
-        style="flex:1;min-width:120px;max-width:200px"
-        title="A number or a word. A word is hashed the same way ?seed= hashes it, so `dub` here and ?seed=dub are the same piece — and a word is easier to say out loud than a 31-bit integer.">
-      <button id="seedgo" style="padding:3px 10px">take it</button>
-      <button id="seedroll" style="padding:3px 10px">roll</button>
-      <output id="seedin_v"></output></div>
-    <div class="note">Everything the arrangement decides is drawn from this
-      number, so a new seed is a new piece rather than a variation of this one —
-      same manifest, same genre, different draw. The URL follows it, so the
-      piece you are on can be sent to somebody.</div>
-  </fieldset>
-
-  <fieldset>
-    <legend>the space · LANDS NOW</legend>
-    <div class="row"><label>echo division</label><select id="dlydiv">
-      <option value="0.5" selected>1/8 — the manifest</option>
-      <option value="0.75">3/16 dotted eighth — the genre default</option>
-      <option value="0.25">1/16</option>
-      <option value="1">1/4</option>
-    </select><output id="dlydiv_v"></output></div>
-    <div class="row"><label>echo feedback</label><input id="fbk" type="range" min="0" max="0.88" step="0.01" value="0.42"><output id="fbk_v"></output></div>
-    <div class="row"><label>echo send trim</label><input id="dlytrim" type="range" min="0" max="2" step="0.01" value="1"><output id="dlytrim_v"></output></div>
-    <div class="row"><label>room size</label><input id="revsize" type="range" min="1.5" max="6" step="0.1" value="4.5"><output id="revsize_v"></output></div>
-    <div class="row"><label>room send trim</label><input id="revtrim" type="range" min="0" max="2" step="0.01" value="1"><output id="revtrim_v"></output></div>
-    <!-- THE MASTER OVER EVERY MODULATOR, AND ITS LABEL WAS FALSE. `send
-         modulation` names two of the four verbs: this control also scales
-         channel 3's LEVEL modulator, measured — x0 to x1 moves that channel's
-         bar-to-bar spread from 1.91 to 5.72 dB. It is a master over the trims
-         in `the modulators` below, the way `echo send trim` is a master over
-         nine wets. The id and the cfg key are untouched. -->
-    <div class="row"><label>all modulation</label><input id="moddepth" type="range" min="0" max="1" step="0.01" value="1"
-      title="Every modulator in the piece at once, as a multiplier on how far it swings — never on the value it swings around. At 0 nothing moves and every send sits exactly where the arrangement put it, which is the same sound as unbinding the lot. Each modulator's own trim is in `the modulators` below, and the figure printed there is this number times that one."><output id="moddepth_v"></output></div>
-    <div class="row"><label>stab cutoff</label><input id="stabcut" type="range" min="0.35" max="2" step="0.01" value="1"><output id="stabcut_v"></output></div>
-    <!-- THE FLOOR. One control, and it is a trim on a level that was measured
-         rather than a level of its own — the number it multiplies is BED_LEVEL
-         and the reasoning is beside it in the source. At 0 the readout says
-         `off`, because a channel that produces nothing has to say so. -->
-    <div class="row"><label>noise floor</label><input id="bed" type="range" min="0" max="2" step="0.01" value="1"
-      title="Tape air, dust ticks breathing once per revolution (0.55 Hz = 33 rpm) and a few pops, band-limited 140 Hz to 9 kHz and injected after the reverb and the delay so the deck saturator and the finisher act on it the way they act on the room. It never ducks with the kick and it never moves on its own: a floor you can hear arrive is not a floor."><output id="bed_v"></output></div>
-  </fieldset>
+  <div class="seedbar" id="piecebar">
+    <label for="seedin">seed</label>
+    <input id="seedin" type="text" inputmode="text" spellcheck="false"
+      title="A number or a word. A word is hashed the same way ?seed= hashes it, so `dub` here and ?seed=dub are the same piece — and a word is easier to say out loud than a 31-bit integer.">
+    <button id="seedgo" class="sm">take it</button>
+    <button id="seedroll" class="sm">roll</button>
+    <output id="seedin_v"></output>
+    <span class="note">a new piece — same manifest, same genre, a different draw</span>
+  </div>
 
   <!-- ===================================================================
-       THE MODULATORS. One row per modulator the arrangement can bind, each
-       one a multiplier on the DEPTH its composer declared — x1.00 is the
-       manifest exactly, the same shape as a voice trim and as the two send
-       trims above it. It sits directly under `the space` because the master
-       over all of them, `all modulation`, is the last control in that box:
-       this is the detail of the thing above.
+       THE DRAWERS. §5: what a hand reaches for while playing stays out; the
+       rest is here, and a CLOSED drawer says what is inside it without being
+       opened. Every spine carries the same four fields in the same order —
+       name·count, how far from the manifest, the two or three values you
+       would ask about from outside, and ANY REFUSAL INSIDE IT. A refusal
+       behind a closed panel is a refusal you find out about after reaching,
+       which is the same fault as going quiet without saying why.
 
-       IT LANDS NOW, and there is no arrow on it. A depth trim is not
-       structure: it changes neither which modulators are bound nor which
-       pattern is played, only how far an already-running one swings [G rule
-       5]. Nothing in its path touches `compositionAt` or the holds.
-
-       IT IS NOT A GRID COLUMN, and that was measured: the channel grid is
-       1210 px of tracks inside a 1240 px cap, with 28 px of slack at 1280 and
-       a twelfth column needing a gap, a slider and a readout. `channel-grid.md`
-       requires a column to exist at all three widths or not at all.
-
-       THE ROWS ARE DERIVED FROM `MOD_SLOTS`, which is derived from `PIECE.mods`
-       and the movement's own `mod` events, so this list cannot fall out of step
-       with the arrangement it is steering.
+       THE MECHANISM IS `<details>`. Open, close, keyboard and the accessible
+       name are the browser's; the four fields and the dead state are ours. A
+       spine whose every control is dead draws dead and REFUSES TO OPEN — the
+       summary's click is cancelled, so there is no panel of nine `——` to
+       walk into.
        =================================================================== -->
-  <fieldset>
-    <legend>the modulators · LANDS NOW</legend>
-    <div id="modrows"></div>
-    <div class="note">
-      <button id="modreset" style="padding:3px 10px">modulators back to the manifest</button>
-      <p class="src">Every figure here is the excursion the engine will apply —
-      how far that one modulator swings the send, the fader or the corner it is
-      bound to, in the units of the thing it is writing, and already multiplied
-      by <em>all modulation</em> above. The value it swings AROUND is the
-      arrangement's and is never scaled. At <em>x0</em> a modulator is held
-      still, which sounds exactly like not having it — measured — while the
-      composer's own <em>depth 0</em> removes it; a row that says <em>——</em> is
-      one the arrangement is not binding at this bar, and it says why.</p>
-    </div>
-  </fieldset>
+  <div id="drawers">
 
-  <!-- ===================================================================
-       THE VOICES. What a channel SOUNDS like, as against when it fires. It is
-       here, under the room, because it lands NOW the way the room does —
-       timbre lands now [G rule 5] — and a voice trim lands on the NEXT HIT of
-       that voice, because a hit is when the voice is built.
+    <details class="drawer" id="d_room">
+      <summary class="spine" id="sp_room">
+        <span class="nmx">room · 8</span><span class="rule"></span>
+        <span class="moved" id="mv_room">at the manifest</span>
+        <span class="digest" id="dg_room"></span>
+        <span class="refuse" id="rf_room" hidden></span>
+        <span class="plus">+</span>
+      </summary>
+      <div class="body">
+        <div class="grid4">
+          <!-- NAMED STEPS, NOT A MENU. §7.4: named steps beat continuous
+               travel for anything you must return to. The `<select>` is still
+               the mechanism and still carries the id, the four options and
+               both `change` listeners — it is simply not what your eye reads.
+               A hand-rolled control that stopped reaching the engine is the
+               exact failure this page has a rule about. -->
+          <div class="unit" id="u_dlydiv">
+            <div class="t">echo division <output id="dlydiv_v" class="ro"></output></div>
+            <select id="dlydiv" class="offstage">
+              <option value="0.5" selected>1/8 — the manifest</option>
+              <option value="0.75">3/16 dotted eighth — the genre default</option>
+              <option value="0.25">1/16</option>
+              <option value="1">1/4</option>
+            </select>
+            <div class="steps" id="dlydiv_steps">
+              <button type="button" data-v="0.25" aria-pressed="false">1/16</button>
+              <button type="button" data-v="0.5"  aria-pressed="false">1/8</button>
+              <button type="button" data-v="0.75" aria-pressed="false">3/16</button>
+              <button type="button" data-v="1"    aria-pressed="false">1/4</button>
+            </div>
+            <div class="why" id="w_dlydiv"></div>
+          </div>
 
-       EVERY ROW IS A MULTIPLIER ON THE RECIPE'S OWN NUMBER, x1.00 being the
-       recipe exactly, the same shape as the two send trims above. The rows are
-       drawn from VOICE_PARAMS (section 4d), which is also the table the engine
-       multiplies by, so the figure printed here and the figure a filter
-       receives cannot drift apart.
-       =================================================================== -->
-  <fieldset>
-    <legend>the voices · LANDS NOW</legend>
-    <div id="voices"></div>
-    <div class="note">
-      <button id="voicereset" style="padding:3px 10px">voices back to the recipe</button>
-      <p class="src">Every figure here is what the voice will be built with on
-      its next hit. The kit is set and left; the three filters are the ones
-      worth moving mid-set.</p>
-    </div>
-  </fieldset>
+          <div class="unit" id="u_fbk">
+            <div class="t">repeats</div>
+            <label class="strip"><input id="fbk" type="range" min="0" max="0.88" step="0.01" value="0.42" aria-label="repeats"><span class="fill"></span><output id="fbk_v" class="v"></output></label>
+            <div class="why" id="w_fbk"></div>
+          </div>
 
-  <fieldset>
-    <legend>the set · LANDS NOW</legend>
-    <div class="row"><label>tempo</label><input id="bpm" type="range" min="110" max="140" step="1" value="125"><output id="bpm_v"></output></div>
-    <div class="row"><label>master</label><input id="vol" type="range" min="0" max="1" step="0.01" value="0.8"><output id="vol_v"></output></div>
-    <div class="row"><label>kick pump</label><input id="pump" type="range" min="0" max="1" step="0.01" value="0"
-      title="The sidechain duck on everything tonal, from the Endless Set's deck (:8479): 15 ms down, 240 ms back. IT STARTS AT ZERO, and here is why. The manifest's twenty-piece round has no ducking anywhere in it — this is the reference's architecture, not the piece's. And it does not earn its place on the rumble either: MEASURED, a pump of 0.25 takes 1.4 dB off the rumble's own level inside 30-120 Hz and does NOT sharpen its swell into the gap (crest 11.8 dB against 12.9 dB with no pump at all) — the rumble already has a duck of its own. It also costs 0.68 dB of mix RMS. So it is here, it works, and the owner turns it up if the piece wants it."><output id="pump_v"></output></div>
-  </fieldset>
+          <!-- NOT `throw`. §7.4 gives THROW to the momentary gesture that
+               sends this bar to the echo at full; these two are latching
+               MASTERS over the nine sends that are on the desk, and naming
+               them `throw` would be a second meaning for one word. -->
+          <div class="unit" id="u_dlytrim">
+            <div class="t">all echo sends</div>
+            <label class="strip"><input id="dlytrim" type="range" min="0" max="2" step="0.01" value="1" aria-label="all echo sends"><span class="fill"></span><output id="dlytrim_v" class="v"></output></label>
+            <div class="why" id="w_dlytrim"></div>
+          </div>
 
-  <!-- ===================================================================
-       THE MOVEMENT. It is below the instrument on purpose. With `auto` off
-       nothing in the schedule has happened, and a wall of reasoning for
-       events that are not running is not what should stand between a hand
-       and the controls. The reasoning stays REACHABLE — it is the one
-       writable home for why each event exists — so it is one click away
-       rather than deleted.
-       =================================================================== -->
-  <fieldset>
-    <legend>the movement · 256 bars</legend>
-    <div class="row"><label>seek to bar</label>
-      <input id="seek" type="range" min="0" max="255" step="1" value="0"><output id="seek_v"></output>
-      <button id="seekgo" style="padding:3px 10px;margin-left:8px">go</button></div>
-    <details id="schedule">
-      <summary id="schedsum">the schedule — what auto would do, bar by bar</summary>
-      <table id="sections" style="margin-top:6px"><thead><tr>
-        <th style="width:52px">bar</th><th>event</th>
-      </tr></thead><tbody></tbody></table>
+          <div class="unit" id="u_revsize">
+            <div class="t">room size</div>
+            <label class="strip"><input id="revsize" type="range" min="1.5" max="6" step="0.1" value="4.5" aria-label="room size"><span class="fill"></span><output id="revsize_v" class="v"></output></label>
+            <div class="why" id="w_revsize"></div>
+          </div>
+
+          <div class="unit" id="u_revtrim">
+            <div class="t">all room sends</div>
+            <label class="strip"><input id="revtrim" type="range" min="0" max="2" step="0.01" value="1" aria-label="all room sends"><span class="fill"></span><output id="revtrim_v" class="v"></output></label>
+            <div class="why" id="w_revtrim"></div>
+          </div>
+
+          <div class="unit" id="u_stabcut">
+            <div class="t">stab cutoff</div>
+            <label class="strip"><input id="stabcut" type="range" min="0.35" max="2" step="0.01" value="1" aria-label="stab cutoff"><span class="fill"></span><output id="stabcut_v" class="v"></output></label>
+            <div class="why" id="w_stabcut"></div>
+          </div>
+
+          <!-- THE FLOOR. One control, and it is a trim on a level that was
+               measured rather than a level of its own — the number it
+               multiplies is BED_LEVEL and the reasoning is beside it in the
+               source. At 0 the readout says `off`, because a channel that
+               produces nothing has to say so. -->
+          <div class="unit" id="u_bed">
+            <div class="t">noise floor</div>
+            <label class="strip"><input id="bed" type="range" min="0" max="2" step="0.01" value="1" aria-label="noise floor"
+              title="Tape air, dust ticks breathing once per revolution (0.55 Hz = 33 rpm) and a few pops, band-limited 140 Hz to 9 kHz and injected after the reverb and the delay so the deck saturator and the finisher act on it the way they act on the room. It never ducks with the kick and it never moves on its own: a floor you can hear arrive is not a floor."><span class="fill"></span><output id="bed_v" class="v"></output></label>
+            <div class="why" id="w_bed"></div>
+          </div>
+
+          <!-- THE MASTER OVER EVERY MODULATOR. `send modulation` named two of
+               the four verbs and was false: this also scales channel 3's
+               LEVEL modulator, measured — x0 to x1 moves that channel's
+               bar-to-bar spread from 1.91 to 5.72 dB. It lives in ROOM rather
+               than in MOVERS so it is not printed twice, and it is on ROOM's
+               spine so a hand can read it without opening anything. -->
+          <div class="unit" id="u_moddepth">
+            <div class="t">all modulation</div>
+            <label class="strip"><input id="moddepth" type="range" min="0" max="1" step="0.01" value="1" aria-label="all modulation"
+              title="Every modulator in the piece at once, as a multiplier on how far it swings — never on the value it swings around. At 0 nothing moves and every send sits exactly where the arrangement put it, which is the same sound as unbinding the lot. Each modulator's own trim is in `movers`, and the figure printed there is this number times that one."><span class="fill"></span><output id="moddepth_v" class="v"></output></label>
+            <div class="why" id="w_moddepth">a master on how far every modulator swings — never on the value it swings around</div>
+          </div>
+        </div>
+      </div>
     </details>
-    <!-- THE SEEK'S OWN PARAGRAPH IS GONE, not moved. It explained that
-         composition state at bar N is a pure function of (seed, N, auto,
-         holds) — which is true, is documented where documentation lives, and
-         is not something a player needs mid-set — and it carried a claim about
-         the SOUND seeking identically that was measured false on 2026-09-18.
-         A false sentence rendered on the page is worse than no sentence. -->
-  </fieldset>
+
+    <!-- ===================================================================
+         THE VOICES. What a channel SOUNDS like, as against when it fires. A
+         voice trim lands on the NEXT HIT of that voice, because a hit is when
+         the voice is built. Every row is a multiplier on the recipe's own
+         number, x1.00 being the recipe exactly. The rows are drawn from
+         VOICE_PARAMS, which is also the table the engine multiplies by, so
+         the figure printed here and the figure a filter receives cannot drift
+         apart.
+         =================================================================== -->
+    <details class="drawer" id="d_voices">
+      <summary class="spine" id="sp_voices">
+        <span class="nmx">voices · 9</span><span class="rule"></span>
+        <span class="moved" id="mv_voices">at the recipe</span>
+        <span class="digest" id="dg_voices"></span>
+        <span class="refuse" id="rf_voices" hidden></span>
+        <span class="plus">+</span>
+      </summary>
+      <div class="body">
+        <div class="grid4" id="voices"></div>
+        <div class="foot">
+          <button id="voicereset" class="sm">voices back to the recipe</button>
+          <span class="note">every figure is what the voice will be built with on its
+            next hit — the kit is set and left; the three filters are the ones worth
+            moving mid-set</span>
+        </div>
+      </div>
+    </details>
+
+    <!-- ===================================================================
+         THE MODULATORS. One unit per modulator the arrangement can bind, each
+         a multiplier on the DEPTH its composer declared. IT LANDS NOW: a
+         depth trim changes neither which modulators are bound nor which
+         pattern is played, only how far an already-running one swings.
+
+         THE UNITS ARE DERIVED FROM `MOD_SLOTS`, which is derived from
+         `PIECE.mods` and the movement's own `mod` events, so this list cannot
+         fall out of step with the arrangement it is steering — and the count
+         on the spine is that list's length rather than a number typed here.
+         =================================================================== -->
+    <details class="drawer" id="d_movers">
+      <summary class="spine" id="sp_movers">
+        <span class="nmx" id="nm_movers">movers</span><span class="rule"></span>
+        <span class="moved" id="mv_movers">at the manifest</span>
+        <span class="digest" id="dg_movers"></span>
+        <span class="refuse" id="rf_movers" hidden></span>
+        <span class="plus">+</span>
+      </summary>
+      <div class="body">
+        <div class="grid4" id="modrows"></div>
+        <div class="foot">
+          <button id="modreset" class="sm">modulators back to the manifest</button>
+          <span class="note">every figure is the excursion the engine will apply, already
+            multiplied by <em>all modulation</em> in <em>room</em>. The value a modulator
+            swings AROUND is the arrangement's and is never scaled.</span>
+        </div>
+      </div>
+    </details>
+
+    <!-- ===================================================================
+         THE SET. Tempo, master and the kick pump. It is a drawer and not a
+         play control because none of the three is a gesture a hand reaches
+         for mid-piece: the pulse is the one thing a dub set never moves, the
+         master is set once against the room, and the pump is a decision about
+         the piece rather than about the bar.
+         =================================================================== -->
+    <details class="drawer" id="d_set">
+      <summary class="spine" id="sp_set">
+        <span class="nmx">set · 3</span><span class="rule"></span>
+        <span class="moved" id="mv_set">at the manifest</span>
+        <span class="digest" id="dg_set"></span>
+        <span class="refuse" id="rf_set" hidden></span>
+        <span class="plus">+</span>
+      </summary>
+      <div class="body">
+        <div class="grid4">
+          <div class="unit" id="u_bpm">
+            <div class="t">tempo</div>
+            <label class="strip"><input id="bpm" type="range" min="110" max="140" step="1" value="125" aria-label="tempo"><span class="fill"></span><output id="bpm_v" class="v"></output></label>
+            <div class="why" id="w_bpm"></div>
+          </div>
+          <div class="unit" id="u_vol">
+            <div class="t">master</div>
+            <label class="strip"><input id="vol" type="range" min="0" max="1" step="0.01" value="0.8" aria-label="master"><span class="fill"></span><output id="vol_v" class="v"></output></label>
+            <div class="why" id="w_vol"></div>
+          </div>
+          <div class="unit" id="u_pump">
+            <div class="t">kick pump</div>
+            <label class="strip"><input id="pump" type="range" min="0" max="1" step="0.01" value="0" aria-label="kick pump"
+              title="The sidechain duck on everything tonal, from the Endless Set's deck (:8479): 15 ms down, 240 ms back. IT STARTS AT ZERO, and here is why. The manifest's twenty-piece round has no ducking anywhere in it — this is the reference's architecture, not the piece's. And it does not earn its place on the rumble either: MEASURED, a pump of 0.25 takes 1.4 dB off the rumble's own level inside 30-120 Hz and does NOT sharpen its swell into the gap (crest 11.8 dB against 12.9 dB with no pump at all) — the rumble already has a duck of its own. It also costs 0.68 dB of mix RMS."><span class="fill"></span><output id="pump_v" class="v"></output></label>
+            <div class="why" id="w_pump"></div>
+          </div>
+        </div>
+      </div>
+    </details>
+
+    <!-- ===================================================================
+         THE SCHEDULE. It is reading, and the page is an instrument, so it is
+         behind a spine like everything else that is read. `seek to bar` came
+         in with it: it is navigation rather than a play gesture, and it was
+         already beside the table it belongs to.
+         =================================================================== -->
+    <details class="drawer" id="schedule">
+      <summary class="spine" id="sp_schedule">
+        <span class="nmx">schedule</span><span class="rule"></span>
+        <span class="moved" id="mv_schedule">not running</span>
+        <span class="digest" id="schedsum"></span>
+        <span class="refuse" id="rf_schedule" hidden></span>
+        <span class="plus">+</span>
+      </summary>
+      <div class="body">
+        <div class="seekrow">
+          <div class="unit" id="u_seek">
+            <div class="t">seek to bar</div>
+            <label class="strip"><input id="seek" type="range" min="0" max="255" step="1" value="0" aria-label="seek to bar"><span class="fill"></span><output id="seek_v" class="v"></output></label>
+          </div>
+          <button id="seekgo" class="sm">go</button>
+        </div>
+        <!-- THE TABLE IS READ, so it keeps the page's reading measure while
+             the four-up cell grids around it do not. The exemption is named
+             per element, not taken positionally. -->
+        <table id="sections"><thead><tr>
+          <th style="width:52px">bar</th><th>event</th>
+        </tr></thead><tbody></tbody></table>
+      </div>
+    </details>
+
+  </div>
 
   <!-- WHERE THE VOICES COME FROM is not printed either. Every source line and
        every input gain is still in `CHANNELS` and `INPUT_GAIN` below, which is
@@ -3863,12 +4115,17 @@ const HOLDS = emptyHolds();
    these voices [E]'s voices rather than a session's).
    --------------------------------------------------------------------------- */
 const VOICE_PARAMS = {
+  /* `ch` IS THE CHANNEL THIS TRIM REACHES. It is in the table rather than in
+     the surface so there is one place to be wrong: a trim whose channel is not
+     sounding cannot apply, and G rule 2 says such a control must be DRAWN
+     INERT and say which. A knob that quietly does nothing is the worst thing
+     a surface can offer. */
 
   /* --- THE KIT. Set and left. "able to tune drums etc" — the owner, and this
          group is the headline of #27. ------------------------------------- */
 
   "voice.kick.tune": {
-    id: "vkicktune", label: "kick tune", hand: "set", unit: "Hz",
+    id: "vkicktune", label: "kick tune", hand: "set", ch: 0, unit: "Hz",
     base: 43, min: 0.82, max: 1.25, step: 0.01, def: 1,
     of: "the kick body's landing pitch — [E] playKick :8487, a sine 150 Hz "
       + "falling to 43 Hz over 110 ms. The 150 and the slower sub sine under "
@@ -3881,7 +4138,7 @@ const VOICE_PARAMS = {
   },
 
   "voice.kick.decay": {
-    id: "vkickdecay", label: "kick decay", hand: "set", unit: "ms",
+    id: "vkickdecay", label: "kick decay", hand: "set", ch: 0, unit: "ms",
     base: 0.26, min: 0.5, max: 1.8, step: 0.01, def: 1,
     of: "the kick body's 260 ms decay — [E] playKick :8487. The sub sine's "
       + "420 ms tail takes the same trim; they are one drum ringing, not two.",
@@ -3891,7 +4148,7 @@ const VOICE_PARAMS = {
   },
 
   "voice.kick.click": {
-    id: "vkickclick", label: "kick click", hand: "set", unit: "x", zero: "no click",
+    id: "vkickclick", label: "kick click", hand: "set", ch: 0, unit: "x", zero: "no click",
     base: 0.25, min: 0, max: 2, step: 0.01, def: 1,
     of: "the noise click through the 1200 Hz highpass, 20 ms, at 0.25 of the "
       + "hit's velocity — [E] playKick :8487.",
@@ -3902,7 +4159,7 @@ const VOICE_PARAMS = {
   },
 
   "voice.clap.tone": {
-    id: "vclaptone", label: "clap tone", hand: "set", unit: "Hz",
+    id: "vclaptone", label: "clap tone", hand: "set", ch: 2, unit: "Hz",
     base: 1700, min: 0.7, max: 1.6, step: 0.01, def: 1,
     of: "the 1700 Hz bandpass at Q 1.4 the three bursts pass through — "
       + "[E] playClap :8576.",
@@ -3912,7 +4169,7 @@ const VOICE_PARAMS = {
   },
 
   "voice.rim.tune": {
-    id: "vrimtune", label: "rim tune", hand: "set", unit: "Hz",
+    id: "vrimtune", label: "rim tune", hand: "set", ch: 1, unit: "Hz",
     base: 1700, min: 0.7, max: 1.7, step: 0.01, def: 1,
     of: "the woody rimshot's triangle ping at 1700 Hz — [E] playPerc2 rim "
       + ":9047. The 900 Hz highpass under it moves with the same trim, so the "
@@ -3923,7 +4180,7 @@ const VOICE_PARAMS = {
   },
 
   "voice.sub.tone": {
-    id: "vsubtone", label: "sub tone", hand: "set", unit: "x", zero: "sine only",
+    id: "vsubtone", label: "sub tone", hand: "set", ch: 5, unit: "x", zero: "sine only",
     base: 0.22, min: 0, max: 2.5, step: 0.01, def: 1,
     of: "the whisper of triangle on top of the sub's sine, at 0.22 — "
       + "[E] playBass sub :9170, \"just weight, almost no midrange character\".",
@@ -3936,7 +4193,7 @@ const VOICE_PARAMS = {
   /* --- THE FILTERS. Moved while it plays. ---------------------------------- */
 
   "voice.hats.tone": {
-    id: "vhattone", label: "hats tone", hand: "live", unit: "Hz",
+    id: "vhattone", label: "hats tone", hand: "live", ch: 3, unit: "Hz",
     base: 8200, min: 0.55, max: 1.6, step: 0.01, def: 1,
     of: "the closed hat's 8200 Hz highpass corner at Q 1.2 — [E] playHat "
       + ":8531.",
@@ -3946,7 +4203,7 @@ const VOICE_PARAMS = {
   },
 
   "voice.stab.reso": {
-    id: "vstabreso", label: "stab resonance", hand: "live", unit: "x",
+    id: "vstabreso", label: "stab resonance", hand: "live", ch: 6, unit: "x",
     base: 1, min: 0.4, max: 1.8, step: 0.01, def: 1,
     of: "the singing knee — the Q of the first of the stab's two lowpass "
       + "poles, 3.2 + up to 3.4 per note of analog tolerance. [E] playChord "
@@ -3959,7 +4216,7 @@ const VOICE_PARAMS = {
   },
 
   "voice.pad.tone": {
-    id: "vpadtone", label: "pad tone", hand: "live", unit: "Hz",
+    id: "vpadtone", label: "pad tone", hand: "live", ch: 7, unit: "Hz",
     base: 4200, min: 0.45, max: 1.25, step: 0.01, def: 1,
     of: "the pad's cutoff — [E] padLp corner :8289, already multiplied by the "
       + "`cutoff` modulator on channel 7. The breath's bandpass and the pad "
@@ -6649,13 +6906,20 @@ function paintHeader(C) {
   let live = -1;
   if (C.auto) MOVEMENT.sections.forEach((x, i) => { if (x.at <= bar) live = i; });
   const nEv = MOVEMENT.sections.length + (MOVEMENT.gestures || []).length;
+  // IT IS A SPINE DIGEST NOW, so it is the two or three things a hand asks
+  // about the schedule from outside it and not a sentence. Whether the ring is
+  // running is field 2 and is printed beside this one, so it is not repeated.
   ui("schedsum").textContent = live === -1
-    ? `the schedule — ${nEv} events over ${MOVEMENT.bars} bars, and none of them has run: auto is off`
-    : `the schedule — section ${Math.floor(bar / MOVEMENT.section) + 1} of ${Math.ceil(MOVEMENT.bars / MOVEMENT.section)}, last event ${eventText(MOVEMENT.sections[live].event)} at bar ${MOVEMENT.sections[live].at + 1}`;
+    ? `${nEv} events over ${MOVEMENT.bars} bars · none has run`
+    : `section ${Math.floor(bar / MOVEMENT.section) + 1} of ${Math.ceil(MOVEMENT.bars / MOVEMENT.section)} · last ${eventText(MOVEMENT.sections[live].event)} at bar ${MOVEMENT.sections[live].at + 1}`;
   MOVEMENT.sections.forEach((x, i) => {
     const tr = ui("sec" + i); if (!tr) return;
     tr.style.color = i === live ? "var(--hot)" : "";
   });
+  // THE FIVE SPINES REPAINT HERE AND NOWHERE ELSE PER FRAME. `paintHeader` is
+  // the one entry point for everything that is not the playhead: a hand moved,
+  // the ring was switched, a bar came round, the page was seeked.
+  paintDrawers(C);
 }
 
 // One entry point for everything that is not per-frame: the hand moved, the
@@ -6741,11 +7005,14 @@ function wireModRows() {
 function buildMods() {
   let html = "";
   for (const r of MOD_ROWS) {
-    html += '<div class="mslot" id="ms_' + r.id + '">'
-          + '<div class="row"><label>' + r.label + '</label>'
-          + '<input id="' + r.id + '" type="range" min="0" max="2" step="0.01" value="1">'
-          + '<output id="' + r.id + '_v"></output></div>'
-          + '<div class="mwhy" id="mw_' + r.id + '"></div></div>';
+    html += '<div class="unit" id="ms_' + r.id + '">'
+          + '<div class="t">' + r.label + '</div>'
+          + '<label class="strip">'
+          + '<input id="' + r.id + '" type="range" min="0" max="2" step="0.01" value="1"'
+          + ' aria-label="' + r.label + '">'
+          + '<span class="fill"></span>'
+          + '<output id="' + r.id + '_v" class="v"></output></label>'
+          + '<div class="why" id="mw_' + r.id + '"></div></div>';
   }
   ui("modrows").innerHTML = html;
 }
@@ -6773,7 +7040,13 @@ function paintMods(C) {
     const live = C ? C.mods.find(m => m.channel === slot.channel && m.verb === slot.verb) : null;
     const box = ui("ms_" + r.id), inp = ui(r.id), out = ui(r.id + "_v"), why = ui("mw_" + r.id);
     if (!box) continue;
+    // ONE DEAD LOOK, NOT TWO: the unit dims its label and its reason line, the
+    // strip goes dotted and reads `——`, and the range under it really is
+    // disabled. A knob that quietly does nothing is the worst thing a surface
+    // can offer, so it is drawn inert AND it is inert.
+    const strip = inp.parentNode;
     box.classList.toggle("is-dead", !live);
+    strip.classList.toggle("is-dead", !live);
     inp.disabled = !live;
     if (!live) {
       // A REFUSAL YOU CANNOT SEE IS THE SAME FAULT AS GOING QUIET WITHOUT
@@ -6784,9 +7057,14 @@ function paintMods(C) {
         ? "the ring is off, and this modulator is the movement's"
         : "the arrangement is not binding it at this bar");
       why.title = slot.why || "";
+      strip.classList.remove("is-held");
       continue;
     }
     const trim = parseFloat(inp.value);
+    // AWAY FROM THE MANIFEST IS THE HAND'S MARK, and it is the same mark the
+    // spine counts in `n moved`: the edge, the meter and the number together.
+    strip.classList.toggle("is-held", trim !== 1);
+    setFill(inp);
     const exc = Math.abs(live.depth / 100) * depth * trim;
     out.textContent = trim === 0 ? "still"
       : "\u00b1" + exc.toFixed(2) + (slot.verb === "cutoff" ? " oct" : "");
@@ -6807,14 +7085,19 @@ const VOICE_GROUPS = [
 function buildVoices() {
   let html = "";
   for (const g of VOICE_GROUPS) {
-    html += '<div style="color:var(--dim);margin:12px 0 4px">' + g[1] + '</div>';
+    html += '<div class="sub">' + g[1] + '</div>';
     for (const k of VOICE_KEYS) {
       const p = VOICE_PARAMS[k];
       if (p.hand !== g[0]) continue;
-      html += '<div class="row"><label>' + p.label + '</label>'
+      html += '<div class="unit" id="u_' + p.id + '">'
+            + '<div class="t">' + p.label + '</div>'
+            + '<label class="strip">'
             + '<input id="' + p.id + '" type="range" min="' + p.min + '" max="' + p.max
-            + '" step="' + p.step + '" value="' + p.def + '">'
-            + '<output id="' + p.id + '_v"></output></div>';
+            + '" step="' + p.step + '" value="' + p.def + '"'
+            + ' aria-label="' + p.label + '" title="' + p.of.replace(/"/g, "&quot;") + '">'
+            + '<span class="fill"></span>'
+            + '<output id="' + p.id + '_v" class="v"></output></label>'
+            + '<div class="why" id="w_' + p.id + '"></div></div>';
     }
   }
   ui("voices").innerHTML = html;
@@ -6832,6 +7115,320 @@ const fmtVoice = k => v => {
   return "\u00d7" + v.toFixed(2);
 };
 
+/* =========================================================================
+   THE DRAWERS, AND THE FOUR FIELDS A CLOSED ONE SHOWS
+   (surface-grammar §5, §5.1, §5.2)
+
+   A drawer is a `<details>`; the browser owns open, close, the keyboard and
+   the accessible name. What this section owns is the SPINE — the one line a
+   closed drawer shows — and it carries the same four fields in the same order
+   on every drawer, because a digest that rotates is one a player has to read
+   rather than one they learn:
+
+     1. name · count
+     2. HOW FAR FROM THE MANIFEST, in --hot, because it is the hand's mark.
+        This is the load-bearing field: a drawer you cannot see into is a place
+        for a setting to be wrong for an hour.
+     3. the two or three values you would ask about from outside, fixed
+     4. ANY REFUSAL INSIDE IT. A refusal behind a closed panel is a refusal you
+        find out about after reaching, which is the same fault as going quiet
+        without saying why.
+
+   EVERY ONE OF THOSE IS READ FROM LIVE STATE — the control's own value against
+   the number the piece drew, the same pair the `back to the manifest` buttons
+   read. Nothing here is typed in.
+
+   §5.2, AND IT IS FREE: NOTHING INSIDE A CLOSED DRAWER IS PAINTED. A closed
+   drawer's values can only change when a hand moves something inside it, which
+   cannot happen while it is closed. The spine digests are five lines of text
+   and they repaint through `paintHeader`, never from `paint()`.
+   ========================================================================= */
+
+// The meter under a strip, read off the range's own min and max, so the
+// drawing and the value are one claim and there is no second copy anywhere.
+function setFill(inp) {
+  if (!inp || inp.type !== "range") return;
+  const f = inp.parentNode.querySelector(".fill");
+  if (!f) return;
+  const lo = parseFloat(inp.min), hi = parseFloat(inp.max);
+  f.style.width = (clamp(hi > lo ? (parseFloat(inp.value) - lo) / (hi - lo) : 0, 0, 1) * 100)
+                    .toFixed(2) + "%";
+}
+
+const voiceName = ch => {
+  const c = CHANNELS.find(x => x.ch === ch);
+  return c ? c.voice : "channel " + ch;
+};
+
+/* WHY A CONTROL THAT ONLY REACHES ONE CHANNEL CANNOT APPLY. Empty is the
+   piece's answer and mute/solo are the hand's; all three are STABLE, which is
+   why the arrangement's own bar-by-bar rests are deliberately NOT in here. A
+   control that went dead and live again every bar would be unusable, and
+   §7's rule is that state changes ink, not the ground under a finger. */
+function chReach(ch) {
+  if (PIECE.empty[ch]) return "this piece has no " + voiceName(ch);
+  if (MIX.mutes[ch]) return voiceName(ch) + " is muted — nothing you move here can be heard";
+  if (MIX.solo !== null && MIX.solo !== ch)
+    return voiceName(ch) + " is silent — " + voiceName(MIX.solo) + " is soloed";
+  return "";
+}
+
+/* IS ANYTHING REACHING THE ECHO — or the room. Not "is the trim above zero":
+   a channel that is muted or soloed away sends nothing, and a channel whose
+   composed send is zero can still be fed by a modulator bound to that send.
+   All of that is read rather than assumed, because this decides a refusal
+   printed on a CLOSED drawer and a wrong one there is worse than none. */
+function sendFed(C, verb) {
+  if (val(verb === "delay" ? "dlytrim" : "revtrim") === 0) return false;
+  if (!C) return true;
+  for (const ch of ALL_CHANNELS) {
+    if (PIECE.empty[ch] || !mixAudible(ch)) continue;
+    if (C.wet && C.wet[ch] && C.wet[ch][verb] > 0) return true;
+    if (C.mods && C.mods.some(m => m.channel === ch && m.verb === verb)) return true;
+  }
+  return false;
+}
+
+const DEAD_ECHO = "nothing reaches the echo — every echo send is at zero";
+const DEAD_ROOM = "nothing reaches the room — every room send is at zero";
+const DIV_WORD = { "0.25": "1/16", "0.5": "1/8", "0.75": "3/16", "1": "1/4" };
+
+function echoMsText() {
+  const beats = parseFloat(ui("dlydiv").value);
+  return (60 / (engine ? engine.cfg.bpm : PIECE.tempo) * beats * 1000).toFixed(0) + " ms";
+}
+
+/* A UNIT DESCRIPTOR IS FOUR ANSWERS: which control, what the manifest said,
+   whether it can apply, and the one line under it. `base` is a function and
+   not a number because the manifest changes with the seed — a drawn piece is
+   a different recipe, and a spine that kept the last piece's baseline would
+   report the hand's mark on a value the hand never touched. */
+const ROOM_UNITS = [
+  { id: "dlydiv", unit: "u_dlydiv", short: "echo div", steps: true,
+    // a draw outside the four named steps cannot be shown, so the control is
+    // at the nearest thing it can say and is not marked as the hand's
+    base: () => {
+      const b = DLY_DIVISIONS[PIECE.globals.dlytime];
+      return Array.prototype.some.call(ui("dlydiv").options, o => parseFloat(o.value) === b)
+        ? b : parseFloat(ui("dlydiv").value);
+    },
+    dead: C => sendFed(C, "delay") ? "" : DEAD_ECHO,
+    note: () => "named steps, not a fader — in two hours you come back to 3/16, not to a position" },
+  { id: "fbk", unit: "u_fbk", short: "repeats",
+    base: () => PIECE.globals.dlyfbk / 100,
+    dead: C => sendFed(C, "delay") ? "" : DEAD_ECHO,
+    note: () => "how many times the echo says it again" },
+  { id: "dlytrim", unit: "u_dlytrim", short: "all echo sends", base: () => 1, dead: () => "",
+    note: () => "a master over the nine echo sends on the desk" },
+  { id: "revsize", unit: "u_revsize", short: "room size",
+    base: () => PIECE.globals.revSeconds,
+    dead: C => sendFed(C, "reverb") ? "" : DEAD_ROOM,
+    note: () => "how long the room takes to stop" },
+  { id: "revtrim", unit: "u_revtrim", short: "all room sends", base: () => 1, dead: () => "",
+    note: () => "a master over the nine room sends on the desk" },
+  { id: "stabcut", unit: "u_stabcut", short: "stab cutoff", base: () => 1,
+    // `cfg.stabCut` is read in two places and both of them are channel 6
+    dead: () => chReach(6),
+    note: () => "how far open the stab's filter starts" },
+  { id: "bed", unit: "u_bed", short: "noise floor", base: () => 1, dead: () => "",
+    note: () => "tape air — it never ducks with the kick and it never moves on its own" },
+  { id: "moddepth", unit: "u_moddepth", short: "all modulation", base: () => 1,
+    dead: C => (C && C.mods.length) ? "" : "nothing is bound at this bar — there is no swing to scale",
+    note: () => "a master on how far every modulator swings — never on the value it swings around" }
+];
+
+const SET_UNITS = [
+  { id: "bpm", unit: "u_bpm", short: "tempo", base: () => PIECE.tempo, dead: () => "",
+    note: () => "the pulse is the one thing a dub set never moves" },
+  // THE MANIFEST HAS NO OPINION ABOUT HOW LOUD THE ROOM IS. 0.8 is the page's
+  // own resting level, and it is named here rather than left implicit so the
+  // spine's `1 moved` is against something that exists.
+  { id: "vol", unit: "u_vol", short: "master", base: () => 0.8, dead: () => "",
+    note: () => "set once against the room you are in" },
+  { id: "pump", unit: "u_pump", short: "kick pump", base: () => PIECE.globals.pump, dead: () => "",
+    note: () => "the manifest's round has no ducking in it, so it starts at zero" }
+];
+
+const voiceUnits = () => VOICE_KEYS.map(k => {
+  const p = VOICE_PARAMS[k];
+  return { id: p.id, unit: "u_" + p.id, short: p.label, base: () => p.def,
+           dead: () => chReach(p.ch), note: () => "" };
+});
+
+const moverUnits = () => MOD_ROWS.map(r => ({
+  id: r.id, unit: "ms_" + r.id, short: r.label, base: () => 1,
+  dead: C => (C && C.mods.some(m => m.channel === r.slot.channel && m.verb === r.slot.verb))
+    ? "" : "not bound at this bar",
+  note: () => ""
+}));
+
+const nMoved = n => n + " moved";
+
+const DRAWERS = [
+  { key: "room", el: "d_room", rest: "at the manifest", units: () => ROOM_UNITS,
+    digest: () => "echo " + (DIV_WORD[ui("dlydiv").value] || ui("dlydiv").value)
+                + " · repeats " + val("fbk").toFixed(2)
+                + " · all modulation ×" + val("moddepth").toFixed(2) },
+  { key: "voices", el: "d_voices", rest: "at the recipe", units: voiceUnits,
+    digest: () => VOICE_KEYS.filter(k => VOICE_PARAMS[k].hand === "live")
+      .map(k => VOICE_PARAMS[k].label.split(" ")[0] + " " + FMT[VOICE_PARAMS[k].id](val(VOICE_PARAMS[k].id)))
+      .join(" · ") },
+  { key: "movers", el: "d_movers", rest: "at the manifest", units: moverUnits,
+    name: () => "movers · " + MOD_ROWS.length, nameEl: "nm_movers",
+    body: C => paintMods(C),
+    // FIELD 3 ALREADY IS THE REFUSAL HERE — `3 of 5 bound at this bar` says
+    // which controls cannot apply, in the drawer's own words and with the
+    // count. The chip exists to say what the digest does not, so it is off on
+    // this one spine; the all-dead rule still reads the same refusals.
+    quiet: true,
+    digest: C => {
+      const bound = C ? MOD_ROWS.filter(r => C.mods.some(m => m.channel === r.slot.channel
+                                                          && m.verb === r.slot.verb)).length : 0;
+      const off = MOD_ROWS.filter(r => ui(r.id) && parseFloat(ui(r.id).value) !== 1);
+      return bound + " of " + MOD_ROWS.length + " bound at this bar · "
+           + (off.length ? off.slice(0, 2).map(r => r.label + " ×" + parseFloat(ui(r.id).value).toFixed(2)).join(" · ")
+                         : "every trim at the manifest");
+    } },
+  { key: "set", el: "d_set", rest: "at the manifest", units: () => SET_UNITS,
+    digest: () => val("bpm") + " BPM · master " + val("vol").toFixed(2)
+                + " · pump " + (val("pump") === 0 ? "off" : val("pump").toFixed(2)) },
+  /* THE SCHEDULE IS READ, NOT MOVED, so its second field cannot be `n moved`.
+     What a hand wants to know about it from outside is whether it is RUNNING,
+     which is the ring's answer and is the same fact the transport prints. Its
+     digest is `schedsum`, written by `paintHeader` — one sentence, one writer. */
+  { key: "schedule", el: "schedule", rest: "not running", units: () => [],
+    canDie: false, digestEl: "schedsum",
+    moved: C => (C && C.auto) ? ["running", false] : ["not running", true] }
+];
+
+const drawerOpen = key => {
+  const el = ui((DRAWERS.find(d => d.key === key) || {}).el);
+  return !!(el && el.open);
+};
+
+// AT THE MANIFEST, to the control's own resolution. Comparing against half a
+// step rather than for equality is what stops a slider that reads 125 on a
+// drawn tempo of 124.7 from claiming the hand moved it.
+function atBase(u) {
+  const el = ui(u.id);
+  if (!el) return true;
+  const st = parseFloat(el.step) || 0.01;
+  return Math.abs(parseFloat(el.value) - parseFloat(u.base())) < st / 2;
+}
+
+/* ONE CONTROL, DRAWN. The four looks and nothing else: live (edge `--line`,
+   value `--ink`), held by the hand (edge, meter and number go `--hot`
+   together — a strip cannot invert, §7.1 measured why), and dead (dotted,
+   `--inert`, reading `——`, and the range under it really is disabled). There
+   is no `wait` here: everything in a drawer LANDS NOW. */
+function paintUnit(u, C) {
+  const el = ui(u.id);
+  if (!el) return "";
+  const why = u.dead(C);
+  const unit = ui(u.unit), w = ui("w_" + u.id), out = ui(u.id + "_v");
+  const strip = el.parentNode && el.parentNode.classList.contains("strip") ? el.parentNode : null;
+  if (unit) unit.classList.toggle("is-dead", !!why);
+  el.disabled = !!why;
+  if (w) w.textContent = why || (u.note ? u.note() : "");
+  if (u.steps) {
+    const v = parseFloat(el.value);
+    for (const b of ui("dlydiv_steps").children) {
+      b.setAttribute("aria-pressed", String(parseFloat(b.dataset.v) === v));
+      b.disabled = !!why;
+    }
+    if (out) out.textContent = why ? "——" : echoMsText();
+  } else if (strip) {
+    strip.classList.toggle("is-dead", !!why);
+    strip.classList.toggle("is-held", !why && !atBase(u));
+    if (out) out.textContent = why ? "——" : (FMT[u.id] ? FMT[u.id](parseFloat(el.value)) : el.value);
+    setFill(el);
+  }
+  return why;
+}
+
+/* THE FIVE SPINES, AND ONLY THE OPEN BODIES. This is the whole of §5.2: the
+   spines are cheap and always true; a closed body is not touched at all. */
+function paintDrawers(C) {
+  for (const d of DRAWERS) {
+    const box = ui(d.el);
+    if (!box) continue;
+    const open = box.open;
+    const units = d.units();
+    let moved = 0;
+    const refusals = [];
+    for (const u of units) {
+      const why = open && !d.body ? paintUnit(u, C) : u.dead(C);
+      if (why) refusals.push(u.short);
+      else if (!atBase(u)) moved++;
+    }
+    if (open && d.body) d.body(C);
+    if (d.nameEl) ui(d.nameEl).textContent = d.name();
+    // FIELD 2 — the load-bearing one, and the only thing on a spine that is
+    // allowed the hand's colour.
+    const mv = ui("mv_" + d.key);
+    const m = d.moved ? d.moved(C) : (moved ? [nMoved(moved), false] : [d.rest, true]);
+    mv.textContent = m[0];
+    mv.classList.toggle("none", m[1]);
+    // FIELD 3 — fixed per drawer, never a rotating digest.
+    if (d.digest) ui("dg_" + d.key).textContent = d.digest(C);
+    // FIELD 4 — the refusal, before the gesture rather than after it. UP TO
+    // THREE ARE NAMED, because `3 controls dead` tells a hand that something
+    // is wrong and not what, and there is no hover on an iPad to ask. Past
+    // three it is a count: a chip long enough to wrap is a spine whose first
+    // field has moved, and §7 says state changes ink and never layout.
+    const rf = ui("rf_" + d.key);
+    if (!refusals.length || d.quiet) { rf.hidden = true; rf.textContent = ""; rf.title = ""; }
+    else {
+      rf.hidden = false;
+      rf.textContent = refusals.length <= 3
+        ? refusals.join(" · ") + " dead"
+        : refusals.length + " of " + units.length + " dead";
+      rf.title = refusals.join(", ");
+    }
+    // A SPINE WHOSE EVERY CONTROL IS DEAD DRAWS DEAD AND DOES NOT OPEN.
+    const dead = d.canDie !== false && refusals.length === units.length;
+    box.classList.toggle("is-dead", dead);
+    if (dead && box.open) box.open = false;
+    box.querySelector(".plus").textContent = dead ? " " : (box.open ? "−" : "+");
+  }
+}
+
+function wireDrawers() {
+  // ONE DELEGATED LISTENER, so rebuilding the modulator units or the voice
+  // units does not throw it away — a control that moves but no longer reaches
+  // the spine beside it is the same class of fault as one that no longer
+  // reaches the engine.
+  ui("drawers").addEventListener("input", e => {
+    if (e.target.type === "range") setFill(e.target);
+    paintDrawers(shownComposition());
+  });
+  for (const d of DRAWERS) {
+    const box = ui(d.el);
+    box.addEventListener("toggle", () => paintDrawers(shownComposition()));
+    // the refusal is enforced, not only drawn: a dead spine does not open
+    box.querySelector("summary").addEventListener("click", e => {
+      if (box.classList.contains("is-dead")) e.preventDefault();
+    });
+  }
+  // NAMED STEPS. The buttons write the `<select>` and let it raise its own
+  // `change`, so both listeners already bound to it — the readout's and the
+  // engine's — run exactly as they did when it was a menu.
+  for (const b of ui("dlydiv_steps").children) {
+    b.addEventListener("click", () => {
+      const sel = ui("dlydiv");
+      if (sel.disabled || sel.value === b.dataset.v) return;
+      sel.value = b.dataset.v;
+      sel.dispatchEvent(new Event("change"));
+      paintDrawers(shownComposition());
+    });
+  }
+}
+
+/* THE FORMATTERS, KEPT WHERE THE DRAWERS CAN REACH THEM. A unit that goes
+   dead prints `——`; when it comes back it has to print the number again, and
+   there must be exactly one function on the page that knows how. */
+const FMT = {};
+
 function outputs() {
   const pairs = [
     ["bpm", v => v + " BPM"], ["vol", v => v.toFixed(2)], ["pump", v => v.toFixed(2)],
@@ -6844,15 +7441,13 @@ function outputs() {
   ];
   for (const k of VOICE_KEYS) pairs.push([VOICE_PARAMS[k].id, fmtVoice(k)]);
   for (const [id, fmt] of pairs) {
+    FMT[id] = fmt;
     const el = ui(id), out = ui(id + "_v");
-    const upd = () => { out.textContent = fmt(parseFloat(el.value)); };
+    const upd = () => { out.textContent = fmt(parseFloat(el.value)); setFill(el); };
     el.addEventListener("input", upd); upd();
   }
   const dv = ui("dlydiv"), dvo = ui("dlydiv_v");
-  const updDv = () => {
-    const beats = parseFloat(dv.value);
-    dvo.textContent = (60 / (engine ? engine.cfg.bpm : PIECE.tempo) * beats * 1000).toFixed(0) + " ms";
-  };
+  const updDv = () => { dvo.textContent = echoMsText(); };
   dv.addEventListener("change", updDv); updDv();
   ui("bpm").addEventListener("input", updDv);
 }
@@ -6903,7 +7498,10 @@ function wire() {
   // of this slider alone: it is this slider times `all modulation` times the
   // depth the arrangement is currently running.
   wireModRows();
-  ui("moddepth").addEventListener("input", () => paintMods(shownComposition()));
+  // `moddepth` used to repaint the modulator rows directly. It cannot now: the
+  // rows may be behind a closed drawer, and §5.2 says nothing inside one is
+  // painted. `#drawers`' own delegated listener repaints the spine — which is
+  // what is visible — and the rows when their drawer is open.
   // BACK TO THE MANIFEST, down the path a hand takes — the same reason
   // `voicereset` dispatches the event instead of calling the engine itself.
   ui("modreset").addEventListener("click", () => {
@@ -6930,6 +7528,7 @@ function wire() {
   const updSeek = () => {
     const b = parseInt(sk.value, 10);
     sko.textContent = `${b + 1} / ${MOVEMENT.bars}`;
+    setFill(sk);
   };
   // THE SHEET FOLLOWS THE SEEK WHILE THE TRANSPORT IS STOPPED. A bar the hand
   // is pointing at is a bar it should be able to see: the lead's countdown,
@@ -7271,6 +7870,7 @@ ui("seedin_v").textContent = String(SEED);
 paintBarSheet(previewBar(), shownComposition());
 outputs();
 wire();
+wireDrawers();
 ui("go").addEventListener("click", start);
 ui("mute").addEventListener("click", () => {
   muted = !muted;
