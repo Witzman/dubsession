@@ -102,6 +102,11 @@ const exported = [
   'pinsToText', 'pinsFromText', 'pinsFromQuery', 'mutFreeSteps',
   // #66 — fired gestures are explicit timeline input to the same pure layer.
   'FIRE_MACROS', 'FIRE_MICROS', 'applyFires',
+  // #67 — the ride. The path, the interpolation and the throw's schedule are
+  // pure; the bar line they land on and the races are section 6b's and are
+  // measured in a browser, not here.
+  'RIDE_SPAN', 'RIDE_LENGTHS', 'RIDE_SOUND', 'rideWaypoint', 'rideValue',
+  'rideVector', 'rideMix', 'rideGeometric', 'throwPosition', 'VOX', 'VOX_KEYS',
 ];
 const L = new Function(`${region}\n; return { ${exported.join(', ')} };`)();
 ok(typeof L.compositionAt === 'function', 'the region evaluates and exports the layer');
@@ -1296,6 +1301,136 @@ L.usePiece(SHIPPED);
 ok(L.pinCount() === 0 && L.DRUM_PAT[0].join('') === '1000100010001000',
    '`release pins` puts the lane back exactly as it was drawn', L.DRUM_PAT[0].join(''));
 
+
+/* -- 12. THE RIDE — THE SPACE, AND WHAT IS TRUE AT EVERY POSITION IN IT ----
+   #67. The claim is "half-way between two kicks is a kick", and for SOUND that
+   is a claim about ranges: a position between two draws of one field is inside
+   that field's own declared range, so it is a legal value of that field and
+   the contract has nothing to refuse. This asks that of every ridable field at
+   many positions rather than believing the argument. */
+group('the ride');
+{
+  const RIDE_SEEDS = 40, POSITIONS = 21;
+  const keys = Object.keys(L.RIDE_SOUND).reduce((a, ch) => a.concat(L.RIDE_SOUND[ch]), []);
+  ok(keys.length > 0 && keys.every(k => L.VOX[k] && L.VOX[k].draw && L.VOX[k].draw.range),
+     'every ridable field is a drawn NUMBER, never a name and never a fixed value',
+     `${keys.length} fields over ${Object.keys(L.RIDE_SOUND).length} channels`);
+  ok(L.RIDE_SOUND[5].length === 0,
+     'the sub has no sound dimension — its only drawn voice field is a name');
+
+  // 1. CONTAINMENT. Every position of every field, inside its own range.
+  let outside = 0; const firstOut = [];
+  for (let i = 0; i < RIDE_SEEDS; i++) {
+    const seed = seedOf(i), piece = L.draw(seed);
+    for (const ch of Object.keys(L.RIDE_SOUND)) {
+      for (let p = 0; p < POSITIONS; p++) {
+        const pos = p * L.RIDE_SPAN / (POSITIONS - 1);
+        const v = L.rideVector(seed, piece.vox, ch, pos);
+        for (const k of Object.keys(v)) {
+          const r = L.STYLE.vox[k].range;
+          if (!(v[k] >= r[0] - 1e-9 && v[k] <= r[1] + 1e-9)) {
+            outside++;
+            if (firstOut.length < 3) firstOut.push(`${k} ${v[k]} outside [${r}] at ${pos.toFixed(2)}`);
+          }
+        }
+      }
+    }
+  }
+  ok(outside === 0, 'no position of any ride leaves the range the manifest declares',
+     outside ? firstOut.join(' | ') : `${RIDE_SEEDS} seeds x ${POSITIONS} positions x ${keys.length} fields`);
+
+  // 2. POSITION ZERO IS THE PIECE, IDENTICALLY. Not "within a tolerance":
+  // "push it back and the old one returns" is an equality or it is a story.
+  let drift = 0;
+  for (let i = 0; i < RIDE_SEEDS; i++) {
+    const seed = seedOf(i), piece = L.draw(seed);
+    for (const ch of Object.keys(L.RIDE_SOUND)) {
+      const v = L.rideVector(seed, piece.vox, ch, 0);
+      for (const k of Object.keys(v)) if (v[k] !== piece.vox[k]) drift++;
+    }
+  }
+  ok(drift === 0, 'position 0 returns the drawn piece bit for bit', `${RIDE_SEEDS} seeds`);
+
+  // 3. AN INTEGER POSITION IS A WAYPOINT, and the same seed draws the same
+  // path every time: a ride is deterministic even though it is never in the URL.
+  {
+    const seed = seedOf(3), piece = L.draw(seed);
+    const a = L.rideVector(seed, piece.vox, 0, 2), b = L.rideVector(seed, piece.vox, 0, 2);
+    const same = Object.keys(a).every(k => a[k] === b[k]);
+    const isWaypoint = Object.keys(a).every(k =>
+      a[k] === L.rideWaypoint(seed, k, 2, piece.vox[k]));
+    ok(same && isWaypoint, 'an integer position IS a waypoint, and the path is a fact about the seed');
+    const other = L.rideVector(seedOf(4), L.draw(seedOf(4)).vox, 0, 2);
+    ok(Object.keys(a).some(k => a[k] !== other[k]), 'and a different seed rides a different path');
+  }
+
+  // 4. MONOTONE BETWEEN WAYPOINTS. A ride that overshoots and comes back is
+  // not a ride: every field moves one way between two waypoints, or the
+  // in-between positions are not "on the way" to anything.
+  {
+    let wobbles = 0;
+    for (let i = 0; i < RIDE_SEEDS; i++) {
+      const seed = seedOf(i), piece = L.draw(seed);
+      for (const ch of Object.keys(L.RIDE_SOUND)) for (const k of L.RIDE_SOUND[ch]) {
+        const a = L.rideWaypoint(seed, k, 1, piece.vox[k]), b = L.rideWaypoint(seed, k, 2, piece.vox[k]);
+        const q = L.STYLE.vox[k].q || 0;
+        let prev = a;
+        for (let t = 1; t <= 20; t++) {
+          const v = L.rideMix(k, a, b, t / 20);
+          // a quantised field steps, so it may repeat; it may not turn round
+          if ((b > a && v < prev - (q || 1e-12)) || (b < a && v > prev + (q || 1e-12))) wobbles++;
+          prev = v;
+        }
+      }
+    }
+    ok(wobbles === 0, 'between two waypoints every field moves one way only', `${RIDE_SEEDS} seeds`);
+  }
+
+  // 5. THE CURVE. Hz and seconds ride geometrically: half-way between 1200 and
+  // 5000 Hz is the geometric mean, which is where the EAR puts it. A linear
+  // sweep would be 3100 and would read as having arrived early.
+  {
+    const mid = L.rideMix('rhodesTone', 1200, 5000, 0.5);
+    const gm = Math.sqrt(1200 * 5000);
+    ok(Math.abs(mid - gm) < 1e-9 && Math.abs(mid - 3100) > 500,
+       'a frequency rides geometrically', `half-way 1200..5000 Hz is ${mid.toFixed(0)} Hz, not 3100`);
+    const lin = L.rideMix('kickSubMix', 0.3, 0.9, 0.5);
+    ok(Math.abs(lin - 0.6) < 1e-12, 'a share rides linearly', `half-way 0.3..0.9 is ${lin}`);
+    ok(L.rideGeometric('hatDecay') && !L.rideGeometric('clapQ'),
+       'the unit on the table decides the curve, not the size of the number');
+    // a quantised field lands on its own steps at every position
+    const spec = L.STYLE.vox.leadDetune;
+    let offStep = 0;
+    for (let t = 0; t <= 20; t++) {
+      const v = L.rideMix('leadDetune', 4, 18, t / 20);
+      if (Math.abs(v / spec.q - Math.round(v / spec.q)) > 1e-9) offStep++;
+    }
+    ok(offStep === 0, 'a quantised field rides on its own steps', `q ${spec.q}`);
+  }
+
+  // 6. THE THROW'S SCHEDULE. Bars, never seconds; exact arrival on the last
+  // bar; equal travel per bar, which is what "not a staircase" means when the
+  // landing is quantised to the bar in the first place.
+  {
+    ok(L.RIDE_LENGTHS.join(',') === '0,1,4,8,16,32,64',
+       'the glide lengths are the musical ones, in bars', L.RIDE_LENGTHS.join(' '));
+    let bad = 0; const steps = [];
+    for (const bars of [1, 4, 8, 16, 32, 64]) {
+      let prev = L.throwPosition(0, 3, bars, 0);
+      for (let d = 1; d <= bars; d++) {
+        const v = L.throwPosition(0, 3, bars, d);
+        steps.push(v - prev); prev = v;
+      }
+      if (prev !== 3) bad++;
+      if (L.throwPosition(0, 3, bars, bars + 5) !== 3) bad++;
+    }
+    ok(bad === 0, 'a throw arrives exactly on its last bar, at every length', '1, 4, 8, 16, 32, 64 bars');
+    const per = L.throwPosition(1, 3, 8, 1) - 1;
+    ok(Math.abs(per - 0.25) < 1e-12, 'and every bar of it travels the same distance',
+       `${per} of 2 per bar over 8 bars`);
+    ok(L.throwPosition(2, 0, 4, 2) === 1, 'a throw downward is the same schedule backwards');
+  }
+}
 
 console.log(`\n${checks - failures}/${checks} checks passed`);
 if (PROVE_RED) {
