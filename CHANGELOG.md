@@ -1,5 +1,23 @@
 # Changelog
 
+## 2026-09-20 — four trajectories and six one-bar gestures can be fired
+
+- **Drop, buildup, phase-out and reverb-out are played from the surface.** Each
+  one waits for the next bar, shows its length before it is pressed and says
+  whether it will RETURN or LAND. A second large gesture replaces the first
+  on a bar boundary; pressing the active one again cancels it there.
+- **Drop takes the kick and sub away, buildup ratchets the hats from one to
+  four onsets, phase-out removes the pad, and reverb-out sends the stab into
+  the room.** Their progress is explicit timeline data, so live playback, a
+  seek and an offline render resolve the same bar without replaying history.
+- **The six existing per-bar mutations have buttons.** Ghost hat, hats out,
+  bass octave, stab lean, turnaround and kick ghost use the same bounded
+  mutation layer as the generative grain. Two may share a bar; a turnaround
+  asked early waits for the end of the eight-bar phrase.
+- **The hand still wins.** A held room send outranks reverb-out, `release all`
+  clears every fired and held state, and no gesture redraws a bar already in
+  flight.
+
 ## 2026-09-20 — the desk becomes pane 2 of the sheet
 
 - **The mixer stops being a website with sliders.** The nine channel rows were
