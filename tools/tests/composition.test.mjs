@@ -100,6 +100,8 @@ const exported = [
   // what a reader of `DRUM_PAT` is entitled to see afterwards.
   'PINS', 'PIN_ON', 'pinAt', 'setPin', 'clearPins', 'pinCount', 'applyPins',
   'pinsToText', 'pinsFromText', 'pinsFromQuery', 'mutFreeSteps',
+  // #66 — fired gestures are explicit timeline input to the same pure layer.
+  'FIRE_MACROS', 'FIRE_MICROS', 'applyFires',
 ];
 const L = new Function(`${region}\n; return { ${exported.join(', ')} };`)();
 ok(typeof L.compositionAt === 'function', 'the region evaluates and exports the layer');
@@ -777,6 +779,62 @@ ok(wild.phrase[6] === 8 && wild.chance[6] === 1 && wild.wet[6].delay === 2 && wi
    `phrase ${wild.phrase[6]} · chance ${wild.chance[6]} · delay ${wild.wet[6].delay} · move ${wild.move[6]}`);
 ok(L.compositionAt(SEED, P, M, 8, { holds: { move: { 0: L.LOCK } } }).move[0] === L.LOCK,
    'and LOCK is a word the hand may hold, not a number it may not');
+
+/* -- 5d. FIRED GESTURES --------------------------------------------------
+   The scheduler owns WHEN an event is stamped. From then on the composition
+   layer sees plain data, so seek, offline render and live playback all ask the
+   same question. These checks cover boundaries and replacement rather than
+   mirroring the interpolation code.
+   ------------------------------------------------------------------------ */
+group('fired gestures — explicit, bounded, replayable');
+const fireAt = (bar, events, extra = {}) =>
+  L.compositionAt(SEED, P, M, bar, { mutate: true, fires: { events }, ...extra });
+const captured = { present: { 0: 1, 5: 1, 6: 1, 7: 1 }, reverb: { 6: P.wets[6].reverb / 100 } };
+const drop = { id: 1, kind: 'drop', at: 10, bars: 4, capture: captured };
+ok(fireAt(9, [drop]).present[0] === 1 && fireAt(9, [drop]).fire.active === null,
+   'a macro changes nothing before its stamped bar');
+ok(fireAt(10, [drop]).present[0] < 1 && fireAt(13, [drop]).present[0] === 0,
+   'drop starts on its bar and reaches silence on its last active bar');
+ok(fireAt(14, [drop]).present[0] === 0 && fireAt(200, [drop]).present[5] === 0,
+   'LAND persists across a cold seek', 'kick and sub remain out');
+const cancelled = { ...drop, until: 12 };
+ok(fireAt(12, [cancelled]).present[0] === 1 && fireAt(200, [cancelled]).fire.landed.length === 0,
+   'a cancelled or replaced macro does not land');
+
+const build = { id: 2, kind: 'buildup', at: 20, bars: 4, capture: captured };
+ok([20, 21, 22, 23].map(b => fireAt(b, [build]).mut.ratchet.count).join(',') === '1,2,3,4'
+   && fireAt(24, [build]).mut.ratchet === null,
+   'buildup rises one to four repeats and RETURN clears at the end', '1,2,3,4,return');
+const phase = { id: 3, kind: 'phaseout', at: 30, bars: 3, capture: captured };
+ok(fireAt(32, [phase]).present[7] === 0 && fireAt(33, [phase]).present[7] === 0,
+   'phase-out removes the pad and LAND keeps it out');
+const reverb = { id: 4, kind: 'reverbout', at: 40, bars: 4, capture: captured };
+const revMid = fireAt(41, [reverb]);
+const revBack = fireAt(44, [reverb]);
+ok(revMid.wet[6].reverb > captured.reverb[6] && revMid.present[6] < 1
+   && revBack.wet[6].reverb === captured.reverb[6] && revBack.present[6] === 1,
+   'reverb-out sends the stab into the room and RETURN restores the bar');
+ok(fireAt(41, [reverb], { holds: { reverb: { 6: 0.23 } } }).wet[6].reverb === 0.23,
+   'a held room send outranks a fired reverb-out');
+
+const unordered = [
+  { id: 8, kind: 'micro', micro: 'kick-ghost', at: 55 },
+  { id: 7, kind: 'micro', micro: 'stab-lean', at: 55 }
+];
+const orderedA = fireAt(55, unordered);
+const orderedB = fireAt(55, unordered.slice().reverse());
+ok(L.fingerprint(orderedA, SEED) === L.fingerprint(orderedB, SEED),
+   'timeline order cannot change the resolved bar');
+ok(orderedA.mut.fired.length <= 2 && orderedA.mut.fired.every(x => x.manual),
+   'one-bar buttons use the existing mutation families and keep the two-event cap');
+for (const micro of L.FIRE_MICROS) {
+  const bar = micro === 'turnaround' ? 63 : 62;
+  const C = fireAt(bar, [{ id: 20, kind: 'micro', micro, at: bar }]);
+  ok(C.fire.micros.includes(micro) && C.mut.fired.some(x => x.manual),
+     `the ${micro} button reaches its mutation family`);
+}
+ok(!fireAt(62, [{ id: 21, kind: 'micro', micro: 'turnaround', at: 62 }]).mut.fired.some(x => x.manual),
+   'turnaround cannot fire away from a phrase end');
 
 /* -- 6. the control is still the control ---------------------------------
    These four were "the manifest is untouched" while the manifest WAS the

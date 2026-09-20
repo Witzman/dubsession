@@ -2,6 +2,7 @@
 <html lang="en">
 <head>
 <meta charset="utf-8">
+<link rel="icon" href="data:,">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>dubsession</title>
 <style>
@@ -90,6 +91,19 @@
     background: transparent; cursor: default;
   }
   .top { display: flex; gap: 10px; align-items: center; }
+  #fires { margin: 12px 0 16px; border-top: 1px solid var(--line); padding-top: 10px; }
+  .fire-head { display: flex; gap: 12px; align-items: baseline; margin-bottom: 7px; }
+  .fire-head b { font-size: 12px; letter-spacing: .14em; }
+  #firestate { color: var(--dim); font-size: 12px; }
+  .fire-macros { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 6px; }
+  .fire-unit { display: grid; grid-template-columns: minmax(0, 1fr) auto; }
+  .fire-unit button { padding: 7px 5px; font-size: 11px; white-space: normal; line-height: 1.25; }
+  .fire-unit select { width: 58px; border: 1px solid var(--line); border-left: 0;
+                      background: var(--panel); color: var(--ink); font: inherit; }
+  .fire-micros { display: grid; grid-template-columns: repeat(6, minmax(0, 1fr)); gap: 6px; margin-top: 6px; }
+  .fire-micros button { padding: 7px 4px; font-size: 11px; }
+  #fires button.is-wait { border-style: dashed; border-color: var(--time); color: var(--time); }
+  #fires button.is-landed { border-color: var(--hot); color: var(--hot); }
   /* `.row` — a 150 px label beside a slider beside a 78 px readout — WAS THE
      WHOLE OF THE PAGE BELOW THE SHEET, and §2 of the grammar rejects it by
      name: it is the website-with-sliders. Every one of those rows is now a
@@ -486,6 +500,8 @@
      asking the browser for `scrollWidth` against `clientWidth` on every cell
      finds it — it was found that way here, one pixel sweep at a time. */
   @media (max-width: 900px) {
+    .fire-macros { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+    .fire-micros { grid-template-columns: repeat(3, minmax(0, 1fr)); }
     #chans { display: block; max-width: 660px; }
     .chan {
       display: grid; align-items: center;
@@ -515,6 +531,8 @@
     .vcell .vx { float: right; margin-top: -18px; position: relative; }
   }
   @media (max-width: 560px) {
+    .fire-macros { grid-template-columns: minmax(0, 1fr); }
+    .fire-micros { grid-template-columns: repeat(2, minmax(0, 1fr)); }
     /* The two blocks that still have a fixed width give it up rather than push
        the page wider than the glass. */
     .seedbar input[type=text] { width: 100%; }
@@ -541,6 +559,7 @@
     .steps button { padding: 9px 0; min-height: 36px; }
     button.sm { padding: 9px 13px; }
     summary.spine { min-height: 50px; }
+    .fire-unit button, .fire-micros button, .fire-unit select { min-height: 44px; }
   }
   /* THE ONE LINE THAT MUST BE READ, so it is ink and not an accent. */
   #status { color: var(--ink); min-height: 1.5em; margin: 8px 0 0; }
@@ -566,6 +585,24 @@
     auto is OFF — the schedule is not running. The arrangement is yours.</div>
 
   <div id="status"></div>
+
+  <section id="fires" aria-label="fired gestures">
+    <div class="fire-head"><b>FIRE</b><span id="firestate">nothing waiting</span></div>
+    <div class="fire-macros">
+      <div class="fire-unit"><button id="fire_drop" aria-pressed="false">drop · LAND</button><select id="firelen_drop" aria-label="drop length"></select></div>
+      <div class="fire-unit"><button id="fire_buildup" aria-pressed="false">buildup · RETURN</button><select id="firelen_buildup" aria-label="buildup length"></select></div>
+      <div class="fire-unit"><button id="fire_phaseout" aria-pressed="false">phase-out · LAND</button><select id="firelen_phaseout" aria-label="phase-out length"></select></div>
+      <div class="fire-unit"><button id="fire_reverbout" aria-pressed="false">reverb-out · RETURN</button><select id="firelen_reverbout" aria-label="reverb-out length"></select></div>
+    </div>
+    <div class="fire-micros" aria-label="one-bar gestures">
+      <button id="fire_ghost-hat" aria-pressed="false">ghost hat</button>
+      <button id="fire_hats-out" aria-pressed="false">hats out</button>
+      <button id="fire_bass-octave" aria-pressed="false">bass octave</button>
+      <button id="fire_stab-lean" aria-pressed="false">stab lean</button>
+      <button id="fire_turnaround" aria-pressed="false">turnaround</button>
+      <button id="fire_kick-ghost" aria-pressed="false">kick ghost</button>
+    </div>
+  </section>
 
   <div id="bars">bar — · step —</div>
   <div id="steps"></div>
@@ -4388,6 +4425,12 @@ function releaseFrom(holds, param, ch) {
 // a second copy to disagree with this one.
 const HOLDS = emptyHolds();
 
+// THE OTHER INPUT OBJECT. `pending` is what the hand has asked for; only
+// `events` crosses into the pure composition layer. Promotion happens at the
+// scheduler's bar boundary, so an event can never redraw a bar in flight.
+function emptyFires() { return { seq: 0, pending: { macro: null, micros: [] }, events: [] }; }
+const FIRES = emptyFires();
+
 /* ---------------------------------------------------------------------------
    4d. THE VOICE PARAMETERS — THE NUMBERS INSIDE THE VOICES, DECLARED ONCE
    ---------------------------------------------------------------------------
@@ -4603,7 +4646,11 @@ function createEngine(ctx, opts) {
     // (seed, bar, auto, holds). Mutating it must go through `hold`/`release`
     // below or through the surface's own door, because the per-bar composition
     // is MEMOISED and the memo has to be told that its input changed.
-    holds: opts.holds || emptyHolds()
+    holds: opts.holds || emptyHolds(),
+    // FIRED GESTURES, LIKE HOLDS, ARE AN INPUT OWNED BY THE CALLER. Keeping
+    // the same object lets the live surface add a bar-stamped event without
+    // teaching the audio engine any history.
+    fires: opts.fires || { events: [] }
   };
 
   /* --- THE VOICE TRIMS. Section 4d declares them; this is where they start,
@@ -5834,7 +5881,7 @@ function createEngine(ctx, opts) {
   function compositionFor(bar) {
     if (compBar !== bar || compGen !== gen) {
       comp = compositionAt(cfg.seed, PIECE, cfg.movement, bar,
-                           { auto: cfg.auto, holds: cfg.holds });
+                           { auto: cfg.auto, holds: cfg.holds, fires: cfg.fires });
       compBar = bar; compGen = gen;
     }
     return comp;
@@ -6076,7 +6123,16 @@ function createEngine(ctx, opts) {
       }
       else if (ch === 1) voiceRim(t, v, out, -0.18, sd);
       else if (ch === 2) voiceClap(t, v, out, sd);
-      else voiceHat(t, v, out, 0.12, sd);
+      else {
+        // A buildup repeats each written hat onset inside its own sixteenth.
+        // The count is resolved by the pure composition layer once per bar;
+        // this loop only turns that answer into sample-accurate onsets.
+        const n = mu.ratchet && mu.ratchet.ch === 3
+          ? clamp(Math.round(mu.ratchet.count), 1, 4) : 1;
+        for (let r = 0; r < n; r++)
+          voiceHat(t + r * stepDur / n, v * (r ? 0.82 : 1), out, 0.12,
+                   voiceSeed(ch, absStep, r));
+      }
     }
 
     // the takes — channels 5, 6, 7
@@ -6302,6 +6358,78 @@ pinsFromQuery(location.search);
 // A seed asked for while the transport runs, waiting for a bar line. Null when
 // nothing is waiting.
 let pendingSeed = null;
+
+function fireCapture(C) {
+  return {
+    present: { 0: C.present[0], 5: C.present[5], 6: C.present[6], 7: C.present[7] },
+    reverb: { 6: C.wet[6].reverb }
+  };
+}
+function fireEvent(id) { return FIRES.events.find(e => e.id === id); }
+function requestFire(kind, bars) {
+  if (FIRE_MICROS.indexOf(kind) !== -1) {
+    const q = FIRES.pending.micros;
+    const i = q.indexOf(kind);
+    if (i !== -1) q.splice(i, 1);
+    else if (q.length < MUT_CAP) q.push(kind);
+    else return say("two one-bar gestures are already waiting — cancel one first.");
+    paintFires();
+    return q.slice();
+  }
+  const def = FIRE_MACROS[kind];
+  if (!def) throw new Error("fire: unknown gesture " + kind);
+  const current = shownComposition().fire;
+  const active = current && current.active;
+  const q = FIRES.pending.macro;
+  if (q && q.kind === kind) FIRES.pending.macro = null;
+  else FIRES.pending.macro = {
+    kind, bars: Math.max(1, Math.round(bars || def.bars)),
+    cancel: !!(active && active.kind === kind), target: active && active.id
+  };
+  paintFires();
+  say(FIRES.pending.macro
+    ? `${def.label} waiting — ${FIRES.pending.macro.cancel ? "cancels" : "starts"} on the next bar.`
+    : `${def.label} cancelled before it landed.`);
+  return FIRES.pending.macro;
+}
+function promoteFires(bar) {
+  let changed = false;
+  const q = FIRES.pending.macro;
+  if (q) {
+    const before = compositionAt(SEED, PIECE, MOVEMENT, bar,
+      { auto: autoOn, holds: HOLDS, fires: FIRES });
+    const active = before.fire && before.fire.active;
+    if (active) {
+      const old = fireEvent(active.id);
+      if (old) old.until = bar;
+    }
+    if (!q.cancel) FIRES.events.push({
+      id: ++FIRES.seq, kind: q.kind, at: bar, bars: q.bars,
+      capture: fireCapture(before)
+    });
+    FIRES.pending.macro = null;
+    changed = true;
+  }
+  const keep = [];
+  for (const micro of FIRES.pending.micros) {
+    // A turnaround means the end of a phrase. If it is asked early it waits
+    // for that musical boundary instead of becoming a mislabeled random bar.
+    if (micro === "turnaround" && bar % 8 !== 7) { keep.push(micro); continue; }
+    FIRES.events.push({ id: ++FIRES.seq, kind: "micro", micro, at: bar });
+    changed = true;
+  }
+  FIRES.pending.micros = keep;
+  if (changed && engine) engine.recompose();
+  if (changed) paintFires();
+  return changed;
+}
+function releaseFires() {
+  FIRES.events.length = 0;
+  FIRES.pending.macro = null;
+  FIRES.pending.micros.length = 0;
+  if (engine) engine.recompose();
+  paintFires();
+}
 
 /* --- THE SEEK. Given a bar number, the composition is that bar's state with
    no history: `compositionAt` is asked for the bar and answers without having
@@ -6611,6 +6739,7 @@ function tick() {
       const v = pendingSeed; pendingSeed = null;
       applySeed(v, `seed ${v} — a different piece, from this bar.`);
     }
+    if (T.step % 16 === 0) promoteFires(Math.floor(T.step / 16));
     engine.scheduleStep(T.step, T.nextT, stepDur);
     uiQueue.push({ step: T.step, at: T.nextT });
     T.nextT += stepDur;
@@ -7283,6 +7412,7 @@ function wireHand() {
   }
   ui("releaseall").addEventListener("click", () => {
     hand.release();
+    releaseFires();
     say("released — everything is back under the schedule.");
   });
 }
@@ -7468,7 +7598,7 @@ function previewBar() {
 function shownComposition() {
   const engC = engine ? engine.composition() : null;
   return engC || compositionAt(SEED, PIECE, MOVEMENT, previewBar(),
-                               { auto: autoOn, holds: HOLDS });
+                               { auto: autoOn, holds: HOLDS, fires: FIRES });
 }
 
 function paintCell(ch, v, C, engC) {
@@ -7568,10 +7698,59 @@ function paintWhy(ch, C) {
   }
 }
 
+function fireCount() {
+  return FIRES.events.length + (FIRES.pending.macro ? 1 : 0) + FIRES.pending.micros.length;
+}
+function paintFires(C) {
+  const box = ui("fires");
+  if (!box) return;
+  C = C || shownComposition();
+  const info = C.fire || { active: null, landed: [], micros: [] };
+  const waiting = FIRES.pending.macro;
+  for (const kind of Object.keys(FIRE_MACROS)) {
+    const b = ui("fire_" + kind);
+    const active = !!(info.active && info.active.kind === kind);
+    const landed = info.landed.some(x => x.kind === kind);
+    b.setAttribute("aria-pressed", String(active));
+    b.classList.toggle("is-wait", !!(waiting && waiting.kind === kind));
+    b.classList.toggle("is-landed", !active && landed);
+  }
+  for (const kind of FIRE_MICROS) {
+    const b = ui("fire_" + kind);
+    const waitingMicro = FIRES.pending.micros.indexOf(kind) !== -1;
+    b.setAttribute("aria-pressed", String(info.micros.indexOf(kind) !== -1));
+    b.classList.toggle("is-wait", waitingMicro);
+  }
+  const bits = [];
+  if (info.active) bits.push(`${FIRE_MACROS[info.active.kind].label} ${info.active.end.toUpperCase()} · bar ${C.bar - info.active.at + 1}/${info.active.bars}`);
+  if (info.landed.length) bits.push(info.landed.map(x => FIRE_MACROS[x.kind].label + " LANDED").join(" · "));
+  if (waiting) bits.push(`${FIRE_MACROS[waiting.kind].label} waiting${waiting.cancel ? " to cancel" : ""}`);
+  if (FIRES.pending.micros.length) bits.push(FIRES.pending.micros.join(" + ") + " waiting");
+  ui("firestate").textContent = bits.join(" · ") || "nothing waiting";
+  ui("releaseall").disabled = hand.count() === 0 && fireCount() === 0;
+}
+
+function wireFires() {
+  const lengths = [1, 4, 8, 12, 16, 32, 64];
+  for (const kind of Object.keys(FIRE_MACROS)) {
+    const sel = ui("firelen_" + kind);
+    for (const n of lengths) {
+      const o = document.createElement("option");
+      o.value = String(n); o.textContent = n + (n === 1 ? " bar" : " bars");
+      if (n === FIRE_MACROS[kind].bars) o.selected = true;
+      sel.appendChild(o);
+    }
+    ui("fire_" + kind).addEventListener("click", () => requestFire(kind, parseInt(sel.value, 10)));
+  }
+  for (const kind of FIRE_MICROS)
+    ui("fire_" + kind).addEventListener("click", () => requestFire(kind, 1));
+  paintFires();
+}
+
 function paintHand() {
   const engC = engine ? engine.composition() : null;
   const C = engC || compositionAt(SEED, PIECE, MOVEMENT, previewBar(),
-                                  { auto: autoOn, holds: HOLDS });
+                                  { auto: autoOn, holds: HOLDS, fires: FIRES });
   for (const c of CHANNELS) {
     const ch = c.ch;
     // THE FADER'S SPAN. A level modulator sweeps around the position the hand
@@ -7603,6 +7782,7 @@ function paintHand() {
   // controls, not meters. What takes one dead is the ring, the seek or a new
   // bar, and every one of those already comes through this function.
   paintMods(C);
+  paintFires(C);
   return C;
 }
 
@@ -7612,7 +7792,7 @@ function paintHand() {
 function paintHeader(C) {
   const bar = C.bar;
   const n = hand.count();
-  ui("releaseall").disabled = n === 0;
+  ui("releaseall").disabled = n === 0 && fireCount() === 0;
   ui("movenow").textContent =
     (C.auto ? `auto ON · section ${Math.floor(bar / MOVEMENT.section) + 1} of ${Math.ceil(MOVEMENT.bars / MOVEMENT.section)}`
             : "auto OFF · the schedule is not running · the arrangement is yours")
@@ -8313,7 +8493,8 @@ async function start() {
     ctx = new (window.AudioContext || window.webkitAudioContext)();
     // The held values are section 4c's object, handed over rather than copied:
     // anything set before this gesture is already waiting in it.
-    engine = createEngine(ctx, { seed: SEED, movement: MOVEMENT, auto: autoOn, holds: HOLDS,
+    engine = createEngine(ctx, { seed: SEED, movement: MOVEMENT, auto: autoOn,
+                                holds: HOLDS, fires: FIRES,
                                 // handed over, not copied: what the hand muted
                                 // before there was an engine is muted now
                                 mutes: MIX.mutes });
@@ -8413,6 +8594,7 @@ async function renderOffline_(o, drawSeed) {
     // or the arrangement holding still with the hand's values on it
     auto: !!o.auto,
     holds: o.holds,
+    fires: o.fires,
     // the floor is a construction-time trim as well as a live one, so a render
     // can ask for the piece with it and without it at identical settings
     bedTrim: o.bedTrim
@@ -8485,6 +8667,7 @@ window.p02 = {
   state: () => ({
     contextCreated: !!ctx, running: T.running, muted, auto: autoOn,
     holds: HOLDS,
+    fires: FIRES,
     step: T.step, bar: Math.floor(T.step / 16), bpm: T.bpm, seed: SEED, perf: perfReport(),
     // WHAT THE HAND HAS DONE TO THE MIX, and then what the ENGINE has, which
     // is not the same claim: the surface's copy and the engine's copy are two
@@ -8527,6 +8710,7 @@ window.p02 = {
   }),
   renderOffline,
   PIECE, INPUT_GAIN, MASTER_TRIM, BED_LEVEL, MOVEMENT, MOD_RATE_BARS, MOD_RATES, HOLD_PARAMS,
+  FIRE_MACROS, FIRE_MICROS,
   VOX, VOX_STYLE,
   // the voice table itself, so a measurement can sweep every control to its own
   // declared ends without a second list of them to fall out of date
@@ -8553,6 +8737,9 @@ window.p02 = {
   // at the next bar.
   release: (param, ch) => hand.release(param, ch),
   holds: () => HOLDS,
+  fire: (kind, bars) => requestFire(kind, bars),
+  releaseFires,
+  fires: () => FIRES,
   // WHAT THE ENGINE WROTE, not what the surface thinks it sent. The paint
   // loop reads this for the three modulated parameters; a measurement has to
   // be able to read it too, or a held send is only ever a claim.
@@ -8597,7 +8784,7 @@ window.p02 = {
   // that does not move on its own.
   compositionAt: (bar, seed, movement, opts) =>
     compositionAt(seed === undefined ? SEED : seed, PIECE, movement || MOVEMENT, bar, opts),
-  stepFires, walkAt, transposeDegrees, modValue, shapeAt, scheduleStateAt,
+  stepFires, walkAt, transposeDegrees, modValue, shapeAt, scheduleStateAt, applyFires,
   // WHAT FIRES, PER BAR — the loop-detector's evidence. This is the function
   // that would return the same string 256 times if the frozen loop came back.
   barFingerprint: (bar, seed, movement, opts) => fingerprint(
@@ -8615,6 +8802,7 @@ buildChannels();
 buildBarSheet();
 wireFaders();
 wireHand();
+wireFires();
 wireMix();
 buildSections();
 buildSteps();
