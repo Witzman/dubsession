@@ -6958,8 +6958,16 @@ function buildChannels() {
       // printed inside it IS `lvl<ch>` — the element that used to sit in a
       // column of its own beside it. One value, one object, printed once.
       + `<label class="strip g-fad${empty ? " is-dead" : ""}" id="fadc${ch}">`
+      // `step="any"` AND NOT `0.005`, AND IT IS A DEFECT FIX. [M]'s levels are
+      // four decimals — 0.7065, 0.7826, 0.3261 — and a 0.005 step CANNOT HOLD
+      // ONE OF THEM: the browser snapped the control to 0.705 while the row
+      // printed 0.707, so the number and the thing under it were two claims
+      // about one object, and the first pixel of a drag moved the engine to a
+      // value the surface had never shown. A strip is ONE object (§2.1); its
+      // number has to be its own position. Found by printing `.value` against
+      // `FADER_START` in a real browser, which is the only way it could be.
       + `<input type="range" id="fad${ch}" min="0" max="${c.max || 1.2}"`
-      + ` step="0.005" value="${lvl}" aria-label="fader channel ${ch}"${empty ? " disabled" : ""}>`
+      + ` step="any" value="${lvl}" aria-label="fader channel ${ch}"${empty ? " disabled" : ""}>`
       + `<span class="fill"></span><span class="span" id="fadm${ch}" hidden></span>`
       + `<i class="tick" id="fadt${ch}" hidden></i>`
       + `<i class="v n" id="lvl${ch}">${lvl.toFixed(3)}</i></label>`
@@ -7013,23 +7021,37 @@ function buildSources_unused() {
    writing. Until this pass channel 3 was excluded here because `paint()` owned
    its readout and animated it five times a second; the modulator's motion is
    the span and the tick on the strip, which is §7.3 rule 5 and is why the
-   exception is gone rather than moved. */
+   exception is gone rather than moved.
+
+   `held` ON A FADER MEANS THE SAME THING IT MEANS IN A DRAWER: away from what
+   the piece drew. `--hot` is the hand and nothing else on this page gets it,
+   so a fader sitting where the manifest put it is `--ink` and one your hand
+   moved is `--hot` in its edge, its meter and its number together — which is
+   also what `faders back to the manifest` undoes, in one gesture, for all
+   nine. It is one look, not a second one, and a strip cannot invert (§7.1). */
+function paintFader(ch) {
+  const el = ui("fad" + ch), box = ui("fadc" + ch), num = ui("lvl" + ch);
+  if (!el || !box || !num) return;
+  const v = parseFloat(el.value);
+  num.textContent = v.toFixed(3);
+  setFill(el);
+  box.classList.toggle("is-held", Math.abs(v - FADER_START[ch]) > 1e-9);
+}
 function wireFaders() {
   for (const c of CHANNELS) {
     const el = ui("fad" + c.ch);
     el.addEventListener("input", () => {
-      const v = parseFloat(el.value);
-      if (engine) engine.setLevel(c.ch, v);
-      ui("lvl" + c.ch).textContent = v.toFixed(3);
+      if (engine) engine.setLevel(c.ch, parseFloat(el.value));
+      paintFader(c.ch);
     });
+    paintFader(c.ch);
   }
   ui("reset").addEventListener("click", () => {
     for (const c of CHANNELS) {
       const v = FADER_START[c.ch];
       ui("fad" + c.ch).value = v;
-      setFill(ui("fad" + c.ch));
       if (engine) engine.setLevel(c.ch, v);
-      ui("lvl" + c.ch).textContent = v.toFixed(3);
+      paintFader(c.ch);
     }
     say("faders back to the manifest.");
   });
@@ -7371,8 +7393,14 @@ function paintHand() {
     // composition's — the composition owns `present`, which is a different
     // number and is already in the gain the engine writes.
     const fad = ui("fad" + ch);
-    if (fad) paintSpan(ui("fadm" + ch), ui("fadt" + ch), fad, modOf(C, ch, "level"),
-                       parseFloat(fad.value), faderReceived(ch, C));
+    if (fad) {
+      // A ROLL REDRAWS THE MANIFEST AND DOES NOT MOVE THE FADERS — a slider is
+      // the owner's hand — so a fader that was at the old piece's level is
+      // away from the new one's, and this is where it finds that out.
+      paintFader(ch);
+      paintSpan(ui("fadm" + ch), ui("fadt" + ch), fad, modOf(C, ch, "level"),
+                parseFloat(fad.value), faderReceived(ch, C));
+    }
     // the rumble and the empty channel have no verbs, but both have a why
     // line, and the hand can silence either of them
     if (ch === "R" || PIECE.empty[ch]) { paintWhy(ch, C); continue; }

@@ -1,5 +1,35 @@
 # Changelog
 
+## 2026-09-20 — the desk becomes pane 2 of the sheet
+
+- **The mixer stops being a website with sliders.** The nine channel rows were
+  the last part of the page wearing a label beside a slider beside a readout,
+  nine times over. They are now the same nine rows as the bar above them, in
+  the same order, with the same name column and the same reason column: two
+  panes of one sheet, not two grids that happen to look alike.
+- **A value you can move is one object.** Every continuous control on the desk
+  is the strip the drawers already use — a track with the number printed
+  inside it and a meter along its bottom edge. Nothing is drawn twice: the
+  fader's number lives *in* the fader, and the column beside it now carries the
+  channel's input trim, which is a different fact.
+- **Motion is a range, not a moving number.** Where a modulator is writing a
+  value, the number stays the base — the one your hand owns — and the
+  modulator draws as a span behind it with a tick showing where it is right
+  now. `0.44▸0.51` is gone: a number that changes five times a second cannot
+  be aimed at.
+- **What is about to change is visible before it changes.** A composition verb
+  you move goes dashed with an arrow until the bar comes round, and the `×`
+  beside it cancels. What lands now — the fader, mute, solo — never does that,
+  and the line at the top of the pane says which is which once.
+- **A fader can hold the level the piece drew.** It could not before: the
+  control snapped to the nearest 0.005 while the row printed the piece's own
+  four-decimal number, so the two disagreed and the first pixel of a drag
+  moved the sound to a value nothing had shown. A fader away from the manifest
+  is now marked as yours, and `faders back to the manifest` is the way back.
+- **A row that cannot do something still looks dead**, in the same dotted
+  drawing the rest of the page uses, and every row that is not sounding says
+  why in its tail — in the same column the bar pane says it in.
+
 ## 2026-09-20 — the grid becomes playable: a cell is a pin
 
 - **Click a cell on the bar and it pins.** The hit fires, or it stops, and the
