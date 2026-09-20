@@ -104,6 +104,7 @@
   .pane-head b { letter-spacing: .14em; font-size: 12px; }
   .pane-note { color: var(--dim); font-size: 12px; }
   .pane-note .t { color: var(--time); font-style: normal; }
+  .pane-note b { color: var(--ink); font-weight: 400; }
   #barsheet { display: grid; grid-template-columns: 104px repeat(16, 1fr) minmax(150px, 210px);
               gap: 2px 3px; align-items: stretch; }
   .bs-h { color: var(--dim); font-size: 11px; text-align: center; padding-bottom: 2px; }
@@ -173,127 +174,107 @@
   #steps i.on { background: var(--hot); }
   #steps i.beat { background: #3a332c; }   /* the ruler is structure, and structure went warm with the plate */
   #steps i.on.beat { background: var(--hot); }
-  fieldset { border: 1px solid var(--line); padding: 12px 14px; margin: 0 0 14px; }
-  legend { color: var(--dim); padding: 0 6px; }
   table { border-collapse: collapse; width: 100%; font-size: 12px; }
   th { text-align: left; color: var(--dim); font-weight: 400; padding: 2px 8px 6px 0; }
   td { padding: 2px 8px 2px 0; color: var(--ink); vertical-align: top; }
   td.n { color: var(--hot); text-align: right; }
   td.why { color: var(--dim); }
-  /* --- THE CHANNELS, AS ONE GRID -------------------------------------------
-     Nine channels are nine ROWS; every mixer control and every composition
-     verb is a COLUMN. The eye lands on a position instead of reading a line,
-     and a column is named ONCE at the top instead of forty-five times down the
-     page. This grid REPLACED the per-channel blocks rather than sitting above
-     them: two surfaces telling one story disagree the first time one of them
-     is changed, and nothing here prints a value twice.
+  /* --- PANE 2, THE DESK — channel x parameter  (surface-grammar §2, §3) -----
+     THE SAME NINE ROWS, THE SAME ORDER, THE SAME NAME COLUMN AS THE BAR. Two
+     panes of ONE sheet, never two grids that happen to look alike: `#chans` is
+     a FLAT grid exactly as `#barsheet` is, its first track is the same 104 px
+     and its last is the same `minmax(150px, 210px)`, so the channel names and
+     the reason lines line up down the page across both panes.
 
-     The header and every channel share ONE pair of custom properties, `--cols`
-     and `--areas`, so a column cannot drift between the header and a row, or
-     between one row and the next. A width changes those two and nothing else.
+     A ROW IS `display: contents`. The element is kept — `#ch0` is what carries
+     `hushed`, `silent` and `frozen`, and three painters address it by id — but
+     it does not generate a box, so its eleven cells are placed directly in the
+     one grid. A per-row grid of its own is the thing `channel-grid.md` §3
+     proved drifts.
+
+     WHAT WAS HERE BEFORE: `.row`'s successor — a 150 px label beside a slider
+     beside a 78 px readout, folded into twelve tracks. §2 rejects that format
+     by name, and the value that could be moved is ONE OBJECT now: a `.strip`,
+     the same widget the drawers use, with the number printed inside it.
      --------------------------------------------------------------------- */
-  .chan {
-    display: grid; align-items: center;
-    grid-template-columns: var(--cols);
-    grid-template-areas: var(--areas);
-    column-gap: 5px; row-gap: 2px;
-    border-top: 1px solid var(--line); padding: 6px 0 5px;
-    /* THE DEFAULT IS THE MIDDLE WIDTH — the iPad, and any desktop under 1260.
-       MEASURED: the one-line form further down needs 1188 px inside the
-       fieldset and 1024 px of iPad gives 962, so the row folds onto three
-       lines there. Both control lines are placed in the SAME twelve-column
-       track set, and that is what keeps them aligned down all nine channels —
-       two grids that happen to look alike is how a column drifts. */
-    --cols: repeat(12, minmax(0, 1fr));
-    --areas:
-      "id id id fad fad fad fad fad lvl lvl mix mix"
-      "chance chance phrase phrase move move lock lock delay delay reverb reverb"
-      "why why why why why why why why why why rel rel";
+  #chanbox { margin: 16px 0 8px; }
+  #chans {
+    display: grid; align-items: center; row-gap: 2px; column-gap: 6px;
+    /* EVERY WIDTH HERE IS A MEASUREMENT. The first and last tracks are the bar
+       pane's own, to the pixel, because the two panes are one sheet. `in` is
+       five characters; `m · s` is two 26 px latches and their gap; `phr` is one
+       digit and a release; LOCK is four letters. Everything else is `fr`,
+       because a strip is the only cell on the row whose width is worth
+       spending on. */
+    grid-template-columns:
+      104px                 /* channel — the bar pane's name column, to the px */
+      minmax(0, 2fr)        /* fader */
+      74px                  /* in */
+      62px                  /* m · s */
+      minmax(0, 1fr)        /* chance */
+      66px                  /* phr */
+      minmax(0, 1fr)        /* move */
+      52px                  /* LOCK */
+      minmax(0, 1fr)        /* echo */
+      minmax(0, 1fr)        /* room */
+      minmax(150px, 210px); /* why it is not sounding — the bar pane's tail */
   }
-  .chan:first-child { border-top: 0; }
-  /* THE SPINE. One header, at the top, in the same tracks as the rows. */
-  .ghead { border-top: 0; border-bottom: 1px solid var(--line); padding-bottom: 7px; }
-  .ghead i { font-style: normal; color: var(--dim); font-size: 11px; letter-spacing: .07em; }
-  .g-id { grid-area: id; color: var(--ink); font-weight: 400; }
-  .g-fad { grid-area: fad; }
-  input.g-fad { width: 100%; min-width: 0; accent-color: var(--hot); }
-  .g-lvl { grid-area: lvl; display: flex; align-items: baseline; gap: 6px; }
-  .ghead .g-lvl, .ghead .g-mix { display: block; }
-  /* BOTH OF THESE ARE `<i>`, and an `<i>` is italic until it is told not to
-     be: a level that leaned while nothing else on the page did was the first
-     thing a screenshot caught. */
-  .g-lvl .n { color: var(--hot); font-style: normal; }
-  .g-lvl .in { color: var(--dim); font-size: 11px; font-style: normal; }
-  .g-lvl, .g-id { white-space: nowrap; }
-  .g-mix { grid-area: mix; display: flex; align-items: center; gap: 6px; }
-  .g-chance { grid-area: chance; }
-  .g-phrase { grid-area: phrase; }
-  .g-move { grid-area: move; }
-  /* LOCK IS A VALUE OF `move`, NOT A SECOND CONTROL, so it has no column name
-     of its own in the header: it sits under `move`'s label and says its own
-     name on its face. It is the only cell on the row with nothing written
-     above it, which is the whole of the distinction. */
-  .g-lock { grid-area: lock; justify-self: start; }
-  .g-delay { grid-area: delay; }
-  .g-reverb { grid-area: reverb; }
-  .g-why { grid-area: why; }
-  .g-rel { grid-area: rel; justify-self: start; }
-  /* M AND S. Two latches, and they wear the latch look this page already has
-     rather than inventing a third vocabulary. Sized for a finger at the base
-     size, like every other small control here. */
-  .mx { flex: none; padding: 2px 7px; font-size: 11px; line-height: 1.2;
-        min-height: 21px; background: transparent; min-width: 26px; }
+  .chan { display: contents; }
+  /* THE SPINE. One header, at the top, in the same eleven tracks as every row,
+     so a name sits over its column and cannot drift from it. */
+  .ghead i { font-style: normal; color: var(--dim); font-size: 11px; letter-spacing: .07em;
+             padding-bottom: 4px; border-bottom: 1px solid var(--line); align-self: stretch; }
+  .g-id { display: flex; align-items: center; gap: 6px; color: var(--ink);
+          font-size: 12px; white-space: nowrap; min-width: 0; }
+  .g-id .nm { overflow: hidden; text-overflow: ellipsis; }
+  .ghead .g-id { display: block; }
+  .g-in { color: var(--dim); font-size: 11px; font-style: normal; white-space: nowrap; }
+  .g-mix { display: flex; align-items: center; gap: 4px; }
+  /* M AND S. Two latches wearing the page's one latch look rather than a third
+     vocabulary, sized for a finger at the base size like everything else. */
+  .mx { flex: none; padding: 3px 6px; font-size: 11px; line-height: 1.2;
+        min-height: 24px; background: transparent; min-width: 27px; }
   .mx[aria-pressed="true"] { background: var(--ink); color: var(--bg); border-color: var(--ink); }
   .mx.so[aria-pressed="true"] { background: var(--hot); border-color: var(--hot); }
   /* NOT SOUNDING BECAUSE OF THE HAND — the row keeps its layout and loses its
-     ink, which is the same thing `silent` already does for the composition's
-     own reasons. Nothing moves when a channel is muted. */
-  .chan.hushed .g-id, .chan.hushed .g-lvl .n { color: var(--inert); }
-  /* A cell always carries a 1px edge and never changes size when its state
-     changes: state changes INK, never layout. A surface that reflows when
-     something latches is disorienting and expensive at once. */
-  .vc { border: 1px solid transparent; padding: 2px 4px 3px; }
-  /* THE VERB'S NAME LIVES IN THE COLUMN HEADER NOW, not in the cell — that is
-     what a grid buys, and it takes forty-five repeated words off the page. It
-     comes back only where the columns cannot survive, below 560 px. */
-  .vc .vl { display: none; font-style: normal; color: var(--dim); font-size: 11px;
-            letter-spacing: .06em; }
-  .vc .vr { display: flex; align-items: center; gap: 4px; }
-  .vc .vs { flex: 1; min-width: 28px; accent-color: var(--hot); height: 18px; }
-  .vc .vv { flex: none; color: var(--hot); font-weight: 400; min-width: 34px; text-align: right; padding: 0 2px; }
-  /* A FINGER IS ONE OF THE TWO POINTERS THIS IS PLAYED WITH, so the smallest
-     control on the page is sized for one at its base size rather than only
-     under a media query the emulator may not report. */
-  .vc .vx, .vk { flex: none; padding: 2px 6px; font-size: 11px; line-height: 1.2;
-                 min-height: 21px; background: transparent; }
-  .vk { padding: 1px 6px; }
-  /* THE LATCH LOOK AGAIN, at a specificity that beats the line above. Without
-     it the pressed LOCK keeps the transparent background and its dark text
-     disappears into the panel: a latched control reading as an empty box.
-     Found by looking at a screenshot, which is the only way it could have
-     been found. */
-  .vk[aria-pressed="true"] { background: var(--ink); color: var(--bg); border-color: var(--ink); }
-  /* HELD BY YOU — the value is inverted and the cell is edged in the same ink. */
-  .vc.is-held { border-color: var(--ink); }
-  .vc.is-held .vv { background: var(--ink); color: var(--bg); }
-  /* ASKED FOR, NOT LANDED YET — dashed, and the value carries an arrow. A 1px
-     dash does not survive a small cell on its own, so it gets a faint fill
-     too. The wait is the feature: a hold lands on the next bar. */
-  .vc.is-wait { border-color: var(--time); border-style: dashed; background: rgba(194,89,46,.08); }
-  .vc.is-wait .vv { color: var(--time); }   /* a value that lands LATER is time, not alarm */
-  /* CANNOT APPLY HERE — dotted, dimmer than everything, reading nothing. */
-  .vc.is-dead { border-color: var(--inert); border-style: dotted; }
-  .vc.is-dead .vl, .vc.is-dead .vv { color: var(--inert); }
-  .vc.is-dead .vs { accent-color: var(--inert); opacity: .3; pointer-events: none; }
-  .cwhy { color: var(--dim); min-height: 1.4em; font-size: 12px; }   /* words, not time */
-  /* A MODULATOR ROW IS A `.unit` IN THE MOVERS DRAWER NOW, and it wears the
-     same dead look as every other unit — `.unit.is-dead` and `.strip.is-dead`,
-     which is one vocabulary and not a second. The `.mslot`/`.mwhy` rules that
-     used to live here are gone with the row stack they styled. */
-  /* a channel that is silent, or sounding but unable to vary, is marked where
-     its name is as well as on its reason line: one colour, one meaning */
+     ink, the same thing `silent` already does for the composition's reasons. */
+  .chan.hushed .g-id, .chan.hushed .g-fad .v { color: var(--inert); }
   .chan.silent .g-id, .chan.frozen .g-id { color: var(--dim); }
-  .rel { padding: 2px 6px !important; font-size: 11px; background: transparent; }
+  /* A VERB CELL IS A STRIP AND ITS WAY BACK OUT. The strip is the value; the
+     `×` puts it back under the schedule, and it is DISABLED — drawn inert,
+     reading nothing, doing nothing — whenever there is nothing held to
+     release. It keeps its track either way: state changes ink, never layout. */
+  .vcell { display: flex; align-items: center; gap: 3px; min-width: 0; }
+  .vcell .strip { flex: 1; min-width: 0; }
+  /* THE VERB'S NAME LIVES IN THE COLUMN HEADER, printed once instead of
+     forty-five times. It comes back into the cell only where there are no
+     columns left to name. */
+  .vcell .vl { display: none; font-style: normal; color: var(--dim); font-size: 11px;
+               letter-spacing: .06em; }
+  /* A WAY BACK OUT IS NOT A CONTROL YOU AIM AT, so it has no edge (§7.1: only
+     a thing a hand can move gets one) and it is one glyph wide. */
+  .vx, .rel { flex: none; border: 0; background: transparent; color: var(--dim);
+              padding: 2px 3px; font-size: 12px; line-height: 1; min-width: 17px;
+              min-height: 22px; text-align: center; }
+  .vx:hover, .rel:hover { color: var(--hot); border-color: transparent; }
+  .vx:disabled, .vx:disabled:hover, .rel:disabled, .rel:disabled:hover {
+    color: var(--inert); border: 0; background: transparent; cursor: default; }
+  .rel { font-size: 10px; letter-spacing: .06em; min-width: 24px; }
+  /* LOCK IS A VALUE OF `move`, NOT A SECOND CONTROL, so it has no name of its
+     own in the header: it sits in the track immediately right of `move`, under
+     that word, and says what it is on its own face. */
+  .vk { width: 100%; padding: 4px 2px; font-size: 10px; line-height: 1.2;
+        min-height: 24px; background: transparent; letter-spacing: .04em; }
+  .vk[aria-pressed="true"], .vk[aria-pressed="true"]:hover {
+    background: var(--ink); color: var(--bg); border-color: var(--ink); }
+  /* THE TAIL SAYS WHY THE ROW IS NOT SOUNDING, in the bar pane's own tail
+     column and drawn the same way, because it answers the same question. */
+  .cwhy, .ghead .g-why { color: var(--dim); font-size: 11px; line-height: 1.25;
+          display: flex; align-items: center; padding-left: 8px; }
+  .cwhy:empty::before { content: "\00a0"; }
+  .desk-foot { display: flex; align-items: baseline; gap: 14px; flex-wrap: wrap;
+               margin-top: 12px; border-top: 1px solid var(--line); padding-top: 10px; }
+  .desk-foot .src, .desk-foot details { max-width: 720px; }
   .cwhy:empty::before { content: "\00a0"; }
   .note { color: var(--dim); margin-top: 10px; }
   details { margin: 6px 0; }
@@ -412,6 +393,29 @@
   .strip.is-dead .fill { display: none; }
   .strip.is-dead .v { color: var(--inert); }
   .strip.is-dead input[type=range] { pointer-events: none; }
+  /* ASKED FOR, HAS NOT LANDED — dashed `--time` edge AND a faint fill, because
+     a dashed 1 px edge does not survive a small cell (§7.1, measured). The
+     number carries the arrow. Pressing the value back where it was cancels it;
+     so does the `×`. THE WAIT IS THE FEATURE, NOT THE LATENCY. */
+  .strip.is-wait { border-color: var(--time); border-style: dashed;
+                   background: rgba(194,89,46,.10); }
+  .strip.is-wait .fill { background: var(--time); }
+  .strip.is-wait .v { color: var(--time); }
+  /* MOTION IS A SPAN, NOT AN ANIMATED NUMBER [G, §7.3 rule 5]. The dashed span
+     is how far the modulator bound to this value can take it; the tick is
+     where the ENGINE has it right now; the printed number stays the BASE — the
+     one your hand owns and the one it returns to. A number that moves cannot
+     be aimed at, and this replaced `0.44▸0.51`, which was exactly that. */
+  .strip .span { position: absolute; bottom: 0; height: 9px; pointer-events: none;
+                 border: 1px dashed var(--time); border-bottom: 0;
+                 background: rgba(194,89,46,.12); }
+  .strip .tick { position: absolute; bottom: 0; height: 12px; width: 1px;
+                 background: var(--time); pointer-events: none; }
+  .strip .span[hidden], .strip .tick[hidden] { display: none; }
+  /* The desk's tracks are narrower than a drawer's four-up cell, and the one
+     number a hand aims at has to stay inside its own strip at 1024. */
+  #chans .strip .v { font-size: 11px; }
+  .strip .v { font-weight: 400; font-style: normal; }
 
   /* NAMED STEPS. The `<select>` is off the page but still in it: it holds the
      value, the options and both `change` listeners. */
@@ -441,85 +445,78 @@
      is exempt from `main`'s 720 px cap as a whole, and everything inside it
      that is prose takes the cap back explicitly. */
   #sections { margin-top: 14px; max-width: 720px; }
-  /* THE ONE-LINE FORM — one channel, one line, eleven columns, and the reason
-     line under it. MEASURED: its tracks add up to 1160 px inside the
-     fieldset, so it is asked for only from 1260 px of viewport upward. That is
-     the 1280 desktop; the iPad falls back to the three-line form above, which
-     is the same grid with the same column names, folded. */
-  @media (min-width: 1260px) {
-    .chan {
-      /* EVERY MINIMUM HERE IS A MEASUREMENT, not a guess. A track narrower
-         than its cell does not wrap, it OVERFLOWS into its neighbour, and the
-         first pass of this line put the phrase cell 5 px over and the level
-         2 px over — caught by asking the browser for scrollWidth against
-         clientWidth on every cell, not by looking. The two send columns are
-         the wide ones because their value can read `0.44\u25b80.51`: the base
-         and what the engine received, which is nine characters. THE LEVEL
-         COLUMN IS WIDE FOR THE SAME REASON: with a modulator on a channel's
-         level it reads `0.67\u25b80.64 in 1.425`, and at 100 px that ran over
-         the top of the M and S buttons. The tracks add up to 1188 px and the
-         breakpoint gives at least 1203 px on a real 1280 desktop, scrollbar
-         included \u2014 the headless browser has no scrollbar and would not have
-         shown that. */
-      --cols: 104px minmax(150px, 1.2fr) 132px 60px
-              minmax(106px, .9fr) minmax(106px, .8fr) minmax(106px, .9fr) 52px
-              minmax(146px, 1.1fr) minmax(146px, 1.1fr);
-      --areas:
-        "id fad lvl mix chance phrase move lock delay reverb"
-        "why why why why why why why why rel rel";
+  /* THE IPAD, AND EVERY DESKTOP UNDER 1201. THE SAME LAYOUT, NOT A SECOND ONE:
+     the same eleven columns in the same order, and only the track widths move.
+     A layout that differs between the two targets is two sets of muscle memory
+     for one instrument (§3). MEASURED at 1024 with a touch pointer: the four
+     `fr` cells come out 72 px and the strips inside them 52 px, which holds
+     `0.85` with its 7 px right inset; the first and last tracks resolve to the
+     same 104 px and 210 px the bar pane above gets, which is what makes the
+     two panes one sheet rather than two grids. */
+  @media (max-width: 1200px) {
+    #chans {
+      grid-template-columns:
+        104px minmax(0, 1.6fr) 66px 60px minmax(0, 1fr) 58px minmax(0, 1fr)
+        48px minmax(0, 1fr) minmax(0, 1fr) minmax(150px, 210px);
+      column-gap: 5px;
     }
-    .g-rel { justify-self: end; }
-    /* WHERE THE MIXER STOPS AND THE COMPOSITION STARTS. One hairline, drawn
-       once per row, in the structure colour and not in an accent: the page
-       spends colour on time and nothing else. */
-    .g-mix { border-right: 1px solid var(--line); padding-right: 10px; }
-  }
-  /* THE STACKED FORM. MEASURED, and the number is not the phone width anyone
-     would have guessed: the twelve-column form above holds together down to
-     about 930 px and then its send cells start overlapping their neighbours —
-     because a send reads `0.44\u25b80.51` once a modulator is writing it, which is
-     nine characters in a track that has become 112 px wide. Below 561 px it
-     was also scrolling the page sideways. So the stacked form takes everything
-     under 921 px, which is iPad portrait and every phone. A grid track that is
-     narrower than its cell does not wrap; it overflows into the next column,
-     and nothing but asking the browser for scrollWidth against clientWidth
-     finds it. */
-  @media (max-width: 920px) {
-    .chan {
-      --cols: repeat(4, minmax(0, 1fr));
-      --areas:
-        "id id mix mix"
-        "fad fad lvl lvl"
-        "chance chance phrase phrase"
-        "move move move lock"
-        "delay delay reverb reverb"
-        "why why why why"
-        "rel rel rel rel";
-    }
-    /* HERE THERE ARE NO COLUMNS LEFT TO NAME, so the header would be pointing
-       at tracks that are not there. It is hidden and every cell carries its own
-       label again — a name in a header this width never shows is a name
-       nobody has. */
-    .ghead { display: none; }
-    .vc .vl { display: block; }
-    /* AND IT STOPS GROWING. Stacked, at 900 px, four tracks of 220 px gave
-       every slider the width of a desk and made the fieldset nearly twice as
-       tall as the folded form it had just replaced \u2014 a blown-up phone. The
-       column is capped and the spare width is left as spare width. */
-    #chans { max-width: 660px; }
-    /* FOUR CELLS ACROSS STOPS BEING FOUR CELLS ACROSS at the same width the
-       desk folds at, so the page has one breakpoint story and not two. */
+    .vk { font-size: 9px; letter-spacing: 0; padding: 4px 1px; }
+    .mx { min-width: 26px; padding: 3px 4px; }
+    /* FOUR CELLS ACROSS STOPS BEING FOUR CELLS ACROSS at the width the drawers
+       need it, and the spines tighten with them. */
     .grid4 { grid-template-columns: repeat(2, minmax(0, 1fr)); }
     .spine { gap: 10px; }
     .spine .nmx { width: 104px; letter-spacing: .12em; }
     .spine .rule { flex: 0 0 20px; }
     .spine .moved { width: 140px; letter-spacing: .04em; }
   }
+  /* THE STACKED FORM. PHONE IS NOT A TARGET — the two are 1280 desktop and
+     1024 with a touch pointer — but a page that scrolls sideways is one defect
+     too many (#43), and eleven columns cannot survive under about 860 px: the
+     four `fr` tracks fall under 40 px and a grid track narrower than its cell
+     does not wrap, it OVERFLOWS into its neighbour. So below that the row goes
+     back to being its own box and folds, with the same cells in the same
+     order, and the column names come back into the cells because there are no
+     columns left for a header to point at.
+
+     THE NUMBER IS MEASURED, NOT GUESSED, AND IT IS NOT THE ONE ANYBODY WOULD
+     HAVE PICKED: the eleven columns survive to 901 px and fail at 861, where
+     the `chance` cell wants 44 px in a 42 px track. A grid track narrower than
+     its cell does not wrap, it OVERFLOWS into its neighbour, and nothing but
+     asking the browser for `scrollWidth` against `clientWidth` on every cell
+     finds it — it was found that way here, one pixel sweep at a time. */
+  @media (max-width: 900px) {
+    #chans { display: block; max-width: 660px; }
+    .chan {
+      display: grid; align-items: center;
+      grid-template-columns: repeat(4, minmax(0, 1fr));
+      grid-template-areas:
+        "id id mix mix"
+        "fad fad fad in"
+        "chance chance phrase phrase"
+        "move move move lock"
+        "delay delay reverb reverb"
+        "why why why why";
+      column-gap: 6px; row-gap: 3px;
+      border-top: 1px solid var(--line); padding: 7px 0 6px;
+    }
+    .chan:first-of-type { border-top: 0; }
+    .g-id { grid-area: id; } .g-fad { grid-area: fad; } .g-in { grid-area: in; }
+    .g-mix { grid-area: mix; justify-self: end; } .g-chance { grid-area: chance; }
+    .g-phrase { grid-area: phrase; } .g-move { grid-area: move; }
+    .g-lock { grid-area: lock; } .g-delay { grid-area: delay; }
+    .g-reverb { grid-area: reverb; } .g-why { grid-area: why; padding-left: 0; }
+    .ghead { display: none; }
+    .vcell { display: block; }
+    .vcell .vl { display: block; }
+    .vcell .strip { display: block; }
+    /* the `×` goes back beside the name it releases, because a block cell has
+       no row to sit at the end of */
+    .vcell .vx { float: right; margin-top: -18px; position: relative; }
+  }
   @media (max-width: 560px) {
-    /* PHONE IS NOT A TARGET — the two are 1280 desktop and 1024 with a touch
-       pointer — but #43 is one sideways scroll too many, so the two blocks
-       that still have a fixed width here give it up rather than push the page
-       wider than the glass. */
+    /* The two blocks that still have a fixed width give it up rather than push
+       the page wider than the glass. */
     .seedbar input[type=text] { width: 100%; }
     /* THE SPINE'S FOUR FIELDS ONTO TWO LINES rather than the page scrolling
        sideways. The order is unchanged, which is what a player learned. */
@@ -530,12 +527,12 @@
     .seekrow { flex-wrap: wrap; }
   }
   @media (pointer: coarse), (hover: none) {
-    .vc .vs { height: 24px; }
-    .vc .vx, .vk { padding: 5px 8px; }
-    .mx { padding: 5px 9px; }
-    .rel { padding: 5px 8px !important; }
-    /* A FINGER IS ONE OF THE TWO POINTERS THIS IS PLAYED WITH. The strip and
-       the named steps grow; nothing else about them changes. */
+    /* A FINGER IS ONE OF THE TWO POINTERS THIS IS PLAYED WITH. Every latch on
+       the desk grows to a finger; the strip and the named steps grow with
+       them; nothing else about any of them changes. */
+    .mx { padding: 6px 6px; min-height: 30px; }
+    .vk { padding: 8px 2px; min-height: 30px; }
+    .vx, .rel { padding: 6px 4px; min-width: 22px; min-height: 30px; }
     .strip { height: 34px; }
     /* A CELL IS HIT WITH A FINGER ON THE OTHER TARGET, so the row of the sheet
        grows with everything else that is touched. There is no hover
@@ -591,26 +588,41 @@
     <div id="barsheet"></div>
   </section>
 
-  <!-- ===================================================================
-       THE CHANNELS. This is the instrument, so it is first. Everything in
-       here lands ON THE BAR: a value you move is held from the next bar,
-       because this bar is already scheduled up to 140 ms ahead on the audio
-       clock. The controls under "the space" land NOW, and the difference is
-       carried by which block a control is in rather than by decoration.
+  <!-- ============================================== PANE 2 — THE DESK ===
+       THE SAME NINE ROWS, THE SAME ORDER, THE SAME NAME COLUMN as the bar
+       above it. Two panes of ONE sheet, never two grids that happen to look
+       alike: the first track and the last are the bar pane's own, so a
+       channel is one place on the page and its reason line is one column.
+
+       It is a `<section>` and not a `<fieldset>` any more. §2: a fieldset
+       with a legend is not a unit of an instrument — the unit is the row and
+       the spine — and the legend was the only thing saying which latency
+       this block carries, which is a caption's job.
+
+       THE LATENCY IS SAID ONCE, AT THE TOP, and it is carried by POSITION
+       (§7.2): the fader and the two latches beside it land NOW, and every
+       composition verb on the row — including the two sends, because they
+       come through the hand's bar-rate door — lands ON THE BAR.
        =================================================================== -->
-  <fieldset id="chanbox">
-    <legend>the channels · LANDS ON THE BAR</legend>
+  <section id="chanbox">
+    <div class="pane-head"><b>THE DESK</b>
+      <span class="pane-note">nine channels, the same nine rows · fader,
+        <b>M</b> and <b>S</b> land now · chance, phrase, move, LOCK and the two
+        sends land <i class="t">on the bar</i></span></div>
     <div id="chans"></div>
-    <div class="note">
-      <button id="reset" style="padding:3px 10px">faders back to the manifest</button>
+    <div class="desk-foot">
+      <button id="reset" class="sm">faders back to the manifest</button>
       <details><summary>what the four looks mean</summary>
-      <p class="src"><b>inverted</b> held by you · <b>dashed, with an arrow</b> asked
-      for, lands next bar · <b>plain</b> the schedule owns it · <b>dotted, ——</b>
-      cannot apply here. Every figure is what the engine resolved for the bar
-      you are hearing; <em>base</em>▸<em>received</em> where a modulator is writing it.</p>
+      <p class="src"><b>edge, meter and number in white</b> held by you ·
+      <b>dashed, with an arrow</b> asked for, lands next bar — press the
+      <b>×</b> to cancel · <b>plain</b> the schedule owns it · <b>dotted, ——</b>
+      cannot apply here. A number printed on a strip is always the
+      <em>base</em>, the one your hand owns; where a modulator is writing a
+      value the <i class="t">oxide span</i> is how far it can take it and the
+      tick is where the engine has it right now.</p>
       </details>
     </div>
-  </fieldset>
+  </section>
 
   <!-- ===================================================================
        THE PIECE, AS ONE LINE. A different seed is a different piece — the
@@ -6583,52 +6595,145 @@ function fmtVerb(param, v) {
   if (param === "phrase") return String(v);
   return typeof v === "number" ? v.toFixed(2) : String(v);
 }
-// "base ▸ what the engine received". [G] "The displayed value is always the
-// base, the number your hand owns; the motion is shown as a span, not an
-// animated number." The base is on the left and the ENGINE's own number is on
-// the right, because a number the surface shows and a number the engine
-// receives are different claims and this is where they are put side by side.
-function modSuffix(param, ch, C) {
-  if (!engine || !C) return "";
-  if (!C.mods.some(m => m.channel === ch && m.verb === param)) return "";
+/* MOTION IS A SPAN, NOT AN ANIMATED NUMBER  [G, and §7.3 rule 5]
+   -------------------------------------------------------------------------
+   THIS REPLACED `0.44▸0.51`. That text was honest — the base and what the
+   engine received, side by side — and it was also a number that changed five
+   times a second in the one place a hand aims. "The displayed value is always
+   the base; the motion is shown as a span, not an animated number" is the rule
+   it was breaking while quoting it, and it cost the send and level columns
+   nine characters of track each.
+
+   So the strip draws it instead, in three parts and one colour:
+     the NUMBER   is the base — what your hand owns and what it returns to;
+     the SPAN     is how far the modulator bound to this value can take it;
+     the TICK     is where the ENGINE has it right now.
+
+   THE SPAN IS COMPUTED FROM THE ENGINE'S OWN ARITHMETIC and not from a second
+   idea of it: `applyMods` adds `modValue() * modDepth * trim` to the base, and
+   every one of the four shapes is bounded by ±1 (`shapeAt`), so the reach is
+   `|depth|/100 × modDepth × trim` either side. A surface that guessed at that
+   would be a second implementation of one wrong idea.
+
+   THE TICK IS THE ONLY THING THAT MOVES PER FRAME, it is one `style.left` on
+   one leaf node per modulated value, and `paint()` writes nothing else here.
+   The span moves when the composition does, which is on the bar. ------- */
+function modOf(C, ch, param) {
+  if (!C || !C.mods) return null;
+  for (const m of C.mods) if (m.channel === ch && m.verb === param) return m;
+  return null;
+}
+// How far this modulator can take its base, in the value's own units.
+function modReach(mod) {
+  if (!mod || !engine) return 0;
+  const trim = engine.cfg["mod." + mod.channel + "." + mod.verb];
+  return Math.abs(mod.depth) / 100 * (engine.cfg.modDepth === undefined ? 1 : engine.cfg.modDepth)
+       * (trim === undefined ? 1 : trim);
+}
+// What the engine actually wrote, brought back into the value's own units so
+// it can be compared with the base the strip is printing. `modState` holds the
+// gain it set, which is the base times the trims the signal path applies.
+function modReceived(ch, param) {
+  if (!engine) return undefined;
   const v = engine.modState[ch + ":" + param];
-  return v === undefined ? "" : "▸" + v.toFixed(2);
+  if (v === undefined) return undefined;
+  if (param === "delay")  return engine.cfg.dlyTrim ? v / engine.cfg.dlyTrim : v;
+  if (param === "reverb") return engine.cfg.revTrim ? v / engine.cfg.revTrim : v;
+  return v;   // `level` is handled by its own caller, which knows the channel's gains
+}
+/* WHAT THE FADER'S MODULATOR ACTUALLY WROTE, back in fader units. `applyMods`
+   sets the channel gain to `clamp(fader + amount, 0, 4) * inGain * present`,
+   so both of those come back out here. `present` is the ARRANGEMENT's — a
+   channel that has left the arrangement is at zero and its tick would sit on
+   the left edge for a reason that has nothing to do with the modulator — so it
+   is divided out and the reason line in the row's tail says the rest. */
+function faderReceived(ch, C) {
+  if (!engine) return undefined;
+  const v = engine.modState[ch + ":level"];
+  if (v === undefined) return undefined;
+  const g = (INPUT_GAIN[ch] || 1) * ((C && C.present && C.present[ch]) || 1);
+  return g ? v / g : undefined;
+}
+/* Draw the span and the tick on one strip. `base` and `now` are in the same
+   units as the range under it, so the arithmetic is one division and there is
+   nowhere for the two to disagree. Returns nothing: a painter. */
+function paintSpan(spanEl, tickEl, inp, mod, base, now) {
+  if (!spanEl || !tickEl || !inp) return;
+  const reach = modReach(mod);
+  if (!mod || reach <= 0) { spanEl.hidden = true; tickEl.hidden = true; return; }
+  const lo = parseFloat(inp.min), hi = parseFloat(inp.max);
+  if (!(hi > lo)) { spanEl.hidden = true; tickEl.hidden = true; return; }
+  const at = x => clamp((x - lo) / (hi - lo), 0, 1) * 100;
+  const a = at(base - reach), b = at(base + reach);
+  spanEl.hidden = false;
+  spanEl.style.left = a.toFixed(2) + "%";
+  spanEl.style.width = Math.max(0, b - a).toFixed(2) + "%";
+  if (now === undefined || !isFinite(now)) { tickEl.hidden = true; return; }
+  tickEl.hidden = false;
+  tickEl.style.left = at(now).toFixed(2) + "%";
 }
 
+/* A VALUE THAT CAN BE MOVED IS ONE OBJECT (§2.1), and it is the SAME object
+   the drawers use: a `.strip` — a track with the number printed inside it, a
+   3 px meter on its bottom edge and the native `<input type=range>` laid over
+   it at zero opacity. There is not a second implementation of a slider on this
+   page and there must never be one; the drag, the keyboard and the touch
+   handling are the browser's, and every listener that was bound to `hs_*` is
+   bound to exactly the same element it always was.
+
+   THE CELL ID `hc_<param>_<ch>` IS THE STRIP ITSELF NOW. `paintCell` toggles
+   `is-held` / `is-wait` / `is-dead` on it and all three looks are already
+   drawn for a strip — a strip cannot invert, and §7.1 measured why.
+
+   THE `×` IS OUTSIDE THE STRIP, not over it: it is the way back under the
+   schedule, and inside the track it would have eaten the bottom of the drag
+   area at exactly the moment there was something to drag back. It keeps its
+   place whether or not anything is held — disabled is drawn inert and reads
+   nothing — because state changes ink, never layout. */
 function verbCell(ch, v, dead) {
   const id = v.p + "_" + ch;
   const d = dead ? " disabled" : "";
-  // The label is NOT in the cell any more: it is the column header, printed
-  // once. It is still emitted, because below 560 px there are no columns left
-  // to name and the cell has to say what it is again.
-  return `<div class="vc g-${v.p}${dead ? " is-dead" : ""}" id="hc_${id}"${dead ? ' data-dead="1"' : ""}>`
-    + `<i class="vl">${v.label}</i><div class="vr">`
+  // The label is NOT in the cell: it is the column header, printed once. It is
+  // still emitted, because below 860 px there are no columns left to name and
+  // the cell has to say what it is again.
+  return `<div class="vcell g-${v.p}">`
+    + `<i class="vl">${v.label}</i>`
+    + `<label class="strip${dead ? " is-dead" : ""}" id="hc_${id}"${dead ? ' data-dead="1"' : ""}>`
     + `<input class="vs" type="range" id="hs_${id}" min="${v.min}" max="${v.max}"`
     + ` step="${v.step}" value="${v.min}" aria-label="${v.label} channel ${ch}"${d}>`
-    + `<b class="vv" id="hv_${id}">${dead ? "\u2014\u2014" : ""}</b>`
-    + `<button class="vx" id="hx_${id}" aria-label="release ${v.label} on channel ${ch}" disabled>\u00d7</button>`
-    + `</div></div>`;
-}
-
-/* THE COLUMN NAMES, PRINTED ONCE. It is laid out from the same `--cols` and
-   `--areas` as every channel row, so a name sits over its column at every
-   width the grid has — and the reason line gets a name too, which it never
-   had while it was a loose third line under a block. `lock` is deliberately
-   blank: LOCK is a value of `move` and not a column of its own. */
-function channelHead() {
-  return `<div class="chan ghead" id="chhead">`
-    + `<i class="g-id">channel</i>`
-    + `<i class="g-fad">fader</i><i class="g-lvl">level \u00b7 in</i>`
-    + `<i class="g-mix">m \u00b7 s</i>`
-    + VERBS.map(v => `<i class="g-${v.p}">${v.label}</i>`).join("")
-    + `<i class="g-lock"></i>`
-    + `<i class="g-why">why it is silent, or why it cannot vary</i><i class="g-rel"></i>`
+    + `<span class="fill"></span><span class="span" id="hm_${id}" hidden></span>`
+    + `<i class="tick" id="ht_${id}" hidden></i>`
+    + `<b class="vv v" id="hv_${id}">${dead ? "——" : ""}</b>`
+    + `</label>`
+    + `<button class="vx" id="hx_${id}" title="release ${v.label} on channel ${ch}"`
+    + ` aria-label="release ${v.label} on channel ${ch}" disabled>×</button>`
     + `</div>`;
 }
 
-/* ONE CHANNEL IS ONE ROW OF THE GRID, and every cell it owns is a direct
-   child placed by name. There is no wrapper per band, because a band with a
-   box of its own is a second grid, and two grids drift. */
+/* THE COLUMN NAMES, PRINTED ONCE. The header is a `.chan` like every other
+   row — `display: contents`, eleven cells, the same eleven tracks — so a name
+   cannot drift from its column, and the reason line gets a name too, which it
+   never had while it was a loose third line under a block. `lock` is
+   deliberately blank: LOCK is a value of `move` and not a column of its own,
+   and being the one cell on the row with nothing written over it is the whole
+   of that distinction.
+
+   THE HEADER WORDS ARE SHORTER THAN THE ARIA LABELS, ON PURPOSE. `echo` over
+   a 72 px track; "echo send channel 6" into a screen reader. Two audiences,
+   two lengths, one source. */
+const COL_WORD = { chance: "chance", phrase: "phr", move: "move",
+                   delay: "echo", reverb: "room" };
+function channelHead() {
+  return `<div class="chan ghead" id="chhead">`
+    + `<i class="g-id">channel</i>`
+    + `<i class="g-fad">fader</i><i class="g-in">in</i>`
+    + `<i class="g-mix">m · s</i>`
+    + VERBS.map(v => `<i class="g-${v.p}">${COL_WORD[v.p]}</i>`
+        + (v.p === "move" ? `<i class="g-lock"></i>` : "")).join("")
+    + `<i class="g-why">why it is not sounding</i>`
+    + `</div>`;
+}
+
 /* =========================================================================
    THE BAR PANE — channel by step, built once and repainted per bar.
 
@@ -6814,6 +6919,17 @@ function leadWait(C, bar) {
   return phase >= cyc ? (cyc * 2 - phase) : null;
 }
 
+/* ONE CHANNEL IS ONE ROW OF THE SHEET, and its eleven cells are placed
+   directly in `#chans`' one grid — the row element is `display: contents`, so
+   it still exists to carry `hushed`, `silent` and `frozen` and to be addressed
+   by id, and it generates no box of its own. A per-row grid is what
+   `channel-grid.md` §3 proved drifts.
+
+   THE ORDER IS THE MOCKUP'S, AND IT IS THE ORDER OF THE COLUMNS:
+     channel · fader · in · m s · chance · phr · move · LOCK · echo · room · why
+   LOCK is emitted immediately after `move` because it is a value of `move`,
+   and the reason line is last because it is the bar pane's tail in the bar
+   pane's own track. */
 function buildChannels() {
   const box = ui("chans");
   box.innerHTML = channelHead();
@@ -6829,11 +6945,36 @@ function buildChannels() {
     el.className = "chan";
     el.id = "ch" + ch;
     el.innerHTML =
-      `<b class="g-id">${ch} ${empty ? "\u2014" : c.voice}</b>`
-      + `<input class="g-fad" type="range" id="fad${ch}" min="0" max="${c.max || 1.2}"`
-      + ` step="0.005" value="${lvl}" aria-label="fader channel ${ch}"${empty ? " disabled" : ""}>`
-      + `<span class="g-lvl"><i class="n" id="lvl${ch}">${lvl.toFixed(3)}</i>`
-      + `<i class="in">in ${ch === "R" ? "\u2014" : (INPUT_GAIN[ch] || 1).toFixed(3)}</i></span>`
+      // THE ROW'S WAY BACK OUT SITS WITH THE ROW'S NAME. It releases the five
+      // values this channel can hold at once, so it belongs in the cell that
+      // says which channel that is; `release all` at the top does the page.
+      // Disabled when there is nothing held — inert, reading nothing.
+      `<div class="g-id"><span class="nm">${ch} ${empty ? "—" : c.voice}</span>`
+      + `<button class="vx rel g-rel" id="hr_${ch}"`
+      + ` title="release every value you are holding on channel ${ch} — it goes`
+      + ` back under the schedule on the next bar"`
+      + ` aria-label="release channel ${ch}" disabled>rel</button></div>`
+      // THE FADER IS A STRIP LIKE EVERY OTHER CONTINUOUS VALUE, and the number
+      // printed inside it IS `lvl<ch>` — the element that used to sit in a
+      // column of its own beside it. One value, one object, printed once.
+      + `<label class="strip g-fad${empty ? " is-dead" : ""}" id="fadc${ch}">`
+      // `step="any"` AND NOT `0.005`, AND IT IS A DEFECT FIX. [M]'s levels are
+      // four decimals — 0.7065, 0.7826, 0.3261 — and a 0.005 step CANNOT HOLD
+      // ONE OF THEM: the browser snapped the control to 0.705 while the row
+      // printed 0.707, so the number and the thing under it were two claims
+      // about one object, and the first pixel of a drag moved the engine to a
+      // value the surface had never shown. A strip is ONE object (§2.1); its
+      // number has to be its own position. Found by printing `.value` against
+      // `FADER_START` in a real browser, which is the only way it could be.
+      + `<input type="range" id="fad${ch}" min="0" max="${c.max || 1.2}"`
+      + ` step="any" value="${lvl}" aria-label="fader channel ${ch}"${empty ? " disabled" : ""}>`
+      + `<span class="fill"></span><span class="span" id="fadm${ch}" hidden></span>`
+      + `<i class="tick" id="fadt${ch}" hidden></i>`
+      + `<i class="v n" id="lvl${ch}">${lvl.toFixed(3)}</i></label>`
+      // THE INPUT TRIM IS THE CHANNEL'S, NOT THE HAND'S: it is what the
+      // manifest set this voice's gain to before the fader ever touched it,
+      // and it never moves. A readout has no box (§7.1).
+      + `<i class="g-in">${ch === "R" ? "—" : (INPUT_GAIN[ch] || 1).toFixed(3)}</i>`
       + `<span class="g-mix">`
       + `<button class="mx mu" id="mu${ch}" aria-pressed="false"`
       + ` title="mute channel ${ch}. NOT a fader at zero: the fader keeps the`
@@ -6844,16 +6985,23 @@ function buildChannels() {
       + ` pressing this one again clears it. The noise floor goes with it, because`
       + ` a floor under a soloed voice is not that voice."${empty ? " disabled" : ""}>S</button>`
       + `</span>`
-      + VERBS.map(v => verbCell(ch, v, dead)).join("")
       // LOCK is a value of `move` and not a second control, so it has no name
       // in the header: it sits in the track immediately right of `move`, under
       // that word, and says what it is on its own face.
-      + `<button class="vk g-lock" id="hk_${ch}" aria-pressed="false"${dead ? " disabled" : ""}>LOCK</button>`
+      + VERBS.map(v => verbCell(ch, v, dead)
+          + (v.p === "move"
+             ? `<button class="vk g-lock" id="hk_${ch}" aria-pressed="false"`
+               + ` title="hold channel ${ch} on one bar for ever. Press again to release."`
+               + `${dead ? " disabled" : ""}>LOCK</button>`
+             : "")).join("")
       + `<div class="cwhy g-why" id="why${ch}"${ch === "R"
-          ? ' title="the rumble is a dark reverb on a copy of the kick: it has no pattern of its own, so none of the composition verbs applies to it">no pattern of its own \u00b7 it follows the kick'
-          : '>'}</div>`
-      + `<button class="vx rel g-rel" id="hr_${ch}" disabled>release channel</button>`;
+          ? ' title="the rumble is a dark reverb on a copy of the kick: it has no pattern of its own, so none of the composition verbs applies to it">no pattern of its own · it follows the kick'
+          : '>'}</div>`;
     box.appendChild(el);
+    // THE METER UNDER EVERY STRIP IS DRAWN FROM THE RANGE'S OWN min/max, by
+    // the one function that knows how — there is no second copy of that
+    // arithmetic anywhere on the page.
+    for (const inp of el.querySelectorAll('input[type=range]')) setFill(inp);
   }
 }
 
@@ -6867,23 +7015,54 @@ function buildSources_unused() {
     + `${PIECE.empty[c.ch] ? PIECE.empty[c.ch] + " " : ""}${c.from}</p>`).join("");
 }
 
+/* THE NINE FADERS, AND THE ONE METER UNDER EACH OF THEM.
+   THE NUMBER PRINTED ON A FADER IS ALWAYS THE BASE NOW — the position your
+   hand is holding — on every channel, including the ones a modulator is
+   writing. Until this pass channel 3 was excluded here because `paint()` owned
+   its readout and animated it five times a second; the modulator's motion is
+   the span and the tick on the strip, which is §7.3 rule 5 and is why the
+   exception is gone rather than moved.
+
+   `held` ON A FADER MEANS THE SAME THING IT MEANS IN A DRAWER: away from what
+   the piece drew. `--hot` is the hand and nothing else on this page gets it,
+   so a fader sitting where the manifest put it is `--ink` and one your hand
+   moved is `--hot` in its edge, its meter and its number together — which is
+   also what `faders back to the manifest` undoes, in one gesture, for all
+   nine. It is one look, not a second one, and a strip cannot invert (§7.1). */
+function paintFader(ch) {
+  const el = ui("fad" + ch), box = ui("fadc" + ch), num = ui("lvl" + ch);
+  if (!el || !box || !num) return;
+  const v = parseFloat(el.value);
+  num.textContent = v.toFixed(3);
+  setFill(el);
+  box.classList.toggle("is-held", Math.abs(v - FADER_START[ch]) > 1e-9);
+}
 function wireFaders() {
   for (const c of CHANNELS) {
     const el = ui("fad" + c.ch);
     el.addEventListener("input", () => {
-      const v = parseFloat(el.value);
-      if (engine) engine.setLevel(c.ch, v);
-      if (c.ch !== 3) ui("lvl" + c.ch).textContent = v.toFixed(3);   // ch3 shows base ▸ live
+      if (engine) engine.setLevel(c.ch, parseFloat(el.value));
+      paintFader(c.ch);
     });
+    paintFader(c.ch);
   }
   ui("reset").addEventListener("click", () => {
     for (const c of CHANNELS) {
       const v = FADER_START[c.ch];
       ui("fad" + c.ch).value = v;
       if (engine) engine.setLevel(c.ch, v);
-      if (c.ch !== 3) ui("lvl" + c.ch).textContent = v.toFixed(3);
+      paintFader(c.ch);
     }
     say("faders back to the manifest.");
+  });
+  /* ONE DELEGATED `input` LISTENER FOR THE WHOLE DESK, and it draws meters and
+     nothing else. It is the drawers' own pattern (§5.2) for the same reason:
+     `buildChannels` runs again on every new seed, and forty-five listeners
+     rebound per roll is forty-five chances for one of them not to be. It runs
+     AFTER the per-control listeners above, so nothing here decides anything —
+     the value has already reached the engine by the time the meter moves. */
+  ui("chans").addEventListener("input", e => {
+    if (e.target && e.target.type === "range") setFill(e.target);
   });
 }
 
@@ -7045,26 +7224,30 @@ function paint() {
       lastHeadStep = s;
     }
   }
-  // WHAT THE ENGINE RECEIVED for the parameters a modulator is writing. This is
-  // the only thing repainted per frame, it is at most three leaf nodes, and it
-  // writes `textContent` rather than markup: nothing that is not moving is
-  // repainted.
+  // WHERE THE ENGINE HAS A MODULATED VALUE RIGHT NOW. This is the only thing
+  // repainted per frame beside the playhead, it is at most three leaf nodes,
+  // and each one is ONE `style.left` — no text, no markup, no layout. The
+  // number beside it does not move: it is the base, it is written by
+  // `paintCell` on the bar, and a number that moved could not be aimed at.
+  //
+  // The SPAN each tick sits in is not touched here. Its extent is a fact about
+  // the modulator and the composition, which change on the bar, so it is drawn
+  // by `paintHand` — the entry point for everything that is not per-frame.
   const C = engine.composition();
   if (C) for (let i = 0; i < C.mods.length; i++) {
     const m = C.mods[i];
     if (m.verb === "delay" || m.verb === "reverb") {
-      const cell = ui("hc_" + m.verb + "_" + m.channel);
-      // a value the hand has asked for and the bar has not landed yet keeps
-      // its arrow: the engine's number is not the answer to that question
-      if (cell && !cell.classList.contains("is-wait"))
-        ui("hv_" + m.verb + "_" + m.channel).textContent =
-          fmtVerb(m.verb, C.wet[m.channel][m.verb]) + modSuffix(m.verb, m.channel, C);
+      const tick = ui("ht_" + m.verb + "_" + m.channel);
+      const inp = ui("hs_" + m.verb + "_" + m.channel);
+      const now = modReceived(m.channel, m.verb);
+      if (tick && inp && !tick.hidden && now !== undefined)
+        tick.style.left = (clamp((now - parseFloat(inp.min))
+          / (parseFloat(inp.max) - parseFloat(inp.min)), 0, 1) * 100).toFixed(2) + "%";
     } else if (m.verb === "level") {
-      const ms = engine.modState[m.channel + ":level"];
-      if (ms !== undefined)
-        ui("lvl" + m.channel).textContent =
-          parseFloat(ui("fad" + m.channel).value).toFixed(2) + "▸"
-          + (ms / (INPUT_GAIN[m.channel] || 1)).toFixed(2);
+      const tick = ui("fadt" + m.channel), inp = ui("fad" + m.channel);
+      const now = faderReceived(m.channel, C);
+      if (tick && inp && !tick.hidden && now !== undefined)
+        tick.style.left = (clamp(now / parseFloat(inp.max), 0, 1) * 100).toFixed(2) + "%";
     }
   }
   ui("perf").textContent = perfReport();
@@ -7115,18 +7298,26 @@ function paintCell(ch, v, C, engC) {
   cell.classList.toggle("is-held", held && landed);
   cell.classList.toggle("is-wait", held && !landed);
   ui("hx_" + v.p + "_" + ch).disabled = !held;
+  // THE NUMBER ON THE STRIP IS THE BASE, always. A modulator's motion is the
+  // span and the tick below; it is never printed, because a number that moves
+  // cannot be aimed at.
   if (held && !landed) val.textContent = "→" + fmtVerb(v.p, asked);
-  else {
-    const r = resolvedOf(C, v.p, ch);
-    val.textContent = fmtVerb(v.p, r) + modSuffix(v.p, ch, C);
-  }
+  else val.textContent = fmtVerb(v.p, resolvedOf(C, v.p, ch));
   if (v.p === "move") ui("hk_" + ch).setAttribute("aria-pressed", String(held && want === LOCK));
   // An untouched slider reads the value that is actually running, so picking it
   // up does not jump. A slider under a hand is left alone.
+  const base = held ? asked : resolvedOf(C, v.p, ch);
   if (document.activeElement !== sl) {
-    const r = held ? asked : resolvedOf(C, v.p, ch);
-    if (r !== LOCK && typeof r === "number") sl.value = String(r);
+    if (base !== LOCK && typeof base === "number") { sl.value = String(base); setFill(sl); }
   }
+  // MOTION AS A SPAN. Only the two sends can carry a modulator, and the span
+  // is drawn from the composition's own mod list rather than from whether the
+  // engine happens to have written a number yet: a modulator that is bound and
+  // has not been read is still a modulator, and its reach is already true.
+  if (v.p === "delay" || v.p === "reverb")
+    paintSpan(ui("hm_" + v.p + "_" + ch), ui("ht_" + v.p + "_" + ch), sl,
+              modOf(C, ch, v.p), typeof base === "number" ? base : 0,
+              modReceived(ch, v.p));
 }
 
 /* A SILENT CHANNEL MUST SAY WHY IT IS SILENT, and a channel that is sounding
@@ -7197,6 +7388,22 @@ function paintHand() {
                                   { auto: autoOn, holds: HOLDS });
   for (const c of CHANNELS) {
     const ch = c.ch;
+    // THE FADER'S SPAN. A level modulator sweeps around the position the hand
+    // is holding, so the base is the range's own value and not the
+    // composition's — the composition owns `present`, which is a different
+    // number and is already in the gain the engine writes.
+    const fad = ui("fad" + ch);
+    if (fad) {
+      // A ROLL REDRAWS THE MANIFEST AND DOES NOT MOVE THE FADERS — a slider
+      // is the owner's hand — so a fader left at the old piece's level would
+      // be away from the new one's, and this is where it would find that out.
+      // MEASURED 2026-09-20: it never fires today, because `STYLE.levels` is
+      // a fixed table and every seed draws the same nine numbers. It is here
+      // for the commit that opens them, not as a claim that they are open.
+      paintFader(ch);
+      paintSpan(ui("fadm" + ch), ui("fadt" + ch), fad, modOf(C, ch, "level"),
+                parseFloat(fad.value), faderReceived(ch, C));
+    }
     // the rumble and the empty channel have no verbs, but both have a why
     // line, and the hand can silence either of them
     if (ch === "R" || PIECE.empty[ch]) { paintWhy(ch, C); continue; }
