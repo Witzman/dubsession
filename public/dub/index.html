@@ -6571,6 +6571,21 @@ function rebuild(before) {
     follow("fbk", PIECE.globals.dlyfbk / 100, v => engine.set("dlyFbk", v));
   if (moved(p => p.globals.revSeconds))
     follow("revsize", PIECE.globals.revSeconds, v => engine.set("revSeconds", v));
+  // THE DRAWN VOICE NUMBERS FOLLOW THE PIECE, AND UNTIL #67 THEY DID NOT.
+  // `cfg["p." + k]` was written once, when the engine was built, so a seed
+  // taken on a bar line changed the patterns and left the SOUND behind:
+  // measured 2026-09-20 on the deployed build, seed 1 -> 999 moved 31 of 38
+  // drawn voice numbers in the piece and 0 of 38 in the engine, and the two
+  // disagreed on 31 keys for the rest of the session — a boom kick drawn and
+  // a 909 playing. `set` is the same door a measurement and a ride use, so
+  // there is one path and not three.
+  //
+  // ONLY WHERE THE PIECE'S OWN VALUE MOVED, for the reason the tempo slider
+  // gives above: a draw that lands on the same number has no business
+  // rewriting anything. A ridden value is dealt with by the ride, which
+  // returns to its own zero on a new piece [#67].
+  for (const k of VOX_KEYS)
+    if (engine && moved(p => p.vox && p.vox[k])) engine.set("p." + k, PIECE.vox[k]);
   if (moved(p => p.globals.rumble) && engine) engine.setLevel("R", PIECE.globals.rumble);
   if (moved(p => p.globals.pump)) follow("pump", PIECE.globals.pump, v => engine.set("pump", v));
 
@@ -8806,6 +8821,15 @@ window.p02 = {
     compositionAt(seed === undefined ? SEED : seed, PIECE, movement || MOVEMENT, bar, opts),
     seed === undefined ? SEED : seed),
   seek: bar => seek(bar),
+  /* THE DRAWN VOICE NUMBERS, TWICE, AND THIS IS THE #67 DOOR. `piece` is what
+     the DRAW wrote; `engine` is what the oscillators actually read at note
+     time. `set("p.<k>", v)` is the only path between them. A measurement that
+     asks the piece alone cannot see the two disagree, and only the second one
+     is audible. */
+  vox: () => ({
+    piece: Object.assign({}, PIECE.vox),
+    engine: engine ? VOX_KEYS.reduce((o, k) => (o[k] = engine.cfg["p." + k], o), {}) : null
+  }),
   engineComposition: () => engine && engine.composition()
 };
 
