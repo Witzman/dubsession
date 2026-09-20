@@ -123,8 +123,27 @@
   .bs-c.take { background: var(--ink); color: var(--bg); font-size: 10px; line-height: 20px;
                text-align: center; overflow: hidden; }
   .bs-c.sus { background: linear-gradient(var(--panel) 46%, var(--ink) 46%, var(--ink) 54%, var(--panel) 54%); }
-  .bs-c.here { box-shadow: inset 0 0 0 1px var(--time); }
+  /* THE PLAYHEAD IS AN OUTLINE AND NOT A SHADOW from #51 on, because the
+     shadow is the pin's and one element has one `box-shadow`: written as two
+     rules they would take turns, and the column you are on would stop being
+     marked for exactly as long as it sat under your own pin. */
+  .bs-c.here { outline: 1px solid var(--time); outline-offset: -1px; }
   .bs-c.seam { border-left: 1px dotted var(--time); }
+  /* THE HAND ON THE SHEET [#51 §4.1]. `--hot` means one thing on this page and
+     it is the hand, so a pin is the only thing in a row that can wear it.
+     The drawing was measured and the first one failed: a 2 px inset alone
+     reads at arm's length as a slightly smaller, slightly brighter block,
+     which is the same object as a drawn cell. What works carries a SHAPE no
+     other cell has — a light core inside a dark frame inside a light ring —
+     so it survives distance, glare and a colour-blind reader. */
+  .bs-c.pinnable { cursor: pointer; touch-action: manipulation; }
+  .bs-c.pin-on { background: var(--hot);
+                 box-shadow: inset 0 0 0 4px var(--bg), 0 0 0 1px var(--hot); }
+  /* A HOLE YOU CUT IS AN OBJECT, and it has to be. If it looked like an empty
+     cell, "the generator draws around it for ever" would be an invisible
+     promise and a hole could not be told from a bar where the dice missed. */
+  .bs-c.pin-off { background: var(--panel); box-shadow: inset 0 0 0 1px var(--hot); }
+  .bs-c.pin-off.beat { background: #171310; }
   /* A RESTED ROW IS A ROW STATE, because that is what it is in the engine:
      the arrangement is not sounding this channel. The marks stay legible and
      go inert — what the machine drew is still there, it is simply not
@@ -132,6 +151,15 @@
   .bs-row-rest .bs-c.on, .bs-row-rest .bs-c.take { background: var(--inert); }
   .bs-row-rest .bs-c { background: repeating-linear-gradient(45deg,
       var(--panel), var(--panel) 3px, #14110e 3px, #14110e 6px); }
+  /* A PIN INSIDE A RESTED ROW KEEPS ITS EDGE [#51 §4.1]. The arrangement
+     resting a channel does not erase your marks, it stops them sounding — and
+     the question this grid exists to answer is which part of what I hear is
+     mine. An answer that disappears when the channel rests is not an answer.
+     The FILL goes inert with the rest of the row; the RING does not. */
+  .bs-row-rest .bs-c.pin-on { background: var(--inert); }
+  /* THE PIN COUNT SITS BESIDE THE ROLL THAT CANNOT TAKE IT AWAY, and it is
+     --hot because it is the hand's [#51 §4.3]. */
+  .pincount { color: var(--hot); font-size: 12px; letter-spacing: .1em; }
   .bs-why { color: var(--dim); font-size: 11px; display: flex; align-items: center;
             padding-left: 8px; line-height: 1.25; }
   #steps { display: flex; gap: 3px; margin-bottom: 8px; }
@@ -503,6 +531,10 @@
     /* A FINGER IS ONE OF THE TWO POINTERS THIS IS PLAYED WITH. The strip and
        the named steps grow; nothing else about them changes. */
     .strip { height: 34px; }
+    /* A CELL IS HIT WITH A FINGER ON THE OTHER TARGET, so the row of the sheet
+       grows with everything else that is touched. There is no hover
+       affordance on a cell anywhere: the hit area IS the cell. */
+    .bs-c { height: 30px; }
     .steps button { padding: 9px 0; min-height: 36px; }
     button.sm { padding: 9px 13px; }
     summary.spine { min-height: 50px; }
@@ -580,7 +612,6 @@
        holds) — so this is the cheapest pattern switching on the page and the
        only one that needs no second generator. It is ABOVE the drawers and
        not inside one, because §5 keeps seed and roll on the play surface.
-       The pin count and `release pins` land here in the next step.
        =================================================================== -->
   <div class="seedbar" id="piecebar">
     <label for="seedin">seed</label>
@@ -589,7 +620,15 @@
     <button id="seedgo" class="sm">take it</button>
     <button id="seedroll" class="sm">roll</button>
     <output id="seedin_v"></output>
-    <span class="note">a new piece — same manifest, same genre, a different draw</span>
+    <!-- THE PINS, BESIDE THE ROLL THAT WILL NOT TAKE THEM AWAY [#51 §4.3].
+         A pin survives a new seed — the owner's "for ever" — so it survives a
+         reload and being sent to somebody too. A state that outlives every
+         roll with nothing on screen explaining it is a piece that stops
+         changing for no visible reason, which is why the count and the way
+         back out are both here and neither is behind a drawer. -->
+    <span class="pincount" id="pincount" hidden></span>
+    <button id="pinclear" class="sm" hidden>release pins</button>
+    <span class="note" id="piecenote">a new piece — same manifest, same genre, a different draw</span>
   </div>
 
   <!-- ===================================================================
@@ -2592,7 +2631,10 @@ function compositionAt(seed, piece, movement, bar, opts) {
 // odds let through. Used to catch a silence that would otherwise have no
 // reason attached to it.
 function countHits(ch) {
-  if (DRUM_PAT[ch]) return DRUM_PAT[ch].reduce((a, b) => a + b, 0);
+  // TRUTHY, NOT SUMMED: a pinned step is `PIN_ON` (2) in the table and it is
+  // one hit, not two. Adding the cell's value would make one pin read as two
+  // hits in the sentence that explains a silence.
+  if (DRUM_PAT[ch]) return DRUM_PAT[ch].reduce((a, b) => a + (b ? 1 : 0), 0);
   const take = PIECE.chords[ch];
   return take ? take.reduce((a, e) => a + e.notes.length, 0) : 0;
 }
@@ -2600,7 +2642,12 @@ function countFirings(seed, ch, key, p) {
   let n = 0;
   if (DRUM_PAT[ch]) {
     const pat = DRUM_PAT[ch];
-    for (let st = 0; st < pat.length; st++) if (pat[st] && stepFires(seed, ch, key, st, p)) n++;
+    // A PINNED STEP FIRES WITHOUT ASKING THE ODDS, so it counts here too —
+    // otherwise a channel the player has pinned solid could still be handed
+    // "chance let nothing through this bar" as its reason for a silence that
+    // is not happening.
+    for (let st = 0; st < pat.length; st++)
+      if (pat[st] && (pat[st] === PIN_ON || stepFires(seed, ch, key, st, p))) n++;
     return n;
   }
   const take = PIECE.chords[ch];
@@ -3652,6 +3699,110 @@ let MOD_SLOTS = {};
 let MOD_SLOT_KEYS = [];
 
 /* =========================================================================
+   THE PINS — WHAT THE HAND PUT THERE, AND IT OUTRANKS THE MANIFEST     [#51]
+   -------------------------------------------------------------------------
+   A PIN IS NOT A SECOND PATTERN. It is an overlay applied in `rebuildDerived`
+   and NOWHERE ELSE, because `DRUM_PAT[ch] = lanePat(...)` is the one place a
+   drawn lane becomes the thing every reader indexes — the scheduler,
+   `fingerprint`, `countFirings`, `mutFreeSteps`, the bar sheet, the test
+   hook. Applied there it reaches all of them at once and cannot drift.
+   Applied anywhere else it is a second copy of the pattern.
+
+   WHAT A PIN OUTRANKS: THE MANIFEST. A pinned ON step does not go through
+   `chance` — it is not part of the drawn pattern to be thinned, exactly as a
+   tier 3 ghost is not. A pinned OFF step never fires, and not under a ghost
+   either: a refusal you can hear the machine walk over is not a refusal.
+
+   WHAT IT DOES NOT OUTRANK: THE ARRANGEMENT. `present[ch] <= 0` is silent
+   pins or not, and so is a muted channel and a lane tier 3 dropped for the
+   bar. Those are the CHANNEL not sounding; a pin is about one step of it. A
+   pin that overrode them would make "the generator draws around it" mean
+   "the generator is off", and the surface already says which of the two is
+   happening — the row hatches and prints its reason.
+
+   THE INDEX IS THE LANE'S OWN STEP, NOT THE COLUMN OF THE BAR. A hat lane on
+   twelve steps wraps inside the bar, so the column a pin appears in moves
+   every bar and the row says so. Sixteen slots are kept per channel whatever
+   the lane's length, so a pin does not evaporate when a roll draws a shorter
+   lane and come back wrong when it draws a longer one.
+
+   DRAW, QUIZ, THEN OVERLAY. `quiz` is a statement about what the DICE may do:
+   F1 says the kick is one of the declared templates, F4 says the rim is
+   punctuation. A player who pins eight kick hits has not produced a contract
+   violation, they have played — and §5.2 says a violation is a reportable
+   incident. So the overlay lands after the piece is drawn and checked, and
+   the piece in the URL stays a legal piece.
+   ========================================================================= */
+const PIN_ON = 2;        // in-band in DRUM_PAT: 0 nothing, 1 drawn, 2 the hand
+const PINS = {};         // ch -> Array(16) of null | 1 (on) | 0 (off), by LANE step
+const pinAt = (ch, ls) => (PINS[ch] && PINS[ch][ls] !== undefined) ? PINS[ch][ls] : null;
+function setPin(ch, ls, v) {
+  if (!(ls >= 0 && ls < 16)) return PINS;
+  const row = PINS[ch] || (PINS[ch] = new Array(16).fill(null));
+  row[ls] = v;
+  // A CHANNEL WITH NOTHING PINNED HAS NO ROW, so the count, the URL token and
+  // `Object.keys` all answer the same question without a second emptiness test.
+  if (row.every(x => x === null)) delete PINS[ch];
+  return PINS;
+}
+function clearPins() { for (const k of Object.keys(PINS)) delete PINS[k]; return PINS; }
+function pinCount() {
+  let n = 0;
+  for (const k of Object.keys(PINS)) for (const v of PINS[k]) if (v !== null) n++;
+  return n;
+}
+/* THE OVERLAY ITSELF. A channel with nothing pinned gets the drawn array back
+   UNCHANGED — the same array, not a copy that happens to be equal, so a page
+   nobody has touched derives exactly what it derived before there were pins. */
+function applyPins(ch, pat) {
+  const row = PINS[ch];
+  if (!row) return pat;
+  const out = pat.slice();
+  for (let i = 0; i < out.length; i++) {
+    if (row[i] === 1) out[i] = PIN_ON;
+    else if (row[i] === 0) out[i] = 0;
+  }
+  return out;
+}
+
+/* PINS RIDE IN THE URL, AND THEY ARE READABLE:
+
+       ?seed=9e3779&pins=0:x...x...x...x...,3:--x-------------
+
+   `x` pinned on, `.` pinned off, `-` untouched; sixteen characters per
+   channel, one entry per channel that has any, worst case about 160
+   characters. A base-32 bitmask would be shorter and would make a URL nobody
+   can read or hand-edit, which is the opposite of what the seed line is for:
+   these URLs are meant to be sent to a person. */
+function pinsToText() {
+  const out = [];
+  for (const ch of Object.keys(PINS).sort())
+    out.push(ch + ":" + PINS[ch].map(v => v === 1 ? "x" : v === 0 ? "." : "-").join(""));
+  return out.join(",");
+}
+function pinsFromText(s) {
+  clearPins();
+  if (!s) return PINS;
+  for (const part of String(s).split(",")) {
+    const m = /^([0-7]):([x.\-]{1,16})$/.exec(part.trim());
+    if (!m) continue;          // A TOKEN NOBODY CAN PARSE IS DROPPED, NOT GUESSED AT.
+    for (let i = 0; i < m[2].length; i++) {
+      if (m[2][i] === "x") setPin(m[1], i, 1);
+      else if (m[2][i] === ".") setPin(m[1], i, 0);
+    }
+  }
+  return PINS;
+}
+// THE QUERY, NEVER THE PATH — the page is served under /dub/ and a path-shaped
+// anything resolves against the owner's main site and breaks only in
+// production. It takes the search string as an argument for the same reason
+// `seedFromQuery` does: the layer stays pure and a test can ask it anything.
+function pinsFromQuery(search) {
+  const m = /(?:^|[?&])pins=([^&]+)/.exec(search || "");
+  return pinsFromText(m ? decodeURIComponent(m[1]) : "");
+}
+
+/* =========================================================================
    THE PATTERNS — in the pure region, because the loop detector has to be able
    to read them without an audio device.
 
@@ -3669,7 +3820,11 @@ let DRUM_PAT = {};
    and the modulator rows). */
 function rebuildDerived() {
   DRUM_PAT = {};
-  for (const ch of Object.keys(PIECE.drums)) DRUM_PAT[ch] = lanePat(PIECE.drums[ch]);
+  // THE PIN OVERLAY LANDS HERE AND NOWHERE ELSE [#51]. The draw and the quiz
+  // have already run on `PIECE.drums`; this is the step where a drawn lane
+  // becomes the table the scheduler, the fingerprint, the silence reasons and
+  // the sheet all index, so the hand reaches every one of them at once.
+  for (const ch of Object.keys(PIECE.drums)) DRUM_PAT[ch] = applyPins(ch, lanePat(PIECE.drums[ch]));
   MOD_SLOTS = modSlotsOf(PIECE, MOVEMENT);
   MOD_SLOT_KEYS = Object.keys(MOD_SLOTS);
 }
@@ -3716,7 +3871,10 @@ function fingerprint(C, seed) {
     let line = "";
     for (let s = 0; s < 16; s++) {
       const ls = laneStep(pat, C.bar * 16 + s);
-      line += (pat[ls] && stepFires(seed, ch, C.key[ch], ls, C.chance[ch])) ? "x" : ".";
+      // THE PIN IS PART OF WHAT FIRES, so the loop detector's evidence carries
+      // it: a bar in which a pinned hit sounded is not the bar without it.
+      line += (pat[ls] && (pat[ls] === PIN_ON
+                           || stepFires(seed, ch, C.key[ch], ls, C.chance[ch]))) ? "x" : ".";
     }
     parts.push(ch + ":" + line);
   }
@@ -3823,7 +3981,13 @@ function mutFreeSteps(ch, gap, bar) {
   // every time, and a ghost would be placed on top of a hit one bar in three.
   // The STEPS THIS RETURNS ARE BAR STEPS, because a ghost is placed against
   // the bar the listener hears.
-  const at = st => pat[laneStep(pat, bar * 16 + st)];
+  // AND A HOLE THE PLAYER CUT IS NOT A FREE STEP. It is free of the lane's
+  // material and it is not free: a ghost dropped into it would be the machine
+  // sounding exactly where the hand said never. The scheduler refuses it a
+  // second time, but a ghost chosen here and suppressed there would leave tier
+  // 3's own signature claiming a hit nobody heard.
+  const at = st => { const ls = laneStep(pat, bar * 16 + st);
+                     return pinAt(ch, ls) === 0 ? 1 : pat[ls]; };
   for (let s = 0; s < 16; s++) {
     if (at(s)) continue;
     let near = false;
@@ -3968,7 +4132,10 @@ function mutationsAt(seed, piece, movement, C, auto) {
       why: "the hats stutter over the bar line",
       apply: m => {
         const g = (m.ghost[3] = m.ghost[3] || []);
-        for (const st of [13, 15]) if (!DRUM_PAT[3] || !DRUM_PAT[3][st]) g.push({ step: st, velo: 0.5 });
+        // not into a hole the hand cut, for the reason `mutFreeSteps` gives
+        for (const st of [13, 15])
+          if ((!DRUM_PAT[3] || !DRUM_PAT[3][st]) && pinAt(3, st) !== 0)
+            g.push({ step: st, velo: 0.5 });
       }
     });
     else if (kind === "hold") cand.push({
@@ -5669,12 +5836,21 @@ function createEngine(ctx, opts) {
          use, so it never collides with a written hit and never goes through
          CHANCE — it is not part of the pattern to be thinned. */
       const ls = laneStep(pat, absStep);
+      /* THE HAND, AND WHAT IT OUTRANKS [#51]. A pinned OFF step is a hole the
+         player cut: nothing fires there — not the drawn hit, not a tier 3
+         ghost that happened to land in it. A pinned ON step is `PIN_ON` in the
+         table and goes round CHANCE and round M5's pull, because it is not
+         part of the drawn pattern to be thinned. Neither outranks `present`,
+         a mute or M2 dropping the lane for the bar: those are the channel not
+         sounding, and the three checks above this one are where they live. */
+      if (pinAt(ch, ls) === 0) continue;
+      const pinned = pat[ls] === PIN_ON;
       const gl = mu.ghost[ch];
       let gh = 0;
       if (gl) for (let i = 0; i < gl.length; i++) if (gl[i].step === s) gh = gl[i].velo;
       if (mu.dropped[ch]) continue;                  // M2 — the lane sits out
       if (!pat[ls] && !gh) continue;
-      if (pat[ls]) {
+      if (pat[ls] && !pinned) {
         if (mu.skip[ch] === s) continue;             // M5 — beat four, pulled
         // CHANCE — how often a step of that channel actually fires. The pattern
         // is still the pattern: nothing is regenerated, the hit is let through
@@ -5924,6 +6100,10 @@ let autoOn = false;
 // the page, which is what used to cost the audio context. Everything that
 // draws a preview reads this, so the preview follows the hand.
 let SEED = seedFromQuery(location.search);
+// AND WHAT THE HAND PINNED, from the same query and before the first draw, so
+// the first `rebuildDerived` already carries them: a URL that came back with
+// pins in it should never render one bar without them.
+pinsFromQuery(location.search);
 // A seed asked for while the transport runs, waiting for a bar line. Null when
 // nothing is waiting.
 let pendingSeed = null;
@@ -6085,13 +6265,92 @@ function applySeed(v, spoken) {
   if (engine) engine.set("seed", SEED);
   ui("seedline").textContent = "seed " + SEED;
   ui("seedin_v").textContent = String(SEED);
-  try {
-    history.replaceState(null, "", location.pathname + "?seed=" + encodeURIComponent(seedText()));
-  } catch (e) { /* a file:// page cannot, and it does not matter */ }
+  writeUrl();
   lastPainted = -1;
   refreshHand();
   if (spoken) say(spoken);
 }
+/* THE URL IS THE PIECE AND WHAT THE HAND DID TO IT, WRITTEN IN ONE PLACE.
+   `?seed=` alone described a piece nobody had touched. A pin survives a roll
+   and a reload by the owner's own "for ever", so it has to survive being sent
+   to somebody as well, and the two tokens are written together or they get to
+   disagree.
+
+   THE PIN TOKEN IS NOT PERCENT-ENCODED, ON PURPOSE. `x . - : ,` are all legal
+   in a query string, and the whole argument for this format over a bitmask is
+   that a person can read it and hand-edit it. `%3A` in the middle of it would
+   throw that away for nothing. The seed keeps its encoding because a seed can
+   be a word, and a word can be anything. */
+function writeUrl() {
+  const pins = pinsToText();
+  try {
+    history.replaceState(null, "", location.pathname + "?seed=" + encodeURIComponent(seedText())
+      + (pins ? "&pins=" + pins : ""));
+  } catch (e) { /* a file:// page cannot, and it does not matter */ }
+}
+
+/* THE BAR THE SHEET IS SHOWING. Running, that is the bar last painted; stopped,
+   it is whatever the seek slider is parked on. A pin is set against the bar in
+   front of the player, so the column they hit is resolved against the same
+   number the cells were drawn from. */
+const sheetBar = () => (engine && lastPainted >= 0) ? lastPainted : previewBar();
+const repaintSheet = () => paintBarSheet(sheetBar(), shownComposition());
+
+/* WHAT A CLICK DOES [#51 §4.5]: IT PINS. It fires or stops the hit and locks
+   it, in one gesture — there is no pin modifier, because a modifier chord is
+   what a hardware panel needs and a web surface does not. The cell cycles
+   drawn/empty -> pinned (flipped) -> released, so three taps put it back and
+   there is nothing to remember.
+
+   THE COLUMN IS NOT THE INDEX. On a lane with its own cycle the column maps
+   through `laneStep` to the lane's own step, which is what a finger means when
+   it hits a cell: THIS step of THIS bar. Next bar it is somewhere else, and
+   the row's tail says so. */
+function togglePin(ch, i) {
+  const pat = DRUM_PAT[ch];
+  if (!pat) return null;
+  const ls = laneStep(pat, sheetBar() * 16 + i);
+  const was = pinAt(ch, ls);
+  setPin(ch, ls, was === null ? (pat[ls] ? 0 : 1) : null);
+  // AND THE OVERLAY IS APPLIED IN ONE PLACE. This is the call that gets it
+  // there: everything downstream of `DRUM_PAT` follows without being told.
+  rebuildDerived();
+  // The bar is memoised on its number, and the silence reasons are resolved
+  // from the pattern table, so the bar being played has to be re-resolved or
+  // the row would keep the reason it had before the hand arrived.
+  if (engine) engine.recompose();
+  writeUrl(); paintPins(); repaintSheet();
+  const now = pinAt(ch, ls);
+  const c = CHANNELS.find(x => x.ch === ch);
+  const name = c ? c.voice : "channel " + ch;
+  say(now === null
+      ? `${name} step ${i + 1} released — the generator has it back.`
+      : now === 1
+        ? `${name} step ${i + 1} pinned ON — it fires every bar, whatever chance says.`
+        : `${name} step ${i + 1} pinned OFF — nothing fires there until you release it.`);
+  return now;
+}
+
+/* THE COUNT AND THE WAY BACK OUT. A state that survives a reload and a re-send
+   needs a visible exit or it is a trap — a piece that has stopped changing and
+   nothing on the page saying why. */
+function paintPins() {
+  const n = pinCount();
+  const el = ui("pincount"), btn = ui("pinclear"), note = ui("piecenote");
+  if (el) { el.hidden = n === 0; el.textContent = n + " PINNED"; }
+  if (btn) btn.hidden = n === 0;
+  // AND THE ROLL SAYS WHAT IT WILL NOT TAKE. It is the one control a player
+  // would expect to clear them, and it does not.
+  if (note) note.textContent = "a new piece — same manifest, same genre, a different draw"
+    + (n ? ". your pins stay." : "");
+}
+function releasePins(spoken) {
+  clearPins(); rebuildDerived();
+  if (engine) engine.recompose();
+  writeUrl(); paintPins(); repaintSheet();
+  if (spoken) say(spoken);
+}
+
 function takeSeed(text) {
   const v = seedFromText(text);
   if (v === SEED && pendingSeed === null) { say("same seed — same piece."); return; }
@@ -6383,6 +6642,12 @@ function buildBarSheet() {
     for (let i = 0; i < BAR_COLS; i++) {
       const cell = document.createElement("div");
       cell.className = "bs-c"; cell.id = `bsc${ch}_${i}`;
+      // WHICH CELL THIS IS, ON THE CELL. One delegated listener reads it, so
+      // rebuilding the sheet for a new piece cannot leave 144 stale listeners
+      // behind it, and the hit area is the cell itself and not something
+      // inside it.
+      cell.dataset.ch = String(ch); cell.dataset.i = String(i);
+      if (pinnable(ch)) cell.classList.add("pinnable");
       box.appendChild(cell);
     }
     const why = document.createElement("div");
@@ -6394,6 +6659,13 @@ function buildBarSheet() {
 // What channel `ch` fires on each of this bar's sixteen steps, as an array of
 // null | {kind, text, sustain}. ONE PLACE ANSWERS IT, so the pane and any
 // future editor cannot disagree about what the bar contains.
+// WHICH ROWS TAKE A PIN. The four drum lanes, and only if this piece gave the
+// channel material. The rumble has no pattern of its own — it sounds where the
+// kick does — and a take is notes with a length rather than a lane, which is a
+// different cell and a different question (§4.4b). Both say so when touched
+// rather than swallowing the tap.
+const pinnable = ch => ch !== "R" && !!DRUM_PAT[ch] && !PIECE.empty[ch];
+
 function barRow(ch, bar, C) {
   const out = new Array(BAR_COLS).fill(null);
   const base = bar * BAR_COLS;
@@ -6406,8 +6678,16 @@ function barRow(ch, bar, C) {
   }
   const pat = DRUM_PAT[ch];
   if (pat) {
-    for (let i = 0; i < BAR_COLS; i++)
-      if (pat[laneStep(pat, base + i)]) out[i] = { kind: "on" };
+    for (let i = 0; i < BAR_COLS; i++) {
+      const ls = laneStep(pat, base + i);
+      if (pat[ls]) out[i] = { kind: "on" };
+      // THE OTHER HALF OF THE CELL: the fill says whether it sounds, the edge
+      // says whose it is. A pinned OFF cell has no fill at all and still has
+      // to be an object, so it is reported here rather than falling out as a
+      // cell the dice happened to miss.
+      const p = pinAt(ch, ls);
+      if (p !== null) (out[i] = out[i] || {}).pin = p === 1 ? "on" : "off";
+    }
     // THE SEAM: the column where a lane on its own cycle starts again inside
     // this bar. It moves every bar, which is the polymeter made watchable
     // rather than described.
@@ -6454,6 +6734,14 @@ function paintBarSheet(bar, C) {
         + (v && v.kind === "take" ? " take" : "")
         + (v && v.kind === "sus" ? " sus" : "")
         + (v && v.seam ? " seam" : "")
+        + (v && v.pin === "on" ? " pin-on" : "")
+        + (v && v.pin === "off" ? " pin-off" : "")
+        + (pinnable(ch) ? " pinnable" : "")
+        // THE PLAYHEAD IS NOT REPAINTED HERE AND MUST NOT BE LOST HERE EITHER.
+        // The sheet is rewritten on a bar line and whenever a pin lands, and a
+        // pin lands mid-bar: without this the column you are on would go
+        // unmarked until the next step.
+        + (i === lastHeadStep ? " here" : "")
         + (rested ? " bs-row-rest" : "");
       cell.textContent = (v && v.text) || "";
     }
@@ -6472,9 +6760,29 @@ function paintBarSheet(bar, C) {
       wait.hidden = w === null;
       if (w !== null) wait.textContent = w + (w === 1 ? " bar" : " bars");
     }
+    // THE ROW'S TAIL SAYS WHY IT IS SILENT, and when it is not silent it says
+    // the one thing about a pin that a player would otherwise file as a bug:
+    // on a lane with its own cycle a pin is pinned to the LANE'S step, so the
+    // column it appears in moves every bar. That is the polymeter, and a pin
+    // that seems to jump without a word beside it is a bug report.
     const why = ui("bsy" + ch);
-    if (why) why.textContent = rested ? shortSilence(ch, C).replace(/^silent · /, "") : "";
+    if (why) why.textContent = rested ? shortSilence(ch, C).replace(/^silent · /, "")
+                                      : pinNote(ch);
   }
+}
+
+// "pinned to step 4 of 12 — it moves across the bar". Only on a lane that is
+// not sixteen steps long, because on a sixteen-step lane the lane's step and
+// the bar's column are the same number and a sentence about it would be noise.
+function pinNote(ch) {
+  const pat = DRUM_PAT[ch], row = PINS[ch];
+  if (!pat || !row || pat.length === BAR_COLS) return "";
+  const on = [];
+  for (let i = 0; i < pat.length; i++) if (row[i] !== null) on.push(i + 1);
+  if (!on.length) return "";
+  return on.length === 1
+    ? `pinned to step ${on[0]} of ${pat.length} — it moves across the bar`
+    : `${on.length} pins on this lane's own ${pat.length} steps — they move across the bar`;
 }
 
 // HOW MANY BARS UNTIL THE LEAD IS BACK. Derived from the piece's own cycle
@@ -7545,6 +7853,24 @@ function wire() {
   // exist until the first gesture, and the switch has to be settable before
   // there is anything to play it.
   ui("auto").addEventListener("click", () => setAuto(!autoOn));
+  /* ONE LISTENER FOR 144 CELLS, on the box and not on the cells: the sheet is
+     rebuilt whenever the piece changes, and a listener per cell would leave a
+     dead one behind on every roll. `closest` means the hit area is the whole
+     cell, which is what a finger needs — and nothing here is a hover. */
+  ui("barsheet").addEventListener("click", e => {
+    const cell = e.target && e.target.closest ? e.target.closest(".bs-c") : null;
+    if (!cell || cell.dataset.ch === undefined) return;
+    const raw = cell.dataset.ch;
+    // A TAP THAT DOES NOTHING SAYS WHY. Swallowing it would read as a broken
+    // cell, which is the same fault as going quiet without a reason.
+    if (raw === "R") return say("the rumble has no pattern of its own — it sounds where the kick does. pin the kick.");
+    const ch = parseInt(raw, 10);
+    if (!DRUM_PAT[ch]) return say("a take is notes with a length, not a lane — for now the pins are the four drum channels.");
+    if (PIECE.empty[ch]) return say("this piece gave channel " + ch + " no material, so there is nothing to pin to.");
+    togglePin(ch, parseInt(cell.dataset.i, 10));
+  });
+  ui("pinclear").addEventListener("click", () =>
+    releasePins("pins released — every lane is the generator's again."));
   ui("seedgo").addEventListener("click", () => takeSeed(ui("seedin").value));
   ui("seedin").addEventListener("keydown", e => { if (e.key === "Enter") takeSeed(ui("seedin").value); });
   // ROLL is a seed nobody chose, which is the point: the fastest way to hear
@@ -7814,6 +8140,20 @@ window.p02 = {
   // be able to read it too, or a held send is only ever a claim.
   modState: () => (engine ? engine.modState : null),
   setLevel: (ch, v) => engine && engine.setLevel(ch, v),
+  /* THE PINS, AS STATE AND AS A DOOR. `table` is what the hand set and `drum`
+     is what the PATTERN TABLE got — two different claims, and only the second
+     one is what the scheduler reads. `0` nothing, `1` drawn, `2` the hand. */
+  pins: () => ({
+    text: pinsToText(), count: pinCount(),
+    table: JSON.parse(JSON.stringify(PINS)),
+    drum: Object.keys(DRUM_PAT).reduce((o, k) => (o[k] = DRUM_PAT[k].join(""), o), {}),
+    url: location.search
+  }),
+  // pin(ch, column) — the same door the click goes through, column-indexed
+  // against the bar the sheet is showing, so a measurement pins what a finger
+  // would have pinned and not a lane step it worked out for itself.
+  pin: (ch, col) => togglePin(ch, col),
+  releasePins: () => releasePins("pins released — every lane is the generator's again."),
   patterns: () => { const e = createEngine(new OfflineAudioContext(2, 1024, 44100), {}); return e.DRUM_PAT; },
   /* THE BED'S LOOP SEAM, AS A NUMBER. The floor never stops, so its buffer
      loops for ever; a buffer whose last sample does not continue into its
@@ -7867,6 +8207,7 @@ surfaceBuilt = true;
 ui("seedline").textContent = "seed " + SEED + (location.search.indexOf("seed=") === -1 ? " (the default piece)" : "");
 ui("seedin").value = (/(?:^|[?&])seed=([^&]+)/.exec(location.search || "") || [, String(SEED)])[1];
 ui("seedin_v").textContent = String(SEED);
+paintPins();
 paintBarSheet(previewBar(), shownComposition());
 outputs();
 wire();
