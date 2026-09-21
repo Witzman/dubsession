@@ -56,6 +56,7 @@
   main { max-width: 1240px; margin: 0 auto; display: flex; flex-direction: column; }
   main > h1 { order: 1; } main > .top { order: 2; }
   main > #movenow { order: 3; } main > #status { order: 4; }
+  main > #pitch { order: 4; }
   main > #piecebar { order: 5; } main > #fires { order: 6; }
   main > #chanbox { order: 7; } main > #bars { order: 8; }
   main > #steps { order: 9; } main > #barbox { order: 10; }
@@ -477,6 +478,7 @@
     .vk { padding: 8px 2px; min-height: 30px; }
     .vx, .rel { padding: 6px 4px; min-width: 22px; min-height: 30px; }
     .strip { height: 34px; }
+    #pitch .strip { height: 46px; }
     /* A CELL IS HIT WITH A FINGER ON THE OTHER TARGET, so the row of the sheet
        grows with everything else that is touched. There is no hover
        affordance on a cell anywhere: the hit area IS the cell. */
@@ -612,6 +614,9 @@
   }
   /* THE ONE LINE THAT MUST BE READ, so it is ink and not an accent. */
   #status { color: var(--ink); min-height: 1.5em; margin: 8px 0 0; }
+  #pitch { margin: 10px 0 14px; }
+  #pitch .grid2 { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 14px 16px; }
+  @media (max-width: 560px) { #pitch .grid2 { grid-template-columns: 1fr; } }
   #perf { color: var(--dim); font-size: 12px; margin-top: 10px; }
   a { color: var(--hot); }
 </style>
@@ -634,6 +639,23 @@
     auto is OFF — the schedule is not running. The arrangement is yours.</div>
 
   <div id="status"></div>
+
+  <section id="pitch" aria-label="global pitch controls">
+    <div class="pane-head"><b>PITCH</b>
+      <span class="pane-note">transpose and semitone offset · lead, sub, stab and pad</span></div>
+    <div class="grid2">
+      <div class="unit" id="u_transpose">
+        <div class="t">transpose</div>
+        <label class="strip"><input id="transpose" type="range" min="-7" max="7" step="1" value="0" aria-label="transpose by scale degrees"><span class="fill"></span><output id="transpose_v" class="v"></output></label>
+        <div class="why">in-key scale degrees · ±7 degrees · new notes</div>
+      </div>
+      <div class="unit" id="u_semi">
+        <div class="t">semi</div>
+        <label class="strip"><input id="semi" type="range" min="-12" max="12" step="1" value="0" aria-label="chromatic semitone offset"><span class="fill"></span><output id="semi_v" class="v"></output></label>
+        <div class="why">chromatic semitones · ±12 semitones · new notes</div>
+      </div>
+    </div>
+  </section>
 
   <section id="fires" aria-label="fired gestures">
     <div class="fire-head"><b>FIRE</b><span id="firestate">nothing waiting</span></div>
@@ -5418,6 +5440,9 @@ function createEngine(ctx, opts) {
   const A = {};                       // the graph, kept; voices die, buses do not
   const cfg = {
     bpm: PIECE.tempo,
+    // These are global hand values, independent of the current piece.
+    transpose: (opts.transpose === undefined ? 0 : opts.transpose),
+    semi: (opts.semi === undefined ? 0 : opts.semi),
     master: 0.8,
     pump: PIECE.globals.pump,            // see the control's own title: measured, not assumed
     dlyBeats: DLY_DIVISIONS[PIECE.globals.dlytime],
@@ -6981,7 +7006,10 @@ function createEngine(ctx, opts) {
           // THE CHORD WALKER — scale degrees, never semitones, so the walk
           // stays diatonic and a return to zero returns to exactly the key
           // [M] dialled and not near it.
-          notes.push(transposeDegrees(ev.notes[k], C.walk + oct, C.root, C.scale));
+          // The shared transpose stays in-key; the separate semi control is
+          // deliberately chromatic and follows it.
+          notes.push(transposeDegrees(ev.notes[k], C.walk + oct + cfg.transpose, C.root, C.scale)
+            + cfg.semi);
         }
         if (!notes.length) continue;
         // A SYMMETRIC contour: the bar leans, it does not get louder.
@@ -7038,6 +7066,8 @@ function createEngine(ctx, opts) {
 
   /* --- what the surface is allowed to change, and the one place it lands --- */
   function set(key, value) {
+    if (key === "transpose") value = Math.round(clamp(value, -7, 7));
+    if (key === "semi") value = Math.round(clamp(value, -12, 12));
     // A VOICE TRIM IS CLAMPED WHERE IT LANDS, not only where it is drawn. The
     // slider's min/max come from the same table, so the two agree by
     // construction — but `renderOffline({set:{...}})` and `p02` reach this
@@ -7130,6 +7160,7 @@ function createEngine(ctx, opts) {
 const TICK_MS = 25, LOOKAHEAD = 0.14, BURST_CAP = 400;
 
 const T = { running: false, bpm: PIECE.tempo, nextT: 0, step: 0 };
+const PITCH_HAND = { transpose: 0, semi: 0 };
 /* Two different numbers, and the difference matters.
    `late` is [E]'s measure: how far past its due time a step was scheduled. It
    is CENSORED BY CONSTRUCTION — inside the lookahead window a late tick is
@@ -9388,7 +9419,9 @@ function outputs() {
     ["moddepth", v => "×" + v.toFixed(2)], ["stabcut", v => "×" + v.toFixed(2)],
     // SILENCE EXPLAINS ITSELF, including a floor's. `×0.00` is a number that
     // could be a rounding; `off` is not.
-    ["bed", v => v === 0 ? "off" : "×" + v.toFixed(2)]
+    ["bed", v => v === 0 ? "off" : "×" + v.toFixed(2)],
+    ["transpose", v => (v > 0 ? "+" : "") + v + " deg"],
+    ["semi", v => (v > 0 ? "+" : "") + v + " st"]
   ];
   for (const k of VOICE_KEYS) pairs.push([VOICE_PARAMS[k].id, fmtVoice(k)]);
   for (const [id, fmt] of pairs) {
@@ -9409,6 +9442,19 @@ function outputs() {
   const updDv = () => { dvo.textContent = echoMsText(); };
   dv.addEventListener("change", updDv); updDv();
   ui("bpm").addEventListener("input", updDv);
+  for (const key of ["transpose", "semi"]) {
+    const el = ui(key), out = ui(key + "_v");
+    const fmt = key === "transpose" ? FMT.transpose : FMT.semi;
+    const update = () => {
+      const value = Math.round(parseFloat(el.value));
+      PITCH_HAND[key] = value;
+      out.textContent = fmt(value);
+      setFill(el);
+      if (engine) engine.set(key, value);
+    };
+    el.addEventListener("input", update);
+    update();
+  }
 }
 
 /* THE RING, AS A LATCH. One function, so the button, `p02.auto()` and a
@@ -9553,6 +9599,7 @@ async function start() {
     // The held values are section 4c's object, handed over rather than copied:
     // anything set before this gesture is already waiting in it.
     engine = createEngine(ctx, { seed: SEED, movement: MOVEMENT, auto: autoOn,
+                                transpose: PITCH_HAND.transpose, semi: PITCH_HAND.semi,
                                 holds: HOLDS, fires: FIRES,
                                 // handed over, not copied: what the hand muted
                                 // before there was an engine is muted now
@@ -9737,6 +9784,8 @@ window.p02 = {
     engineSolo: engine ? engine.cfg.solo : null,
     engineMutes: engine ? Object.keys(engine.cfg.mutes) : null,
     pendingSeed,
+    pitchUI: { transpose: PITCH_HAND.transpose, semi: PITCH_HAND.semi },
+    pitchEngine: engine ? { transpose: engine.cfg.transpose, semi: engine.cfg.semi } : null,
     // WHAT THE ENGINE HAS, not what the slider says, and then WHAT THE GAIN
     // NODE HAS, which is not the same claim again: `bedTrim` is what `set`
     // was told and `bedGain` is what the audio graph is actually multiplying

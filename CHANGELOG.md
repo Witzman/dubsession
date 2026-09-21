@@ -1,5 +1,11 @@
 # Changelog
 
+## 2026-09-21 — two global pitch controls
+
+- **Transpose and semi act on lead, sub, stab and pad.** Transpose moves by
+  scale degrees over ±7; semi adds chromatic semitones over ±12. They affect
+  new notes and leave notes already sounding alone.
+
 ## 2026-09-21 — voice recipes can be chosen by hand
 
 - **Kick, rimshot, sub and stab recipes are selectable in their channel details.**
