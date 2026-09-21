@@ -1,5 +1,16 @@
 # Changelog
 
+## 2026-09-21 — voice recipes can be chosen by hand
+
+- **Kick, rimshot, sub and stab recipes are selectable in their channel details.**
+  The options come from the style's declared pools; weighted duplicates remain
+  draw weights and do not appear as duplicate choices.
+- **A choice made during playback is shown as pending and lands on the next
+  bar.** Notes already sounding ring out on their existing voice. The sound die
+  still draws a new recipe, and the hand's selection stays in force through
+  numeric sound rides until the next die or seed.
+- **Channels with one recipe say so and have no switch.**
+
 ## 2026-09-21 — nine musicians become one performance station
 
 - **The flat desk is now nine channel strips.** Kick, rimshot, clap, hats,

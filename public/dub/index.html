@@ -579,6 +579,10 @@
   .voice-detail .unit .t { color: var(--dim); font-size: 9px; }
   .voice-detail .unit .why { display: none; }
   .voice-detail .strip { height: 34px; }
+  .voice-recipe { display: grid; gap: 3px; border-bottom: 1px solid var(--line); padding: 0 0 6px; }
+  .voice-recipe label { color: var(--dim); font-size: 9px; text-transform: uppercase; letter-spacing: .08em; }
+  .voice-recipe select { width: 100%; min-width: 0; min-height: 32px; background: var(--bg); color: var(--ink); }
+  .voice-recipe .recipe-state { color: var(--dim); font-size: 9px; min-height: 1.2em; }
   .mod-detail { display: grid; gap: 6px; }
   .mod-detail .unit .t, .mod-detail .unit .why { color: var(--dim); font-size: 9px; }
   .mod-detail .strip { height: 34px; }
@@ -604,6 +608,7 @@
     .ride-actions { grid-template-columns: minmax(44px, 1fr) 44px; }
     .ride-row select, .ride-row .ride-die { min-width: 44px; min-height: 44px; }
     .channel-deep summary { min-height: 44px; display: flex; align-items: center; }
+    .voice-recipe select { min-height: 44px; }
   }
   /* THE ONE LINE THAT MUST BE READ, so it is ink and not an accent. */
   #status { color: var(--ink); min-height: 1.5em; margin: 8px 0 0; }
@@ -4517,6 +4522,32 @@ const RIDE_NAMES = {
   5: ["subWave"], 6: ["stabEngine", "rhodesRatio"], 7: [], R: []
 };
 
+// A recipe is a declared choice, not a free-form instrument browser. Every
+// option comes from this style's own pools; repeated pool entries weight the
+// draw but appear once in the performer's selector.
+const uniquePool = key => [...new Set((STYLE.vox[key] && STYLE.vox[key].pool) || [])];
+const VOICE_RECIPE_OPTIONS = {
+  0: { label: "kick voice", fields: ["kickEngine"], options: uniquePool("kickEngine").map(value => ({
+    id: String(value), label: value === "909" ? "909 kick" : value + " kick", values: { kickEngine: value }
+  })) },
+  1: { label: "rim waveform", fields: ["rimWave"], options: uniquePool("rimWave").map(value => ({
+    id: String(value), label: value, values: { rimWave: value }
+  })) },
+  2: { label: "clap voice", fixed: "clap", fields: [], options: [] },
+  3: { label: "hat voice", fixed: "closed hat", fields: [], options: [] },
+  4: { label: "lead voice", fixed: "lead", fields: [], options: [] },
+  5: { label: "sub waveform", fields: ["subWave"], options: uniquePool("subWave").map(value => ({
+    id: String(value), label: value, values: { subWave: value }
+  })) },
+  6: { label: "stab voice", fields: ["stabEngine", "rhodesRatio"], options:
+    uniquePool("stabEngine").flatMap(value => value === "rhodes"
+      ? uniquePool("rhodesRatio").map(ratio => ({
+          id: "rhodes:" + ratio, label: "Rhodes · " + ratio, values: { stabEngine: value, rhodesRatio: ratio }
+        }))
+      : [{ id: String(value), label: value === "dubstab" ? "dub stab" : String(value), values: { stabEngine: value } }]) },
+  7: { label: "pad voice", fixed: "pad", fields: [], options: [] }
+};
+
 const RIDE_FIELD_I = VOX_KEYS.reduce((o, k, i) => (o[k] = i, o), {});
 
 /* THE LAP. A JUMP is the other way to move [#64 §5]: it lands somewhere
@@ -4821,6 +4852,10 @@ const RIDE = {
   held: 0,           // positions the contract refused, since the page loaded
   log: []            // the last 64 landings, with the scheduler step each got
 };
+// A selected recipe is a live performance override, never part of the URL or
+// the seed. It survives numeric sound rides, yields to the dice, and clears
+// when a new piece is drawn.
+const VOICE_RECIPE_STATE = { current: {}, pending: {}, log: [] };
 const rideKey = (ch, dim) => ch + ":" + (dim || "sound");
 /* A CHANNEL OFFERS WHAT IT HAS MATERIAL FOR, AND THE DOOR SAYS SO. Measured
    2026-09-20 with every channel thrown at every dimension: `0:rhythm` — the
@@ -4861,7 +4896,75 @@ function rideLane(ch, dim) {
 // EVERY LANE IS NEW MATERIAL'S ZERO. A new piece is drawn, not ridden to, so a
 // position on the old piece's path means nothing on the new one's — and the
 // new piece's own numbers are what `rebuild` has just pushed into the engine.
-function rideReset() { RIDE.lanes = {}; }
+function rideReset() {
+  RIDE.lanes = {};
+  for (const ch of Object.keys(VOICE_RECIPE_STATE.current)) delete VOICE_RECIPE_STATE.current[ch];
+  for (const ch of Object.keys(VOICE_RECIPE_STATE.pending)) delete VOICE_RECIPE_STATE.pending[ch];
+  if (surfaceBuilt) paintVoiceRecipes();
+}
+
+function voiceRecipeReadback(ch) {
+  const def = VOICE_RECIPE_OPTIONS[ch];
+  if (!def) return null;
+  const values = {};
+  for (const key of def.fields) {
+    const live = engine ? engine.cfg["p." + key] : undefined;
+    values[key] = live === undefined ? PIECE.vox[key] : live;
+  }
+  const manual = VOICE_RECIPE_STATE.current[ch];
+  if (!engine && manual) Object.assign(values, manual.values);
+  return def.options.find(option => Object.keys(option.values)
+    .every(key => values[key] === option.values[key])) || null;
+}
+
+function writeVoiceRecipe(ch, option) {
+  VOICE_RECIPE_STATE.current[ch] = option;
+  delete VOICE_RECIPE_STATE.pending[ch];
+  if (engine) for (const key of Object.keys(option.values))
+    engine.set("p." + key, option.values[key]);
+}
+
+function requestVoiceRecipe(ch, id) {
+  const def = VOICE_RECIPE_OPTIONS[ch];
+  const option = def && def.options.find(item => item.id === id);
+  if (!option) return null;
+  const live = voiceRecipeReadback(ch);
+  const pending = VOICE_RECIPE_STATE.pending[ch];
+  if (live && live.id === id) {
+    if (pending) {
+      delete VOICE_RECIPE_STATE.pending[ch];
+      paintVoiceRecipes();
+      say(def.label + " change cancelled; " + live.label + " stays.");
+    }
+    return live;
+  }
+  if (T.running) {
+    VOICE_RECIPE_STATE.pending[ch] = option;
+    paintVoiceRecipes();
+    say(def.label + ": " + (live ? live.label : "current voice") + " → "
+      + option.label + " on the next bar.");
+  } else {
+    writeVoiceRecipe(ch, option);
+    paintVoiceRecipes();
+    say(def.label + " is now " + option.label + ".");
+  }
+  return option;
+}
+
+function promoteVoiceRecipes() {
+  const changed = [];
+  for (const ch of Object.keys(VOICE_RECIPE_STATE.pending)) {
+    const option = VOICE_RECIPE_STATE.pending[ch];
+    writeVoiceRecipe(ch, option);
+    VOICE_RECIPE_STATE.log.push({ step: T.step, bar: Math.floor(T.step / 16), ch: Number(ch), id: option.id });
+    if (VOICE_RECIPE_STATE.log.length > 64) VOICE_RECIPE_STATE.log.shift();
+    changed.push(VOICE_RECIPE_OPTIONS[ch].label + " → " + option.label);
+  }
+  if (changed.length) {
+    paintVoiceRecipes();
+    say(changed.join(" · ") + " landed on the bar.");
+  }
+}
 
 function rideBar() { return Math.floor(T.step / 16); }
 
@@ -4882,7 +4985,12 @@ const RIDE_DIMS = {
   sound: {
     has: ch => ((RIDE_SOUND[ch] || []).length + (RIDE_NAMES[ch] || []).length) > 0,
     rides: ch => (RIDE_SOUND[ch] || []).length > 0,
-    make: (L, pos) => rideVector(SEED, PIECE.vox, L.ch, pos, L.lap),
+    make: (L, pos) => {
+      const values = rideVector(SEED, PIECE.vox, L.ch, pos, L.lap);
+      const choice = VOICE_RECIPE_STATE.current[L.ch];
+      if (choice) Object.assign(values, choice.values);
+      return values;
+    },
     validate: rideValidate,
     land: (v) => { if (engine) for (const k of Object.keys(v)) engine.set("p." + k, v[k]); }
   },
@@ -5109,6 +5217,13 @@ function requestRide(ch, pos, dim) {
 function jumpRide(ch, dim) {
   const L = rideLane(ch, dim);
   if (!L) return null;
+  if ((dim || "sound") === "sound") {
+    // The dice owns recipe names. A hand-picked name is a lock across numeric
+    // rides, so release that lock before asking the new seeded candidate.
+    delete VOICE_RECIPE_STATE.current[ch];
+    delete VOICE_RECIPE_STATE.pending[ch];
+    paintVoiceRecipes();
+  }
   L.lap++;
   L.want = 0; L.from = 0; L.at = null;
   generateRide(L, 0);
@@ -7472,6 +7587,7 @@ function tick() {
     }
     if (T.step % 16 === 0) promoteFires(Math.floor(T.step / 16));
     if (T.step % 16 === 0) promoteRides(Math.floor(T.step / 16));
+    if (T.step % 16 === 0) promoteVoiceRecipes();
     engine.scheduleStep(T.step, T.nextT, stepDur);
     uiQueue.push({ step: T.step, at: T.nextT });
     T.nextT += stepDur;
@@ -8031,6 +8147,39 @@ function wireRides() {
   }
 }
 
+function voiceRecipeMarkup(ch) {
+  const def = VOICE_RECIPE_OPTIONS[ch];
+  if (!def) return "";
+  if (def.options.length <= 1) {
+    return `<div class="voice-recipe"><label>${def.label}</label>`
+      + `<span class="recipe-state">one recipe · ${def.options[0] ? def.options[0].label : def.fixed}</span></div>`;
+  }
+  return `<div class="voice-recipe"><label for="recipe_${ch}">${def.label}</label>`
+    + `<select id="recipe_${ch}" aria-label="${def.label} for channel ${ch}"`
+    + ` title="Choose a declared voice recipe. It changes on the next bar; sounding notes ring out.">`
+    + def.options.map(option => `<option value="${option.id}">${option.label}</option>`).join("")
+    + `</select><span class="recipe-state" id="recipe_state_${ch}" aria-live="polite"></span></div>`;
+}
+
+function paintVoiceRecipes() {
+  for (const ch of Object.keys(VOICE_RECIPE_OPTIONS)) {
+    const live = voiceRecipeReadback(ch), pending = VOICE_RECIPE_STATE.pending[ch];
+    const select = ui("recipe_" + ch), status = ui("recipe_state_" + ch);
+    if (select) select.value = pending ? pending.id : (live ? live.id : "");
+    if (status) status.textContent = pending
+      ? `now ${live ? live.label : "unknown"} → next bar ${pending.label}`
+      : `now ${live ? live.label : "unknown"}`;
+  }
+}
+
+function wireVoiceRecipes() {
+  for (const ch of Object.keys(VOICE_RECIPE_OPTIONS)) {
+    const select = ui("recipe_" + ch);
+    if (select) select.addEventListener("change", () => requestVoiceRecipe(ch, select.value));
+  }
+  paintVoiceRecipes();
+}
+
 function buildChannels() {
   const box = ui("chans");
   box.innerHTML = "";
@@ -8108,6 +8257,7 @@ function buildChannels() {
       + ` title="hold channel ${ch} on one bar for ever. Press again to release."`
       + `${dead ? " disabled" : ""}>LOCK</button>`
       + `<i class="g-in">input ${ch === "R" ? "—" : (INPUT_GAIN[ch] || 1).toFixed(3)}</i>`
+      + voiceRecipeMarkup(ch)
       + `<div class="voice-detail" id="voice_detail_${ch}"></div>`
       + `<div class="mod-detail" id="mod_detail_${ch}"></div>`
       + `</div></details>`
@@ -9423,6 +9573,8 @@ async function start() {
     engine.set("modDepth", val("moddepth"));
     engine.set("dlyTrim", val("dlytrim"));
     engine.set("revTrim", val("revtrim"));
+    for (const [ch, option] of Object.entries(VOICE_RECIPE_STATE.current))
+      for (const key of Object.keys(option.values)) engine.set("p." + key, option.values[key]);
     // the voice trims, from wherever the hand left them before the gesture —
     // the same reason every other control is replayed here
     for (const k of VOICE_KEYS) engine.set(k, val(VOICE_PARAMS[k].id));
@@ -9616,7 +9768,14 @@ window.p02 = {
     // modulator's sweep.
     dlyTrim: engine ? engine.cfg.dlyTrim : null,
     revTrim: engine ? engine.cfg.revTrim : null,
-    stabCut: engine ? engine.cfg.stabCut : null
+    stabCut: engine ? engine.cfg.stabCut : null,
+    voiceRecipes: Object.fromEntries(Object.keys(VOICE_RECIPE_OPTIONS).map(ch => [ch, {
+      current: voiceRecipeReadback(ch) && voiceRecipeReadback(ch).id,
+      pending: VOICE_RECIPE_STATE.pending[ch] && VOICE_RECIPE_STATE.pending[ch].id,
+      manual: !!VOICE_RECIPE_STATE.current[ch],
+      engine: Object.fromEntries(VOICE_RECIPE_OPTIONS[ch].fields.map(key =>
+        [key, engine ? engine.cfg["p." + key] : null]))
+    }]))
   }),
   renderOffline,
   PIECE, INPUT_GAIN, MASTER_TRIM, BED_LEVEL, MOVEMENT, MOD_RATE_BARS, MOD_RATES, HOLD_PARAMS,
@@ -9722,6 +9881,9 @@ window.p02 = {
     }, {}),
     fields: RIDE_SOUND, names: RIDE_NAMES, log: RIDE.log.slice()
   }),
+  voiceRecipe: (ch, id) => requestVoiceRecipe(Number(ch), id),
+  voiceRecipeOptions: VOICE_RECIPE_OPTIONS,
+  voiceRecipeLog: () => VOICE_RECIPE_STATE.log.slice(),
   // the same doors a finger goes through, so a measurement rides what a hand
   // would have ridden and not a number it worked out for itself.
   rideTo: (ch, pos, dim) => requestRide(ch, pos, dim || "sound"),
@@ -9795,6 +9957,7 @@ buildMods();
 mountChannelMods();
 wireModRows();
 surfaceBuilt = true;
+wireVoiceRecipes();
 ui("seedline").textContent = "seed " + SEED + (location.search.indexOf("seed=") === -1 ? " (the default piece)" : "");
 ui("seedin").value = (/(?:^|[?&])seed=([^&]+)/.exec(location.search || "") || [, String(SEED)])[1];
 ui("seedin_v").textContent = String(SEED);
