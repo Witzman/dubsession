@@ -33,6 +33,7 @@ import { dirname, join } from 'node:path';
 const ROOT = join(dirname(fileURLToPath(import.meta.url)), '..', '..');
 const PAGE = join(ROOT, 'public', 'dub', 'index.html');
 const PROVE_RED = process.argv.includes('--prove-red');
+const PROVE_RED_DRAW = process.argv.includes('--prove-red-draw');
 
 let failures = 0, checks = 0;
 const ok = (cond, what, detail) => {
@@ -114,6 +115,67 @@ const exported = [
 ];
 const L = new Function(`${region}\n; return { ${exported.join(', ')} };`)();
 ok(typeof L.compositionAt === 'function', 'the region evaluates and exports the layer');
+
+/* -- 2a. #38's draw is addressed, clone-safe, and complete ----------------
+   The draw's claims are checked on the actual schema. The red mode collapses
+   every draw entry to its first value; the wide-kit assertions below must
+   then fail, proving this suite can see a pinned manifest. ---------------- */
+const pinSchema = node => {
+  if (!node || typeof node !== 'object') return;
+  if (Array.isArray(node)) return;
+  if (Array.isArray(node.range)) node.range = [node.range[0], node.range[0]];
+  if (Array.isArray(node.pool)) node.pool = [node.pool[0]];
+  for (const k of Object.keys(node)) if (k !== 'range' && k !== 'pool') pinSchema(node[k]);
+};
+if (PROVE_RED_DRAW) {
+  console.log('\n*** --prove-red-draw: every manifest choice is pinned. The wide-draw checks MUST fail. ***');
+  pinSchema(L.STYLE);
+}
+group('the drawn manifest');
+const stableStyle = JSON.stringify(L.STYLE);
+const drawA = L.draw(0x38A11), drawB = L.draw(0x38A11);
+ok(JSON.stringify(drawA) === JSON.stringify(drawB), 'one seed draws the same complete piece');
+ok(drawA !== drawB && drawA.chords[6] !== drawB.chords[6]
+   && drawA.chords[6][0].notes !== drawB.chords[6][0].notes,
+   'two draws are distinct objects down to nested note arrays');
+drawA.chords[6][0].notes[0] += 1;
+ok(drawA.chords[6][0].notes[0] !== drawB.chords[6][0].notes[0]
+   && JSON.stringify(L.STYLE) === stableStyle,
+   'mutating one draw cannot poison its twin or the manifest pools');
+const schemaPaths = [];
+const schemaCoords = [];
+const walkSchema = (node, prefix = '') => {
+  if (!node || typeof node !== 'object' || Array.isArray(node)) return;
+  const kinds = ['range', 'pool', 'fixed'].filter(k => Object.hasOwn(node, k));
+  if (kinds.length) {
+    schemaPaths.push(prefix);
+    if (kinds.length !== 1) schemaPaths.push('INVALID:' + prefix);
+    if (node.d !== undefined && node.f !== undefined) schemaCoords.push({ path: prefix, coord: `${node.d}:${node.f}` });
+    return;
+  }
+  for (const k of Object.keys(node)) walkSchema(node[k], prefix ? `${prefix}.${k}` : k);
+};
+walkSchema(L.STYLE);
+const declaredPaths = [...L.PATHS].sort();
+const actualPaths = [...schemaPaths].sort();
+ok(JSON.stringify(declaredPaths) === JSON.stringify(actualPaths)
+   && L.PATHS.every(path => {
+     let node = L.STYLE;
+     for (const key of path.split('.')) {
+       if (!node || typeof node !== 'object' || !Object.hasOwn(node, key)) return false;
+       node = node[key];
+     }
+     return node !== undefined;
+   }),
+   'PATHS names every and only schema leaf',
+   `missing=${actualPaths.filter(x => !declaredPaths.includes(x)).join(',')} extra=${declaredPaths.filter(x => !actualPaths.includes(x)).join(',')} unresolved=${L.PATHS.filter(path => { let n=L.STYLE; for(const k of path.split('.')) n=n && n[k]; return n===undefined; }).join(',')}`);
+const allCoords = schemaCoords.map(x => x.coord).concat(L.RESERVED.map(([d, f]) => `${d}:${f}`));
+const coordCounts = allCoords.reduce((m, x) => m.set(x, (m.get(x) || 0) + 1), new Map());
+ok(new Set(allCoords).size === allCoords.length,
+   'declared and reserved rand01 coordinates never collide',
+   `collisions=${[...coordCounts].filter(([, n]) => n > 1).map(([x]) => `${x}(${schemaCoords.filter(c=>c.coord===x).map(c=>c.path).join('|')})`).join(',')}`);
+for (let i = 0; i < 2000; i++) L.draw(((i * 2654435761) >>> 8) & 0xFFFFFF);
+ok(JSON.stringify(L.STYLE) === stableStyle, 'two thousand draws leave STYLE byte-identical');
 
 /* -- 2b. THE CONTROL: THE LITERAL PIECE, AS DATA -------------------------
    Until #47 the manifest was pinned so narrow that every seed drew the same
@@ -891,6 +953,7 @@ const poolOf = {};         // path -> pool length, as the draw reported it
 let repaired = 0, quizFails = 0;
 const firstRepair = [], firstQuiz = [];
 const lanes = [];          // the four drum lanes of each piece, as one string
+const drawSignatures = new Set();
 for (let i = 0; i < DRAWS; i++) {
   const sd = seedOf(i);
   const pc = L.draw(sd);
@@ -903,6 +966,8 @@ for (let i = 0; i < DRAWS; i++) {
     (cover[path] = cover[path] || new Set()).add(rec.i);
     poolOf[path] = rec.of;
   }
+  drawSignatures.add(Object.keys(pc.drawn).sort()
+    .map(path => `${path}:${JSON.stringify(pc.drawn[path].value)}`).join('|'));
   lanes.push([0, 1, 2, 3].map(ch => pc.empty[ch] ? '-' : L.lanePat(pc.drums[ch]).join('')).join('|'));
 }
 
@@ -926,6 +991,53 @@ ok(distinctLanes >= DRAWS / 10, 'and the drawn kits are not one kit with a coat 
    `${distinctLanes} distinct kits in ${DRAWS} draws`);
 ok(commonest <= DRAWS / 4, 'no single kit is the piece the manifest really draws',
    `the commonest kit is ${commonest} of ${DRAWS} (${(100 * commonest / DRAWS).toFixed(1)}%)`);
+ok(drawSignatures.size >= DRAWS * 0.95,
+   'at least 95% of seeds choose a distinct discrete manifest signature',
+   `${drawSignatures.size} of ${DRAWS} (${(100 * drawSignatures.size / DRAWS).toFixed(1)}%)`);
+
+const trackAxes = p => [
+  JSON.stringify([p.drums[0].steps, [1,2,3].map(ch => [p.drums[ch].hits, p.drums[ch].rotate]),
+    p.poly, p.frame.swing, p.frame.humanTime, p.frame.humanVelo]),
+  JSON.stringify([[1,2,3].map(ch => p.drums[ch].rotate), p.chords[6].map(e => e.step),
+    (p.chords[5] || []).map(e => e.step)]),
+  JSON.stringify([[0,1,2,3].map(ch => ch === 0 ? p.drums[ch].steps.length : p.drums[ch].hits),
+    [4,5,6,7].map(ch => (p.chords[ch] || []).reduce((n, e) => n + e.notes.length, 0)),
+    p.budget.voices, !!p.chords[7], !!p.chords[4]]),
+  JSON.stringify([p.wets, p.globals.dlytime, p.globals.dlyfbk, p.globals.revSeconds,
+    p.globals.rumble, p.globals.pump, p.mods]),
+  JSON.stringify([p.globals.root, p.globals.scale, p.stab.voicing, p.stab.degrees,
+    p.bass.model, p.bass.law, p.bass.octave]),
+  JSON.stringify([p.frame.grammar, p.frame.phrase, p.frame.section, p.frame.bars]),
+  JSON.stringify([p.engines, p.voices, p.vox])
+];
+const byGrammar = new Map();
+let neighborTotal = 0, neighborBelowTwo = 0, neighborCount = 0;
+let left = L.draw(0);
+for (let seed = 1; seed <= 2000; seed++) {
+  const right = L.draw(seed);
+  const a = trackAxes(left), b = trackAxes(right);
+  const different = a.reduce((n, axis, i) => n + (axis === b[i] ? 0 : 1), 0);
+  neighborTotal += different; neighborCount++;
+  if (different < 2) neighborBelowTwo++;
+  const grammar = left.frame.grammar;
+  if (!byGrammar.has(grammar)) byGrammar.set(grammar, []);
+  byGrammar.get(grammar).push(different);
+  left = right;
+}
+const neighborMean = neighborTotal / neighborCount;
+const belowPct = 100 * neighborBelowTwo / neighborCount;
+ok(neighborMean >= 4,
+   'consecutive seeds differ on at least four of the seven style axes on average',
+   `mean ${neighborMean.toFixed(2)} across ${neighborCount} pairs`);
+ok(belowPct < 1,
+   'fewer than 1% of consecutive seed pairs differ on fewer than two axes',
+   `${neighborBelowTwo}/${neighborCount} (${belowPct.toFixed(2)}%)`);
+for (const [grammar, pairs] of byGrammar) {
+  const mean = pairs.reduce((a, b) => a + b, 0) / pairs.length;
+  const below = pairs.filter(n => n < 2).length / pairs.length * 100;
+  ok(mean >= 4 && below < 1, `${grammar} meets the per-grammar neighbour floor`,
+     `mean ${mean.toFixed(2)}, below-two ${below.toFixed(2)}% over ${pairs.length} pairs`);
+}
 
 // THE PAGE'S OWN PIECE IS ONE OF THEM AND GETS NO EXEMPTION.
 const dflt = L.draw(L.DEFAULT_SEED);
