@@ -1,5 +1,11 @@
 # Changelog
 
+## 2026-09-21 — manual key change
+
+- **Root and scale are global performance controls.** A change during playback
+  lands on the next bar; existing material is mapped by scale degree into the
+  selected key at note time, so the piece is not redrawn.
+
 ## 2026-09-21 — two global pitch controls
 
 - **Transpose and semi act on lead, sub, stab and pad.** Transpose moves by
