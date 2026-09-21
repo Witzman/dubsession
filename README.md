@@ -27,6 +27,10 @@ allow the browser to create audio.
 - Use **THE STATION** as the mixer and performance surface. Each strip has
   mute/solo, material, level, density, tone and an echo/room plane. Material
   and space changes wait for the next bar; level, tone and mute respond now.
+- Use the global **PITCH** controls for all four tonal voices. `transpose` moves
+  in the current scale by up to seven degrees either way; `semi` adds up to
+  twelve chromatic semitones either way. Each changes new notes while notes
+  already sounding ring out.
 - Tap cells in **THE BAR** to pin hits on or off. Pins survive a new seed until
   you press `release pins`.
 - Use **FIRE** for deliberate transitions. The larger gestures — drop,
@@ -36,8 +40,11 @@ allow the browser to create audio.
 - Enter a word or number beside `seed` and press `take it` to recall a piece,
   or press `roll` for a different one.
 - Open a channel's `cycle · initiative` disclosure for its slower rhythmic,
-  synthesis and modulation controls. The drawers below the instrument hold
-  global room, arrangement and scheduling detail.
+  synthesis and modulation controls. Kick, rimshot, sub and stab also expose
+  the voice recipes this style draws; a choice made during playback lands on
+  the next bar, while any note already sounding rings out. Channels with one
+  recipe say so instead of showing a dead switch. The drawers below the
+  instrument hold global room, arrangement and scheduling detail.
 - Press `release all` to hand held performance controls back to the
   arrangement.
 
