@@ -7459,6 +7459,8 @@ function beginMorph(target) {
   refreshHand();
 }
 function promoteMorph() {
+  // M2: each discrete leaf has already chosen its own bar-boundary switch;
+  // advancing one landed position applies that table without touching SEED.
   if (!MORPH.active || MORPH.target <= MORPH.landed) return;
   const step = 1 / Math.max(MORPH_MIN_BARS, MORPH.bars);
   const next = Math.min(MORPH.target, MORPH.landed + step);
