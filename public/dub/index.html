@@ -625,7 +625,7 @@
 </head>
 <body>
 <main>
-  <h1>dubsession playing <b>221-dub-basic</b> · 125 BPM · G minor · <span id="seedline">seed —</span></h1>
+  <h1>dubsession playing <b>dub techno</b> · <span id="seedline">seed —</span></h1>
 
   <!-- THE TRANSPORT AND THE TWO SWITCHES THAT DECIDE WHO OWNS THE PIECE.
        `auto` is the ring; `release all` is the way back out of everything the
@@ -1078,7 +1078,7 @@
    agents taking the same (D,F) — is silent when it happens, because two fields
    sharing a coordinate simply always agree. On the entry, check 5 catches it.
    --------------------------------------------------------------------------- */
-const D = { FRAME:0x4652, DRUM:0x4452, NOTE:0x4E54, VOX:0x5658,
+const D = { PROFILE:0x5052, FRAME:0x4652, DRUM:0x4452, NOTE:0x4E54, VOX:0x5658,
             SPACE:0x5350, MOD:0x4D44, FORM:0x464D, MORPH:0x4D50,
             // #67's own domain, and NOT D.MORPH: a ride's waypoints are drawn
             // from the same ranges as the piece, but they are not the piece
@@ -2008,6 +2008,132 @@ const CONTRACT = {
     budgetMin:     4
   }
 };
+
+const clone = v => (v === null || typeof v !== "object") ? v
+               : Array.isArray(v) ? v.map(clone)
+               : Object.keys(v).reduce((o, k) => (o[k] = clone(v[k]), o), {});
+
+/* ---------------------------------------------------------------------------
+   THE PROFILE SET — one seed chooses one bounded region before any track
+   value is drawn. Profiles are patches over the measured dub-techno centre;
+   they are not presets and they never replace the shared hard contract.
+
+   PROFILE selection has its own addressed domain. The draw below therefore
+   remains stable when a profile gains a field, and two seeds can share a
+   profile while still drawing different values from it.
+   --------------------------------------------------------------------------- */
+const mergeStyle = (base, patch) => {
+  if (!patch || typeof patch !== "object" || Array.isArray(patch)) return clone(patch);
+  const out = clone(base || {});
+  for (const k of Object.keys(patch)) {
+    const v = patch[k];
+    out[k] = (v && typeof v === "object" && !Array.isArray(v))
+      ? mergeStyle(out[k], v) : clone(v);
+  }
+  return out;
+};
+
+const PROFILE_DEFS = [
+  {
+    id: "deep-minimal", name: "deep minimal dub",
+    why: "low-density sub, a patient chord and a large quiet room",
+    must: ["a sparse four-floor or halftime pulse", "the sub remains the anchor",
+           "the chord leaves space for the room"],
+    avoid: ["busy percussion", "a melodic lead", "a dry chord wall"],
+    patch: {
+      frame: { tempo:{range:[118,122],q:1}, swing:{range:[0.04,0.08]} },
+      drums: { kick:{pool:[
+        {v:[0,4,8,12],why:"deep minimal four-floor"},
+        {v:[0,4,8,12],why:"deep minimal four-floor"},
+        {v:[0,8],why:"deep minimal halftime floor"}]},
+        present:{pool:[{v:[2],why:"clap and room only"},{v:[2,3],why:"sparse upper kit"},{v:[1,3],why:"rim and hats, no clap"}]},
+        lanes:{1:{hits:{pool:[1,1,1],d:D.DRUM,f:2}},2:{hits:{pool:[1,1,2],d:D.DRUM,f:5}},3:{hits:{pool:[4,5,6],d:D.DRUM,f:8}}}
+      },
+      stab:{figure:{pool:[{v:[2,10],why:"two patient offbeat stabs"},{v:[6,14],why:"late offbeat answers"},{v:[7,15],why:"leaning offbeat stabs"}]}},
+      bass:{density:{range:[0.10,0.22]},law:{pool:[null,null,{v:"pedal",why:"the deep sub is a held pedal"}]}},
+      pad:{present:{pool:[true,false,false]},hold:{range:[14,15.5]}},
+      lead:{present:{pool:[{v:false,why:"no lead: the room carries the top"}]}},
+      room:{seconds:{range:[4.8,5.6]},dlyFbk:{range:[38,48]}}
+    }
+  },
+  {
+    id: "chord-heavy", name: "chord-heavy dub",
+    why: "the stab is the foreground and the delay is the arrangement",
+    must: ["a steady dub floor", "offbeat chord conversation", "the echo opens and returns"],
+    avoid: ["straight-ahead house chords", "a busy lead", "dry drums"],
+    patch: {
+      drums:{kick:{pool:[{v:[0,4,8,12],why:"chord-heavy four-floor"},{v:[0,4,8,14],why:"leaning four-floor"}]},lanes:{3:{hits:{pool:[6,7,8,9],d:D.DRUM,f:8}}}},
+      stab:{figure:{pool:[{v:[2,6,10,14],why:"full offbeat chord figure"},{v:[2,7,11],why:"uneven chord conversation"},{v:[4,12],why:"skank chord answer"}]}},
+      bass:{density:{range:[0.18,0.32]}},
+      pad:{present:{pool:[true,true,true]},hold:{range:[13,15.5]}},
+      lead:{present:{pool:[{v:false,why:"the stab owns the foreground"}]}},
+      wets:{6:{delay:{range:[34,56]},reverb:{range:[8,18]}},7:{delay:{range:[48,72]},reverb:{range:[40,52]}}}
+    }
+  },
+  {
+    id: "ambient", name: "ambient dub",
+    why: "slow harmonic air, restrained drums and a long tail",
+    must: ["a restrained dub pulse", "wide space around the chord", "melody arrives as a rare trace"],
+    avoid: ["edit density", "a dominant bassline", "a dry room"],
+    patch: {
+      frame:{tempo:{range:[116,120],q:1},swing:{range:[0.02,0.06]}},
+      drums:{lanes:{1:{hits:{pool:[1,1,2],d:D.DRUM,f:2}},2:{hits:{pool:[1,1],d:D.DRUM,f:5}},3:{hits:{pool:[4,5,6,7],d:D.DRUM,f:8}}}},
+      stab:{figure:{pool:[{v:[2,10],why:"sparse ambient stab"},{v:[7,15],why:"late ambient answer"}]}},
+      bass:{density:{range:[0.10,0.20]},lenOdds:{range:[0.05,0.18]}},
+      pad:{present:{pool:[true,true,true]},hold:{range:[14.5,15.5]}},
+      lead:{present:{pool:[{v:true,why:"a rare drenched motif"},{v:false,why:"the room is enough"}]}},
+      room:{seconds:{range:[5.0,5.6]},dlyFbk:{range:[44,52]}}
+    }
+  },
+  {
+    id: "rolling-909", name: "rolling 909 dub",
+    why: "a continuous low motor under sparse, delayed punctuation",
+    must: ["a four-floor 909-like pulse", "the bass answers rather than doubles", "the room remains audible"],
+    avoid: ["a lead melody", "festival build-ups", "snare-led house density"],
+    patch: {
+      frame:{tempo:{range:[122,126],q:1},swing:{range:[0.06,0.10]}},
+      drums:{kick:{pool:[{v:[0,4,8,12],why:"rolling 909 floor"}]},present:{pool:[{v:[1,2,3],why:"full rolling kit"}]},lanes:{1:{hits:{pool:[1,2],d:D.DRUM,f:2}},2:{hits:{pool:[1,1,2],d:D.DRUM,f:5}},3:{hits:{pool:[8,9,10,12],d:D.DRUM,f:8}}}},
+      stab:{figure:{pool:[{v:[2,6,10,14],why:"rolling offbeat figure"},{v:[6,14],why:"rolling chord answers"}]}},
+      bass:{density:{range:[0.32,0.45]},homeBias:{range:[0.30,0.38]},law:{pool:[null,null,null,{v:"octave",why:"rolling octave answer"}]}},
+      pad:{present:{pool:[false,true]},hold:{range:[13,14.5]}},
+      lead:{present:{pool:[{v:false,why:"the 909 floor owns the motion"}]}}
+    }
+  },
+  {
+    id: "sparse-sub", name: "sparse sub dub",
+    why: "halftime weight, one clap and a sub that leaves the gaps open",
+    must: ["a clear low-end anchor", "large gaps between statements", "delay makes the arrangement"],
+    avoid: ["busy hats", "a chord on every offbeat", "a melodic lead"],
+    patch: {
+      frame:{tempo:{range:[118,124],q:1},swing:{range:[0.02,0.06]}},
+      drums:{kick:{pool:[{v:[0,8],why:"halftime sub floor"}]},present:{pool:[{v:[2],why:"one clap and room"},{v:[2,3],why:"clap with a thin hat"}]},lanes:{2:{hits:{pool:[1,1],d:D.DRUM,f:5}},3:{hits:{pool:[4,4,5],d:D.DRUM,f:8}}}},
+      stab:{figure:{pool:[{v:[2,10],why:"two distant stabs"},{v:[6,14],why:"two delayed answers"}]}},
+      bass:{density:{range:[0.10,0.16]},law:{pool:[{v:"pedal",why:"the sub stays home"},{v:"pedal",why:"the sub stays home"}]}},
+      pad:{present:{pool:[false,false,true]}},
+      lead:{present:{pool:[{v:false,why:"no lead in the sparse sub profile"}]}},
+      room:{seconds:{range:[4.5,5.4]},dlyFbk:{range:[44,52]}}
+    }
+  }
+].map(p => Object.assign(p, {
+  genre: "dub techno",
+  grammar: {
+    "deep-minimal":"rolling-low-density", "chord-heavy":"rolling-chord-return",
+    ambient:"sparse-air", "rolling-909":"rolling-motor", "sparse-sub":"sparse-sub"
+  }[p.id],
+  energy: {
+    "deep-minimal":[0.25,0.42,0.30], "chord-heavy":[0.35,0.62,0.48],
+    ambient:[0.18,0.36,0.28], "rolling-909":[0.48,0.72,0.58],
+    "sparse-sub":[0.20,0.34,0.24]
+  }[p.id],
+  contract: { genre:"dub techno", must:p.must, avoid:p.avoid, hard:clone(CONTRACT.hard) }
+}));
+
+function profileForSeed(seed) {
+  const i = Math.min(PROFILE_DEFS.length - 1,
+    Math.floor(rand01(seed | 0, D.PROFILE, 0, 0) * PROFILE_DEFS.length));
+  const def = PROFILE_DEFS[i];
+  return { def: def, style: mergeStyle(STYLE, def.patch), contract: clone(def.contract) };
+}
 
 // [M] globals.dlytime is an index into the parent's delay divisions [D]:
 // `1/16 · 1/8 · 3/16 · 1/4 · 3/8 · 1/2`. Index 1 is 1/8 — half a beat.
@@ -3118,10 +3244,6 @@ const MOVEMENT = {
    is playing.
    ========================================================================= */
 
-const clone = v => (v === null || typeof v !== "object") ? v
-               : Array.isArray(v) ? v.map(clone)
-               : Object.keys(v).reduce((o, k) => (o[k] = clone(v[k]), o), {});
-
 // A QUANTISED RANGE IS UNIFORM OVER ITS INCLUSIVE STEPS. `Math.round` of a
 // uniform is NOT: with {range:[4,8], q:1} it gives 4 and 8 half the weight of
 // 5, 6 and 7, because the end buckets are half as wide — and the two ends of
@@ -3404,11 +3526,12 @@ function writeBass(seed, cfg) {
 
 function draw(seed) {
   seed = seed | 0;
+  const selected = profileForSeed(seed), style = selected.style;
   const drawn = {};
   const pull = (spec, path, i) => drawField(seed, spec, path, i, drawn);
 
   /* --- 1. THE FRAME ---------------------------------------------------- */
-  const F = STYLE.frame;
+  const F = style.frame;
   const frame = {
     grammar: pull(F.grammar, "frame.grammar"),
     phrase:  pull(F.phrase,  "frame.phrase"),
@@ -3435,12 +3558,15 @@ function draw(seed) {
     engines: {}, budget: {},
     violations: [],
     drawn: drawn,
-    contract: CONTRACT
+    profile: { id:selected.def.id, name:selected.def.name, genre:selected.def.genre,
+               grammar:selected.def.grammar, energy:selected.def.energy.slice(),
+               why:selected.def.why, must:selected.def.must.slice(), avoid:selected.def.avoid.slice() },
+    contract: selected.contract
   };
 
   /* --- 2. THE KICK, then 3. the three euclid lanes --------------------- */
   const sc = SCALE_STEPS[piece.globals.scale] || SCALE_STEPS[0];
-  const DR = STYLE.drums;
+  const DR = style.drums;
   piece.drums[0] = {
     steps: pull(DR.kick, "drums.kick"),
     velo:  pull(DR.kickVelo, "drums.kickVelo"),
@@ -3487,7 +3613,7 @@ function draw(seed) {
      figure transposes to any key and any of the six scales with no second
      table. Verified: base 28 (octave 4 of a seven-note mode), root 7, natural
      minor gives 55, 58, 62 — [M]'s own chord, to the note. --- */
-  const S = STYLE.stab;
+  const S = style.stab;
   const figure = pull(S.figure, "stab.figure");
   const stabVelo = pull(S.velo, "stab.velo");
   const stabDur = pull(S.duration, "stab.duration");
@@ -3507,7 +3633,7 @@ function draw(seed) {
                                         velo: stabVelo, duration: stabDur }));
 
   /* --- 6. THE BASS, gated off the holes the field leaves --------------- */
-  const B = STYLE.bass;
+  const B = style.bass;
   piece.bass = {
     model:    pull(B.model,    "bass.model"),
     density:  pull(B.density,  "bass.density"),
@@ -3529,7 +3655,7 @@ function draw(seed) {
   });
 
   /* --- 7. THE PAD and THE LEAD ----------------------------------------- */
-  const P = STYLE.pad, LD = STYLE.lead;
+  const P = style.pad, LD = style.lead;
   const padOn = pull(P.present, "pad.present");
   const padHold = pull(P.hold, "pad.hold");
   let padVoicing = pull(P.voicing, "pad.voicing");
@@ -3588,14 +3714,14 @@ function draw(seed) {
     piece.empty[ch] = "no material — the draw gave this lane no hits";
 
   /* --- 8. THE ENGINES --------------------------------------------------- */
-  piece.engines.kick = pull(STYLE.engines.kick, "engines.kick");
-  piece.engines.stab = pull(STYLE.engines.stab, "engines.stab");
+  piece.engines.kick = pull(style.engines.kick, "engines.kick");
+  piece.engines.stab = pull(style.engines.stab, "engines.stab");
 
   /* --- 9. THE SPACE ----------------------------------------------------- */
-  for (const ch of Object.keys(STYLE.wets)) piece.wets[ch] = {
-    delay:  pull(STYLE.wets[ch].delay,  "wets." + ch + ".delay"),
-    reverb: pull(STYLE.wets[ch].reverb, "wets." + ch + ".reverb") };
-  const RM = STYLE.room;
+  for (const ch of Object.keys(style.wets)) piece.wets[ch] = {
+    delay:  pull(style.wets[ch].delay,  "wets." + ch + ".delay"),
+    reverb: pull(style.wets[ch].reverb,  "wets." + ch + ".reverb") };
+  const RM = style.room;
   piece.globals.dlytime    = pull(RM.dlyDiv,  "room.dlyDiv");
   piece.globals.dlyfbk     = pull(RM.dlyFbk,  "room.dlyFbk");
   piece.globals.revSeconds = pull(RM.seconds, "room.seconds");
@@ -3604,14 +3730,14 @@ function draw(seed) {
   piece.globals.bedTrim    = pull(RM.bedTrim, "room.bedTrim");
 
   /* --- 10. THE MODULATORS ----------------------------------------------- */
-  const modCount = pull(STYLE.mods.count, "mods.count");
-  piece.mods = pull(STYLE.mods.table, "mods.table").slice(0, modCount);
+  const modCount = pull(style.mods.count, "mods.count");
+  piece.mods = pull(style.mods.table, "mods.table").slice(0, modCount);
 
   /* --- 11. PRESENCE AND THE VOICE BUDGET --------------------------------
      S4: THE BUDGET DECIDES WHICH CHANNELS THE PIECE HAS AT ALL. A grammar's
      lane mask only moves channels that already exist, so a silent channel has
      exactly one explanation and the surface never has to guess between two. */
-  const BU = STYLE.budget;
+  const BU = style.budget;
   piece.budget = {
     voices:     pull(BU.voices,     "budget.voices"),
     strippable: pull(BU.strippable, "budget.strippable"),
@@ -3631,14 +3757,14 @@ function draw(seed) {
   }
 
   /* --- 12. THE LEVELS. §7: CHANNEL 4 IS OWED. -------------------------- */
-  const lv = clone(STYLE.levels.fixed);
+  const lv = clone(style.levels.fixed);
   for (const ch of ALL_CHANNELS) {
     if (lv[ch] !== null && lv[ch] !== undefined) { piece.levels[ch] = lv[ch]; continue; }
     if (!piece.empty[ch])
       throw new Error("channel " + ch + " has material and no MEASURED level. §7: its "
         + "INPUT_GAIN and its fader are rendered alone at the deck sum and set by ear "
         + "once — not drawn and not guessed. Owed by #47/#48.");
-    piece.levels[ch] = clone(STYLE.levels.owed4.fixed);
+    piece.levels[ch] = clone(style.levels.owed4.fixed);
   }
 
   /* --- 12b. THE VOICES. Drawn last and repaired like everything else. Each
@@ -3646,14 +3772,14 @@ function draw(seed) {
      writes is what an oscillator is built with — there is no second copy and
      no default that outranks it. --- */
   piece.vox = {};
-  for (const k of VOX_KEYS) piece.vox[k] = pull(STYLE.vox[k], "vox." + k);
+  for (const k of VOX_KEYS) piece.vox[k] = pull(style.vox[k], "vox." + k);
 
   /* --- 13. REPAIR, then THE QUIZ. Repair is a seatbelt whose use is a
      reportable incident: a violation that fires in production is a bug in the
      POOLS, not a rescue of the piece, and §9.3 asserts the list is empty
      across every one of 2000 seeds. --- */
   repair(piece);
-  const left = quiz(piece, CONTRACT);
+  const left = quiz(piece, selected.contract);
   if (left.length) throw DrawError(seed, left);
   return piece;
 }
@@ -3671,7 +3797,7 @@ function draw(seed) {
    two legal pieces is not automatically legal.
    ------------------------------------------------------------------------- */
 function repair(piece) {
-  const H = CONTRACT.hard;
+  const H = piece.contract.hard;
   const V = (fence, what) => piece.violations.push({ fence: fence, why: what });
   const same = (a, b) => a.length === b.length && a.every((x, i) => x === b[i]);
 
@@ -5114,7 +5240,7 @@ function melodyQuiz(ch, events) {
   probe.chords = Object.assign({}, PIECE.chords);
   probe.chords[ch] = events;
   let left = [];
-  try { left = quiz(probe, CONTRACT) || []; } catch (e) { return "the contract could not judge it: " + e.message; }
+  try { left = quiz(probe, PIECE.contract) || []; } catch (e) { return "the contract could not judge it: " + e.message; }
   const mine = left.filter(v => MELODY_FENCES.indexOf(v.fence) !== -1);
   if (!mine.length) return null;
   return mine.map(v => v.fence + " " + (v.why || "")).join("; ");
@@ -7549,7 +7675,7 @@ function applySeed(v, spoken) {
   // waypoints are drawn from the seed [#67].
   rideReset();
   if (engine) engine.set("seed", SEED);
-  ui("seedline").textContent = "seed " + SEED;
+  ui("seedline").textContent = "seed " + SEED + " · " + PIECE.profile.name;
   ui("seedin_v").textContent = String(SEED);
   writeUrl();
   lastPainted = -1;
@@ -9949,10 +10075,15 @@ window.p02 = {
     }]))
   }),
   renderOffline,
+  draw,
   // A render may temporarily rebind PIECE to measure another seed. Expose a
   // getter for harnesses so they read the current draw rather than the object
   // that happened to be exported when the page first loaded.
   piece: () => PIECE,
+  profiles: PROFILE_DEFS.map(p => ({id:p.id, name:p.name, genre:p.genre,
+    grammar:p.grammar, energy:p.energy.slice(), why:p.why,
+    must:p.must.slice(), avoid:p.avoid.slice()})),
+  profileForSeed: seed => profileForSeed(seed).def.id,
   PIECE, INPUT_GAIN, MASTER_TRIM, BED_LEVEL, MOVEMENT, MOD_RATE_BARS, MOD_RATES, HOLD_PARAMS,
   FIRE_MACROS, FIRE_MICROS,
   VOX, VOX_STYLE,
@@ -10136,7 +10267,8 @@ mountChannelMods();
 wireModRows();
 surfaceBuilt = true;
 wireVoiceRecipes();
-ui("seedline").textContent = "seed " + SEED + (location.search.indexOf("seed=") === -1 ? " (the default piece)" : "");
+ui("seedline").textContent = "seed " + SEED + " · " + PIECE.profile.name
+  + (location.search.indexOf("seed=") === -1 ? " (the default piece)" : "");
 ui("seedin").value = (/(?:^|[?&])seed=([^&]+)/.exec(location.search || "") || [, String(SEED)])[1];
 ui("seedin_v").textContent = String(SEED);
 paintPins();
