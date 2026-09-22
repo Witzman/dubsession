@@ -7387,28 +7387,42 @@ const MORPH = {
 function morphSeed(seed, leg) {
   return hash4(seed | 0, D.MORPH, 0xC4, leg | 0) | 0;
 }
-function morphValue(a, b, x, key) {
+function morphSwitch(path) {
+  // Structural changes are spread over the crossing, not held until its end.
+  return 0.12 + rand01(SEED, D.MORPH, 0x200, seedFromText(path)) * 0.76;
+}
+function morphDiscrete(path, a, b) {
+  if (Array.isArray(a) || Array.isArray(b)) return true;
+  if (typeof a !== "number" || typeof b !== "number") return true;
+  const p = path.replace(/\s+/g, "");
+  return /^(piece\.)?(globals\.(root|scale|dlytime|revSeconds)|frame\.(grammar|phrase|section|bars)|drums\..+\.(hits|rotate|len)|stab\.(voicing|base)|bass\.(model|law|octave)|pad\.(voicing|base)|lead\.(cycle|base|onsets)|budget\.voices|chords\.|empty\.|engines\.)/.test(p);
+}
+function morphValue(a, b, x, key, path) {
   if (key === "seed" || key === "file" || key === "profile" || key === "contract"
       || key === "drawn" || key === "violations") return clone(a);
+  path = path || key;
+  if (morphDiscrete(path, a, b) && !(a && typeof a === "object" && !Array.isArray(a)))
+    return clone(x >= morphSwitch(path) ? b : a);
   if (typeof a === "number" && typeof b === "number" && isFinite(a) && isFinite(b))
     return a + (b - a) * x;
-  if (Array.isArray(a) || Array.isArray(b)) return clone(x < 1 ? a : b);
+  if (Array.isArray(a) || Array.isArray(b)) return clone(x >= morphSwitch(path) ? b : a);
   if (a && typeof a === "object" && b && typeof b === "object") {
     const out = {};
     for (const k of new Set(Object.keys(a).concat(Object.keys(b))))
-      out[k] = morphValue(a[k], b[k], x, k);
+      out[k] = morphValue(a[k], b[k], x, k, path + "." + k);
     return out;
   }
-  return clone(x < 1 ? a : b);
+  return clone(x >= morphSwitch(path) ? b : a);
 }
 function morphPieceAt(x) {
   if (!MORPH.from || !MORPH.to) return PIECE;
-  const p = morphValue(MORPH.from, MORPH.to, clamp(x, 0, 1), "piece");
+  x = clamp(x, 0, 1);
+  const p = morphValue(MORPH.from, MORPH.to, x, "piece", "piece");
   p.seed = SEED;
   p.file = MORPH.from.file + "→" + MORPH.to.file;
-  p.profile = MORPH.from.profile;
-  p.contract = MORPH.from.contract;
-  p.drawn = MORPH.from.drawn;
+  p.profile = clone(x >= 0.5 ? MORPH.to.profile : MORPH.from.profile);
+  p.contract = clone(x >= 0.5 ? MORPH.to.contract : MORPH.from.contract);
+  p.drawn = clone(x >= 0.5 ? MORPH.to.drawn : MORPH.from.drawn);
   p.violations = [];
   return p;
 }
@@ -7445,6 +7459,8 @@ function beginMorph(target) {
   refreshHand();
 }
 function promoteMorph() {
+  // M2: each discrete leaf has already chosen its own bar-boundary switch;
+  // advancing one landed position applies that table without touching SEED.
   if (!MORPH.active || MORPH.target <= MORPH.landed) return;
   const step = 1 / Math.max(MORPH_MIN_BARS, MORPH.bars);
   const next = Math.min(MORPH.target, MORPH.landed + step);
