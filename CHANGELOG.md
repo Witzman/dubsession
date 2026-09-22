@@ -1,5 +1,15 @@
 # Changelog
 
+## 2026-09-22 — performance scheduler follows the hand
+
+- **Auto is now the clock, not a fixed arrangement.** The current seed,
+  profile and drawn material stay intact while performance buttons queue
+  temporary actions on the next bar boundary; explicit return/release and
+  replacement prevent actions from getting stuck.
+- **The performance timeline is deterministic.** The same seed and button
+  timeline resolve to the same arrangement, while auto-off still accepts
+  deliberate fired actions.
+
 ## 2026-09-22 — per-piece programme level matching
 
 - **A drawn piece now receives an asynchronously measured programme trim.** A

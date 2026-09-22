@@ -2634,6 +2634,9 @@ function scheduleStateAt(piece, movement, bar, auto) {
   // still, which is the owner's default; the failure mode of the other
   // direction is the page moving something behind their back, which is the
   // exact complaint this switch answers.
+  // The direct pure API retains the movement for old measurements and tools.
+  // The live engine passes an explicit FIRE timeline and selects the
+  // hand-driven path in `compositionAt` below; AUTO there is only the clock.
   if (!auto) return baseComposition(piece, movement.phrase);
 
   // THE MOVEMENT IS ENDLESS. Owner decision 2026-09-18: "i want no exit - i
@@ -2822,7 +2825,13 @@ function compositionAt(seed, piece, movement, bar, opts) {
   opts = opts || {};
   const auto = !!opts.auto;
   const holds = opts.holds || null;
-  const now = scheduleStateAt(piece, movement, bar, auto);
+  // An explicit FIRE timeline is the live performance contract. In that mode
+  // AUTO is only the clock and the base arrangement waits for the hand; the
+  // legacy direct call without `fires` remains available to old pure-layer
+  // measurements and does not drive the desk.
+  const performanceMode = opts.fires !== undefined;
+  const now = performanceMode ? baseComposition(piece, movement.phrase)
+                              : scheduleStateAt(piece, movement, bar, auto);
   const out = {
     bar, seed, auto, mods: now.mods,
     root: opts.keyRoot === undefined ? now.root : opts.keyRoot,
@@ -2968,8 +2977,17 @@ function compositionAt(seed, piece, movement, bar, opts) {
   applyFires(out, opts.fires, holds);
   // TIER 3 — the per-bar mutation. Last, because it READS the resolved bar
   // (what is present, what is silent) and writes over it for this bar only.
-  out.mut = opts.mutate === false ? MUT_NONE
-                                  : mutationsAt(seed, piece, movement, out, auto, out.fire.micros);
+  const firedMicros = out.fire.micros || [];
+  out.mut = performanceMode
+    ? (opts.mutate === false || firedMicros.length === 0 ? MUT_NONE
+       : mutationsAt(seed, piece, movement, out, auto, firedMicros))
+    : (opts.mutate === false ? MUT_NONE
+       : mutationsAt(seed, piece, movement, out, auto, firedMicros));
+  // Macro ratchets are FIRE state too, but they do not need the random
+  // mutation pass. Preserve that explicit audio action while keeping the
+  // unattended mutation layer inert.
+  if (out.fire.ratchet && out.mut === MUT_NONE)
+    out.mut = { ...MUT_NONE, bar: out.bar, ratchet: out.fire.ratchet };
   /* --- THE LEAD IS AN ARRANGEMENT DECISION, NOT A PATTERN. -----------------
      `piece.chords[4]` is the motif as written; this decides whether this bar
      has any of it and which QUOTE it takes.
@@ -4405,12 +4423,10 @@ const MUT_NONE = {
   sig: "-", matSig: "-", text: ""
 };
 
-// TIER 3 DOES NOT ANSWER THE `auto` SWITCH, and if that is ever to change it
-// changes HERE and nowhere else. `auto` off means "the arrangement holds
-// still"; the grain is not the arrangement, the modulators already keep
-// breathing under it on exactly that argument, and `auto` DEFAULTS TO OFF —
-// so a tier 3 behind it would leave the default page playing the one bar this
-// layer exists to end. Set this true and the default page is frozen again.
+// Tier 3 is a fired performance layer now. It must not be another addressed
+// random walk when the hand is idle: that was the old fixed movement in a
+// different costume. Micros explicitly opt into it through `manual`; the
+// absence of a fired micro therefore returns the untouched base.
 const MUT_NEEDS_AUTO = false;
 
 function mutationsAt(seed, piece, movement, C, auto, manual) {
