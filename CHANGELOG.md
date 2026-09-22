@@ -1,11 +1,13 @@
 # Changelog
 
-## 2026-09-22 — programme trim path prepared
+## 2026-09-22 — per-piece programme level matching
 
-- **The engine now has a dedicated programme trim point before saturation.**
-  It starts at unity and is exposed to offline renders, so a measured per-piece
-  trim can land at a bar boundary without changing the existing voice balance.
-  No audible trim value is enabled yet.
+- **A drawn piece now receives an asynchronously measured programme trim.** A
+  one-bar offline preview estimates its RMS while the current bar continues;
+  the gain is promoted on the next bar boundary, before saturation. The target
+  is -20.5 dBFS with a 0.60–1.25 clamp. Eight fresh Chromium renders measured
+  -20.50 to -20.33 dBFS after trim (0.18 dB spread); all trimmed peaks stayed
+  below -5.78 dBFS. The trim remains at unity until its preview is ready.
 
 ## 2026-09-22 — drawn manifest schema
 
