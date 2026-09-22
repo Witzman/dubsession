@@ -5474,7 +5474,7 @@ function createEngine(ctx, opts) {
     // Per-piece programme trim. It is deliberately 1 until #56's measured
     // pre-render chooses a value; the node exists here so that measurement
     // and live playback share the same signal path.
-    pieceTrim: (opts.pieceTrim === undefined ? 1 : clamp(opts.pieceTrim, 0.75, 1.15)),
+    pieceTrim: (opts.pieceTrim === undefined ? 1 : clamp(opts.pieceTrim, 0.60, 1.25)),
     bypassFaders: !!opts.bypassFaders,   // calibration render: [M]'s faders off
     raw: !!opts.raw,                     // …and the input gain off too: the voice exactly as built
     solo: (opts.solo === undefined ? null : opts.solo),
@@ -7122,7 +7122,7 @@ function createEngine(ctx, opts) {
     // node that is already running.
     const t = ctx.currentTime;
     if (key === "master") A.master.gain.setTargetAtTime(value, t, 0.02);
-    if (key === "pieceTrim") A.pieceTrim.gain.setTargetAtTime(clamp(value, 0.75, 1.15), t, 0.05);
+    if (key === "pieceTrim") A.pieceTrim.gain.setTargetAtTime(clamp(value, 0.60, 1.25), t, 0.05);
     if (key === "bpm" || key === "dlyBeats") {
       const dt = 60 / cfg.bpm * cfg.dlyBeats;
       A.pp.L.delayTime.setTargetAtTime(dt, t, 0.05);
@@ -7372,6 +7372,37 @@ function seedText() {
 let surfaceBuilt = false;
 let lastHeadStep = -1;   // which column the playhead is on
 
+/* PIECE LEVEL MATCH [#56]. A one-bar offline preview estimates the drawn
+   piece's integrated level before it lands. The estimate is prepared while
+   the current bar plays and promoted only at the next bar boundary. */
+const PIECE_TRIM_TARGET_DB = -20.5;
+const PIECE_TRIM_MIN = 0.60;
+const PIECE_TRIM_MAX = 1.25;
+let pieceTrimPending = null;
+let pieceTrimJob = 0;
+function pieceTrimOf(rmsDb) {
+  return clamp(Math.pow(10, (PIECE_TRIM_TARGET_DB - rmsDb) / 20), PIECE_TRIM_MIN, PIECE_TRIM_MAX);
+}
+async function preparePieceTrim(seed) {
+  const job = ++pieceTrimJob;
+  try {
+    const r = await renderOffline({seed, bars: 1, auto: false, pieceTrim: 1, tail: 0.1});
+    if (job === pieceTrimJob) {
+      pieceTrimPending = {seed, gain: pieceTrimOf(r.rmsDb), rmsDb: r.rmsDb};
+      if (!T.running) promotePieceTrim();
+    }
+  } catch (e) {
+    if (job === pieceTrimJob) pieceTrimPending = null;
+  }
+}
+function promotePieceTrim() {
+  if (!pieceTrimPending || pieceTrimPending.seed !== PIECE.seed) return;
+  const gain = pieceTrimPending.gain;
+  pieceTrimPending = null;
+  if (engine) engine.set("pieceTrim", gain);
+  PIECE.gainTrim = gain;
+}
+
 function setPiece(seed) {
   const before = PIECE;
   try { usePiece(draw(seed)); }
@@ -7510,6 +7541,8 @@ function applySeed(v, spoken) {
   // only handed to the engine's dice. Everything derived from the piece is
   // rebuilt with it, before anything repaints.
   setPiece(SEED);
+  pieceTrimPending = null;
+  preparePieceTrim(SEED);
   // EVERY RIDE GOES BACK TO ITS OWN ZERO, and the zero it goes back to is the
   // NEW piece's drawn sound, which `rebuild` has just pushed into the engine.
   // A position on the old piece's path names nothing on this one's: the
@@ -7655,6 +7688,7 @@ function tick() {
       const v = pendingSeed; pendingSeed = null;
       applySeed(v, `seed ${v} — a different piece, from this bar.`);
     }
+    if (T.step % 16 === 0) promotePieceTrim();
     if (T.step % 16 === 0) promoteFires(Math.floor(T.step / 16));
     if (T.step % 16 === 0) promoteRides(Math.floor(T.step / 16));
     if (T.step % 16 === 0) promoteVoiceRecipes();
@@ -10081,6 +10115,7 @@ window.p02 = {
    THE PIECE IS DRAWN FIRST. Everything below reads `PIECE`, `DRUM_PAT`,
    `FADER_START` and `MOD_SLOT_KEYS`, and all four now follow the seed. */
 setPiece(SEED);
+preparePieceTrim(SEED);
 KEY_HAND.root = PIECE.globals.root; KEY_HAND.scale = PIECE.globals.scale;
 buildKeyControls();
 buildChannels();
