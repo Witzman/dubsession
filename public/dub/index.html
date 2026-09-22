@@ -1842,7 +1842,7 @@ const STYLE = {
           // the degrees, ABOVE THE LEAD ROOT and inside one octave of the mode.
           // Drawn one per onset with the onset's POSITION as `I`, so the motif
           // is a shape and not a run of independent notes.
-          degree:{pool:[0,0,1,2,2,3,4,4,5,6,7],d:D.NOTE,f:19},
+          degree:{pool:[0,0,1,2,2,3,4,4,5,6,7],d:D.NOTE,f:25},
           // WHICH BAR OF THE CYCLE each note lands in, and where in that bar.
           // Step 0 is weighted because a dub lead states its note on a
           // downbeat and lets it hang; the rest are offbeat eighths and
@@ -1916,21 +1916,10 @@ const STYLE = {
   // `VOICE_PARAMS[k].def`. #48 wires them and widens them together, so that
   // the first commit in which a voice trim is drawn is also the first in which
   // it is heard, rather than one silent commit and one loud one.
-  voices: {
-    "voice.kick.tune":  { range:[1,1], d:D.VOX, f:0 },
-    "voice.kick.decay": { range:[1,1], d:D.VOX, f:1 },
-    "voice.kick.click": { range:[1,1], d:D.VOX, f:2 },
-    "voice.clap.tone":  { range:[1,1], d:D.VOX, f:3 },
-    "voice.rim.tune":   { range:[1,1], d:D.VOX, f:4 },
-    "voice.sub.tone":   { range:[1,1], d:D.VOX, f:5 },
-    "voice.hats.tone":  { range:[1,1], d:D.VOX, f:6 },
-    "voice.stab.reso":  { range:[1,1], d:D.VOX, f:7 },
-    "voice.pad.tone":   { range:[1,1], d:D.VOX, f:8 }
-  },
   // #48's two alternative voices. A pool of NAMES; the renderer switches on it.
   engines: {
-    kick: { pool:["909"], d:D.VOX, f:9 },                    // PINNED. §3: 909×3 + hum
-    stab: { pool:["dubstab"], d:D.VOX, f:10 }                // PINNED. §3: dubstab×3 + rhodes
+    kick: { pool:["909"], d:D.VOX, f:38 },                   // PINNED. §3: 909×3 + hum
+    stab: { pool:["dubstab"], d:D.VOX, f:39 }                // PINNED. §3: dubstab×3 + rhodes
   },
 
   /* --- THE LEVELS. FIXED, AND NOT UP FOR DISCUSSION. ------------------- */
@@ -3442,7 +3431,7 @@ function draw(seed) {
     },
     frame: frame,
     drums: {}, chords: {}, empty: {}, wets: {}, levels: {}, mods: [],
-    voices: {}, engines: {}, budget: {},
+    engines: {}, budget: {},
     violations: [],
     drawn: drawn,
     contract: CONTRACT
@@ -3597,9 +3586,7 @@ function draw(seed) {
   for (const ch of [1, 2, 3]) if (piece.drums[ch].hits <= 0 && !piece.empty[ch])
     piece.empty[ch] = "no material — the draw gave this lane no hits";
 
-  /* --- 8. THE VOICES and THE ENGINES ----------------------------------- */
-  for (const k of Object.keys(STYLE.voices))
-    piece.voices[k] = pull(STYLE.voices[k], "voices." + k);
+  /* --- 8. THE ENGINES --------------------------------------------------- */
   piece.engines.kick = pull(STYLE.engines.kick, "engines.kick");
   piece.engines.stab = pull(STYLE.engines.stab, "engines.stab");
 

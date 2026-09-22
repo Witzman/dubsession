@@ -1,5 +1,25 @@
 # Changelog
 
+## 2026-09-22 — drawn manifest schema
+
+- **A new seed now selects a complete style shaped by the manifest.** Tempo,
+  rhythm, melody, voice choices, space and arrangement are drawn from declared
+  pools and ranges while the genre contract stays in force; the page still
+  explains why a drawn channel is silent.
+- **The draw is deterministic and isolated.** The same seed returns the same
+  piece, different seeds produce different pieces, and changing one draw cannot
+  alter the manifest or another piece.
+
+## 2026-09-21 — manifest coordinate audit
+
+- The draw now uses unique random coordinates for every declared voice,
+  engine pool and lead degree. An unused duplicate voice schema was removed;
+  seeds that draw a lead may choose a different motif note as a result.
+- The composition suite checks manifest determinism, clone isolation, complete
+  schema paths, coordinate collisions, 2,000-seed coverage and neighbour
+  separation. `--prove-red-draw` pins the manifest and confirms the diversity
+  checks fail.
+
 ## 2026-09-21 — manual key change
 
 - **Root and scale are global performance controls.** A change during playback
