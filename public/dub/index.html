@@ -3424,6 +3424,7 @@ function draw(seed) {
   const piece = {
     file: "drawn/0x" + (seed >>> 0).toString(16).toUpperCase(),
     seed: seed,
+    gainTrim: 1,
     tempo: pull(F.tempo, "frame.tempo"),
     globals: {
       root:  pull(F.root,  "frame.root"),
