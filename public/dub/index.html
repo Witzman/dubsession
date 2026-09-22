@@ -5470,6 +5470,10 @@ function createEngine(ctx, opts) {
     // the noise floor, as a TRIM on BED_LEVEL. 1 is the bed as measured; 0 is
     // off and is silent, not quiet.
     bedTrim: (opts.bedTrim === undefined ? PIECE.globals.bedTrim : opts.bedTrim),
+    // Per-piece programme trim. It is deliberately 1 until #56's measured
+    // pre-render chooses a value; the node exists here so that measurement
+    // and live playback share the same signal path.
+    pieceTrim: (opts.pieceTrim === undefined ? 1 : clamp(opts.pieceTrim, 0.75, 1.15)),
     bypassFaders: !!opts.bypassFaders,   // calibration render: [M]'s faders off
     raw: !!opts.raw,                     // …and the input gain off too: the voice exactly as built
     solo: (opts.solo === undefined ? null : opts.solo),
@@ -5900,12 +5904,14 @@ function createEngine(ctx, opts) {
      not fight the pad compressor and the mastering compressor in series:
      attack .022, release .38, threshold −6−amt·6, ratio 1.55+amt·1.45.
      At their bass+pad amount (comp .5 × .48 = .24) that is −7.44 and 1.90. --- */
+  A.pieceTrim = ctx.createGain(); A.pieceTrim.gain.value = cfg.pieceTrim;
+  A.deck.connect(A.pieceTrim);
   A.satIn = satTrim();
   A.sat = ctx.createWaveShaper(); A.sat.curve = satCurve(1.0); A.sat.oversample = "2x";
   A.comp = ctx.createDynamicsCompressor();
   A.comp.threshold.value = -7.44; A.comp.ratio.value = 1.90; A.comp.knee.value = 8;
   A.comp.attack.value = 0.022; A.comp.release.value = 0.38;
-  A.deck.connect(A.satIn); A.satIn.connect(A.sat); A.sat.connect(A.comp);
+  A.pieceTrim.connect(A.satIn); A.satIn.connect(A.sat); A.sat.connect(A.comp);
 
   /* =========================================================================
      THE NOISE FLOOR — the bed. [D] principle 3, [E] :7893 for the recipe.
@@ -7115,6 +7121,7 @@ function createEngine(ctx, opts) {
     // node that is already running.
     const t = ctx.currentTime;
     if (key === "master") A.master.gain.setTargetAtTime(value, t, 0.02);
+    if (key === "pieceTrim") A.pieceTrim.gain.setTargetAtTime(clamp(value, 0.75, 1.15), t, 0.05);
     if (key === "bpm" || key === "dlyBeats") {
       const dt = 60 / cfg.bpm * cfg.dlyBeats;
       A.pp.L.delayTime.setTargetAtTime(dt, t, 0.05);
@@ -9778,7 +9785,8 @@ async function renderOffline_(o, drawSeed) {
     fires: o.fires,
     // the floor is a construction-time trim as well as a live one, so a render
     // can ask for the piece with it and without it at identical settings
-    bedTrim: o.bedTrim
+    bedTrim: o.bedTrim,
+    pieceTrim: o.pieceTrim
   });
   eng.cfg.bpm = bpm;
   if (o.set) for (const k of Object.keys(o.set)) eng.set(k, o.set[k]);

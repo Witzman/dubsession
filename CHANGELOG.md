@@ -1,5 +1,12 @@
 # Changelog
 
+## 2026-09-22 — programme trim path prepared
+
+- **The engine now has a dedicated programme trim point before saturation.**
+  It starts at unity and is exposed to offline renders, so a measured per-piece
+  trim can land at a bar boundary without changing the existing voice balance.
+  No audible trim value is enabled yet.
+
 ## 2026-09-22 — drawn manifest schema
 
 - **A new seed now selects a complete style shaped by the manifest.** Tempo,
