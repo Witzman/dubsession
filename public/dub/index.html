@@ -9906,6 +9906,10 @@ window.p02 = {
     }]))
   }),
   renderOffline,
+  // A render may temporarily rebind PIECE to measure another seed. Expose a
+  // getter for harnesses so they read the current draw rather than the object
+  // that happened to be exported when the page first loaded.
+  piece: () => PIECE,
   PIECE, INPUT_GAIN, MASTER_TRIM, BED_LEVEL, MOVEMENT, MOD_RATE_BARS, MOD_RATES, HOLD_PARAMS,
   FIRE_MACROS, FIRE_MICROS,
   VOX, VOX_STYLE,
