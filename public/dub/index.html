@@ -298,6 +298,10 @@
      hairline meets the drawers' hairlines under it */
   .seedbar .note { color: var(--dim); font-size: 12px; margin: 0; max-width: 520px; }
   button.sm { padding: 6px 12px; font-size: 12px; }
+  .morphbar { display: flex; align-items: center; gap: 10px; flex-wrap: wrap;
+              margin-top: 10px; color: var(--dim); font-size: 12px; }
+  .morphbar input[type=range] { accent-color: var(--hot); min-width: 180px; }
+  .morphbar output { color: var(--hot); min-width: 190px; }
 
   #drawers { margin-top: 22px; }
   /* A CLOSED DRAWER IS A SPINE: one line, a hairline, and four fields in a
@@ -759,6 +763,16 @@
     <span class="pincount" id="pincount" hidden></span>
     <button id="pinclear" class="sm" hidden>release pins</button>
     <span class="note" id="piecenote">a new piece — same manifest, same genre, a different draw</span>
+  </div>
+  <div class="morphbar" id="morphbar">
+    <label for="morph">morph</label>
+    <input id="morph" type="range" min="0" max="1" step="0.01" value="0"
+      aria-label="morph toward the next deterministic track">
+    <output id="morph_v">0% · current piece</output>
+    <label for="morphbars">over</label>
+    <input id="morphbars" type="range" min="32" max="512" step="16" value="128"
+      aria-label="morph length in bars">
+    <output id="morphbars_v">128 bars</output>
   </div>
 
   <!-- ===================================================================
@@ -7360,6 +7374,92 @@ pinsFromQuery(location.search);
 // nothing is waiting.
 let pendingSeed = null;
 
+/* THE MORPH IS A JOURNEY, NOT A SECOND PERFORMANCE SEED. The target is
+   derived from the URL seed and the leg number, while chance rolls,
+   humanisation and the absolute bar continue to read SEED. The surface owns
+   the target; the bar boundary owns the landed position. */
+const MORPH_MIN_BARS = 32;
+const MORPH_MAX_BARS = 512;
+const MORPH = {
+  from: null, to: null, targetSeed: null, landed: 0, target: 0,
+  bars: 128, active: false
+};
+function morphSeed(seed, leg) {
+  return hash4(seed | 0, D.MORPH, 0xC4, leg | 0) | 0;
+}
+function morphValue(a, b, x, key) {
+  if (key === "seed" || key === "file" || key === "profile" || key === "contract"
+      || key === "drawn" || key === "violations") return clone(a);
+  if (typeof a === "number" && typeof b === "number" && isFinite(a) && isFinite(b))
+    return a + (b - a) * x;
+  if (Array.isArray(a) || Array.isArray(b)) return clone(x < 1 ? a : b);
+  if (a && typeof a === "object" && b && typeof b === "object") {
+    const out = {};
+    for (const k of new Set(Object.keys(a).concat(Object.keys(b))))
+      out[k] = morphValue(a[k], b[k], x, k);
+    return out;
+  }
+  return clone(x < 1 ? a : b);
+}
+function morphPieceAt(x) {
+  if (!MORPH.from || !MORPH.to) return PIECE;
+  const p = morphValue(MORPH.from, MORPH.to, clamp(x, 0, 1), "piece");
+  p.seed = SEED;
+  p.file = MORPH.from.file + "→" + MORPH.to.file;
+  p.profile = MORPH.from.profile;
+  p.contract = MORPH.from.contract;
+  p.drawn = MORPH.from.drawn;
+  p.violations = [];
+  return p;
+}
+function paintMorph() {
+  const f = ui("morph"), fo = ui("morph_v"), b = ui("morphbars"), bo = ui("morphbars_v");
+  if (!f || !fo || !b || !bo) return;
+  f.min = String(MORPH.landed.toFixed(2));
+  f.value = String(Math.max(MORPH.landed, MORPH.target));
+  fo.textContent = MORPH.active
+    ? Math.round(MORPH.landed * 100) + "% landed · target " + Math.round(MORPH.target * 100) + "%"
+    : "0% · current piece";
+  b.value = String(MORPH.bars); bo.textContent = MORPH.bars + " bars";
+}
+function resetMorph() {
+  MORPH.from = null; MORPH.to = null; MORPH.targetSeed = null;
+  MORPH.landed = 0; MORPH.target = 0; MORPH.active = false;
+  const f = ui("morph"); if (f) { f.min = "0"; f.value = "0"; }
+  paintMorph();
+}
+function beginMorph(target) {
+  target = clamp(Number(target), 0, 1);
+  if (target < MORPH.landed) {
+    say("the crossing only moves forward — release at " + Math.round(MORPH.landed * 100) + "%.", true);
+    paintMorph(); return;
+  }
+  if (!MORPH.from) MORPH.from = clone(PIECE);
+  if (!MORPH.to) {
+    MORPH.targetSeed = morphSeed(SEED, 1);
+    MORPH.to = draw(MORPH.targetSeed);
+  }
+  MORPH.target = target;
+  MORPH.active = target > MORPH.landed;
+  paintMorph();
+  refreshHand();
+}
+function promoteMorph() {
+  if (!MORPH.active || MORPH.target <= MORPH.landed) return;
+  const step = 1 / Math.max(MORPH_MIN_BARS, MORPH.bars);
+  const next = Math.min(MORPH.target, MORPH.landed + step);
+  const before = PIECE;
+  MORPH.landed = next;
+  usePiece(morphPieceAt(MORPH.landed));
+  rebuild(before);
+  if (MORPH.landed >= MORPH.target) {
+    MORPH.active = false;
+    if (MORPH.landed >= 1) say("morph landed — the new track is in.");
+  }
+  writeUrl();
+  paintMorph();
+}
+
 function fireCapture(C) {
   return {
     present: { 0: C.present[0], 5: C.present[5], 6: C.present[6], 7: C.present[7] },
@@ -7663,6 +7763,7 @@ function rebuildModRows() {
 
 function applySeed(v, spoken) {
   SEED = v | 0;
+  resetMorph();
   // A DIFFERENT SEED IS A DIFFERENT PIECE, and it is drawn here rather than
   // only handed to the engine's dice. Everything derived from the piece is
   // rebuilt with it, before anything repaints.
@@ -7697,7 +7798,8 @@ function writeUrl() {
   const pins = pinsToText();
   try {
     history.replaceState(null, "", location.pathname + "?seed=" + encodeURIComponent(seedText())
-      + (pins ? "&pins=" + pins : ""));
+      + (pins ? "&pins=" + pins : "")
+      + (MORPH.landed > 0 ? "&at=" + MORPH.landed.toFixed(2) : ""));
   } catch (e) { /* a file:// page cannot, and it does not matter */ }
 }
 
@@ -7814,6 +7916,7 @@ function tick() {
       const v = pendingSeed; pendingSeed = null;
       applySeed(v, `seed ${v} — a different piece, from this bar.`);
     }
+    if (T.step % 16 === 0) promoteMorph();
     if (T.step % 16 === 0) promotePieceTrim();
     if (T.step % 16 === 0) promoteFires(Math.floor(T.step / 16));
     if (T.step % 16 === 0) promoteRides(Math.floor(T.step / 16));
@@ -9094,6 +9197,9 @@ function paintHeader(C) {
     + ` · bar ${bar + 1}`
     + ` · walk ${C.walk >= 0 ? "+" : ""}${C.walk} ${Math.abs(C.walk) === 1 ? "degree" : "degrees"}`
     + ` · ${C.mods.length} modulator${C.mods.length === 1 ? "" : "s"} bound`
+    + (MORPH.active || MORPH.landed > 0
+       ? ` · morph ${Math.round(MORPH.landed * 100)}% → ${Math.round(MORPH.target * 100)}%`
+       : "")
     + (n ? ` · ${n} value${n === 1 ? "" : "s"} held by you` : " · nothing held")
     + (T.running ? "" : " · not playing");
   // The disclosure says what is inside it, so nobody has to open it to find
@@ -9817,6 +9923,11 @@ function wire() {
     ui("seedin").value = String(v);
     takeSeed(String(v));
   });
+  ui("morph").addEventListener("input", e => beginMorph(e.target.value));
+  ui("morphbars").addEventListener("input", e => {
+    MORPH.bars = clamp(parseInt(e.target.value, 10) || 128, MORPH_MIN_BARS, MORPH_MAX_BARS);
+    paintMorph();
+  });
   ui("revsize").addEventListener("change", () => { if (engine) engine.set("revSeconds", val("revsize")); });
   ui("dlydiv").addEventListener("change", () => { if (engine) engine.set("dlyBeats", parseFloat(ui("dlydiv").value)); });
 }
@@ -10026,6 +10137,8 @@ window.p02 = {
     engineSolo: engine ? engine.cfg.solo : null,
     engineMutes: engine ? Object.keys(engine.cfg.mutes) : null,
     pendingSeed,
+    morph: { active: MORPH.active, landed: MORPH.landed, target: MORPH.target,
+             bars: MORPH.bars, targetSeed: MORPH.targetSeed },
     pitchUI: { transpose: PITCH_HAND.transpose, semi: PITCH_HAND.semi },
     pitchEngine: engine ? { transpose: engine.cfg.transpose, semi: engine.cfg.semi } : null,
     keyUI: { root: KEY_HAND.root, scale: KEY_HAND.scale,
@@ -10102,6 +10215,7 @@ window.p02 = {
      hold set on a cold page is waiting when the first bar resolves — it used
      to be refused, which made every control on a silent page a lie. --- */
   auto: on => (on === undefined ? autoOn : setAuto(on)),
+  morph: position => beginMorph(position),
   // hold(param, ch, value) — param is one of HOLD_PARAMS. It lands on the NEXT
   // bar, because this bar is already scheduled up to 140 ms ahead.
   // IT WORKS BEFORE `start` DOES. `HOLDS` is module-level and is handed to the
@@ -10275,6 +10389,15 @@ paintPins();
 paintBarSheet(previewBar(), shownComposition());
 outputs();
 wire();
+const morphAt = parseFloat((/(?:^|[?&])at=([^&]+)/.exec(location.search || "") || [, "0"])[1]);
+if (isFinite(morphAt) && morphAt > 0) {
+  const restore = clamp(morphAt, 0, 1), before = PIECE;
+  beginMorph(restore);
+  MORPH.landed = restore; MORPH.target = restore; MORPH.active = false;
+  usePiece(morphPieceAt(restore));
+  rebuild(before);
+  paintMorph();
+}
 wireDrawers();
 ui("go").addEventListener("click", start);
 ui("mute").addEventListener("click", () => {
