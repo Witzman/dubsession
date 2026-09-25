@@ -33,6 +33,9 @@ jobs:
           # evidence that the detector detects anything.
           node tools/tests/composition.test.mjs
           node tools/tests/composition.test.mjs --prove-red
+          # the prototype's fork is a separate file, so it is tested on its own
+          node tools/tests/composition.test.mjs --page v2
+          node tools/tests/composition.test.mjs --page v2 --prove-red
 
   audio:
     # THE GATE THAT REPLACED THE EAR. The ear gate is suspended by owner
