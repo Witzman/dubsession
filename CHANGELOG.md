@@ -1,5 +1,18 @@
 # Changelog
 
+## 2026-09-25 — a Tonight view and hands on it, on the prototype stage only
+
+- **`/v2/` opens on a Tonight view**: the night's arc (played, live, and the
+  dotted tracks the DJ has in mind), two deck cards with eight lane pads each, and
+  one button that starts the transport and the night. The earlier page sits
+  behind "the bench" and is unchanged.
+- **The page follows the live deck**: when a blend ends, the seed line, the sheet
+  and the faders are the new track's.
+- **Controls on the view**: next track now (brings the blend forward to the next
+  phrase), intensity (an offset on the night's arc, +/-0.20, double-click resets),
+  master, a level per deck, and pads that mute a lane and, with shift, solo it.
+- **`https://witzman.de/dub` is unchanged.**
+
 ## 2026-09-25 — the night can be closed, on the prototype stage only
 
 - **"close the night" on `/v2/`.** Pressing it plans a closing track that steps
