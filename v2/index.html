@@ -650,7 +650,7 @@
   #tonight .tn-btn { flex:none; border:2px solid var(--tn-ink); background:transparent; color:var(--tn-ink); border-radius:40px;
     font:600 18px 'Bricolage Grotesque', system-ui, sans-serif; padding:13px 24px; cursor:pointer; }
   #tonight .tn-btn:hover { background:rgba(233,228,212,.1); }
-  #tonight .tn-btn:focus-visible, #bench > summary:focus-visible { outline:3px solid var(--tn-b); outline-offset:3px; }
+  #tonight .tn-btn:focus-visible { outline:3px solid var(--tn-b); outline-offset:3px; }
   #tonight svg { display:block; width:100%; height:auto; margin:6px 0 18px; overflow:visible; }
   #tonight .tn-now { transition:transform .9s linear; }
   #tonight .tn-decks { display:grid; grid-template-columns:1fr 1fr; gap:20px; }
@@ -753,9 +753,9 @@
   @media (max-width: 760px) { #tonight { padding:22px 18px; } #tonight h2 { font-size:34px; } #tonight .tn-decks { grid-template-columns:1fr; } #tonight .tn-ctl { grid-template-columns:1fr; }
     #tonight .tn-head { flex-direction:column; } #tonight .tn-lanes button { font-size:11px; padding:6px; } }
   @media (prefers-reduced-motion: reduce) { #tonight .tn-now { transition:none; } }
-  details#bench > summary { cursor:pointer; padding:14px 2px; font:600 17px 'Bricolage Grotesque', system-ui, sans-serif; color:var(--dim); list-style:none; border-top:1px solid var(--dim); }
-  details#bench > summary::before { content:"+ "; }
-  details#bench[open] > summary::before { content:"− "; }
+  #bench { margin-top:26px; }
+  #bench .bench-h { font:600 17px 'Bricolage Grotesque', system-ui, sans-serif; color:var(--dim); margin:0 0 14px; padding:14px 2px 0; border-top:1px solid var(--dim); }
+  #bench .bench-h span { font-weight:400; font-size:14px; margin-left:10px; }
 </style>
 </head>
 <body>
@@ -838,7 +838,11 @@
     </div>
   </section>
 
-  <details id="bench"><summary>the bench — every hand on every lane</summary>
+  <!-- NO BENCH FOLDED UNDER THE PAGE (owner, 2026-09-25). What the console does not cover yet stays VISIBLE, in place,
+       until sprint 24 gives it a bank: KEY (pitch), the bar and seek, the station's density / tone / space pad / rides / pins /
+       sheet, the drawers (voices, movers, set, schedule, decks). The FIRE section is fully covered by the FIRE bank; its buttons
+       are that bank's model and stay in the page, out of sight. -->
+  <div id="bench"><h2 class="bench-h">the rest of the desk <span>not yet in the console</span></h2>
   <section id="pitch" aria-label="global pitch controls">
     <div class="pane-head"><b>PITCH</b>
       <span class="pane-note">key for the whole instrument · lands on the next bar</span></div>
@@ -871,7 +875,7 @@
     </div>
   </section>
 
-  <section id="fires" aria-label="fired gestures">
+  <section id="fires" aria-label="fired gestures" hidden style="display:none">
     <div class="fire-head"><b>FIRE</b><span id="firestate">nothing waiting</span></div>
     <div class="fire-macros">
       <div class="fire-unit"><button id="fire_drop" aria-pressed="false">drop · LAND</button><select id="firelen_drop" aria-label="drop length"></select></div>
@@ -1214,7 +1218,7 @@
 
   </div>
 
-  </details>
+  </div>
 
   <!-- WHERE THE VOICES COME FROM is not printed either. Every source line and
        every input gain is still in `CHANNELS` and `INPUT_GAIN` below, which is
@@ -11290,6 +11294,7 @@ function kitBank(key, title, widgets, extra) {
   for (const w of widgets) panel.appendChild(w.el || w);
   if (extra) extra(panel);
   tab.addEventListener("click", () => kitShow(key));
+  panel.hidden = !!KIT.shown;                       // only the shown bank is drawn; a later one starts hidden
   tabs.appendChild(tab); host.appendChild(panel); KIT.banks[key] = { tab, panel };
   if (!KIT.shown) kitShow(key);
   return panel;
