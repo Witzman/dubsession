@@ -1,5 +1,11 @@
 # Changelog
 
+## 2026-09-25 — the noise floor is 6 dB quieter
+
+- **The continuous bed now starts at half its level.** The owner heard it as
+  noise rather than air. The bed slider is unchanged and still reaches every
+  level; only its starting point moved (`BED_LEVEL` 0.07 → 0.035).
+
 ## 2026-09-25 — a stage for the successor, under /v2/ on Pages
 
 - **GitHub Pages now carries two things: the instrument at the site root, and a
