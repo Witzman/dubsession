@@ -2335,7 +2335,12 @@ const RUMBLE_CAP = 0.09;
 // The case for quiet: the sound as it stands has been judged good, and a layer
 // that changes the character of it is the failure mode here rather than the
 // feature. What that costs is measured and it is beside the block in section 5.
-const BED_LEVEL = 0.07;
+// LOWERED 0.07 -> 0.035 (-6 dB), 2026-09-25, on the owner's ear: "der rauscht
+// kontinuierlich" - the continuous part of the bed was heard as noise rather
+// than as air. Not re-measured: it is the same bed at half the level, so the
+// table above scales by -6 dB (the air about 37 dB under the mix). The slider
+// still reaches every other level; this is only where it starts.
+const BED_LEVEL = 0.035;
 
 /* ---------------------------------------------------------------------------
    3. THE GRID — euclidean placement [G]
@@ -5943,7 +5948,13 @@ function createEngine(ctx, opts) {
   A.revWet = ctx.createGain(); A.revWet.gain.value = 0.28;
   A.revLp = ctx.createBiquadFilter(); A.revLp.type = "lowpass";
   A.revLp.frequency.value = 3100; A.revLp.Q.value = 0.5;
-  A.halls = [0, 1].map(() => {
+  /* THE REDUCED DECK (workshop #86/#84). `opts.singleHall` builds ONE hall.
+     Measured 2026-09-25: two full decks do not keep up, and the three
+     convolvers are ~38% of a deck. The second hall is what makes a size change
+     free of a cut, and a deck that never changes size does not need it — the
+     incoming deck of a crossfade is exactly that. The room stays PER DECK (the
+     owner's call on sharing one is still open); only the spare goes. */
+  A.halls = (opts.singleHall ? [0] : [0, 1]).map(() => {
     const conv = ctx.createConvolver();
     const g = ctx.createGain();
     A.revIn.connect(conv); conv.connect(g); g.connect(A.revWet);
@@ -5952,8 +5963,10 @@ function createEngine(ctx, opts) {
   A.hall = 0;                                   // which one is sounding
   A.halls[0].conv.buffer = makeImpulse(cfg.revSeconds, 2.2);
   A.halls[0].gain.gain.value = 1;
-  A.halls[1].conv.buffer = makeImpulse(cfg.revSeconds, 2.2);
-  A.halls[1].gain.gain.value = 0;
+  if (A.halls[1]) {
+    A.halls[1].conv.buffer = makeImpulse(cfg.revSeconds, 2.2);
+    A.halls[1].gain.gain.value = 0;
+  }
   // `A.rev` stays as a name so nothing that reads it has to know there are two
   A.rev = A.halls[0].conv;
   A.revWet.connect(A.revLp);
@@ -5965,6 +5978,8 @@ function createEngine(ctx, opts) {
      the whole fade — that is the entire point. */
   const REV_XFADE = 0.25;
   function swapHall(seconds, t) {
+    // a single-hall deck has no idle hall to build into: it takes the cut
+    if (A.halls.length === 1) { A.halls[0].conv.buffer = makeImpulse(seconds, 2.2); return; }
     const from = A.halls[A.hall], to = A.halls[A.hall ^ 1];
     to.conv.buffer = makeImpulse(seconds, 2.2);   // silent node: nothing to cut
     to.gain.gain.cancelScheduledValues(t);
