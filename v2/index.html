@@ -715,6 +715,10 @@
   #tonight .kx-btn:disabled { opacity:.35; cursor:default; }
   #tonight .kx-firecol { width:auto; min-width:104px; background:transparent; padding:0; gap:8px; }
   #tonight .kx-wrap { flex-wrap:wrap; }
+  #tonight .kx-key { position:absolute; top:4px; right:6px; font:600 10px/1 'Bricolage Grotesque', system-ui, sans-serif; font-style:normal; color:var(--tn-dim); border:1px solid #33454f; border-radius:4px; padding:2px 4px; }
+  #tonight .kx-btn { position:relative; }
+  #tonight .kx-btn.kx-on .kx-key { color:#101820; border-color:#101820; }
+  #tonight .kx-momentary { min-width:84px; min-height:60px; }
   #tonight .kx-mrows { display:flex; flex-wrap:wrap; gap:14px; flex-basis:100%; }
   #tonight .kx-line { flex-basis:100%; color:var(--tn-dim); font:400 15px 'Bricolage Grotesque', system-ui, sans-serif; }
   #tonight .kx-step .kx-dots { flex-wrap:wrap; max-width:76px; }
@@ -6053,6 +6057,8 @@ function createEngine(ctx, opts) {
     dlyFbk: PIECE.globals.dlyfbk / 100,
     dlyTrim: 1,
     revTrim: 1,
+    freeze: false,                       // HELD: the echo's tail sustains itself while true (see set())
+    throw: {},                           // HELD: { channel: level } — that lane's echo send is at least `level` while it is here
     revSeconds: PIECE.globals.revSeconds,
     modDepth: 1,
     stabCut: 1,
@@ -6226,6 +6232,7 @@ function createEngine(ctx, opts) {
      feeds the other, which is what makes the repeats alternate sides, and the
      feedback path is filtered so each repeat is darker than the last: [D] "dark
      filtered-out delays is half the genre's own description of itself." --- */
+  const FREEZE_FB = 0.985, FREEZE_Q_DB = 20 * Math.log10(Math.SQRT1_2);   // Butterworth: no resonant peak
   function pingPong(time, fb, darkHz) {
     const inp = ctx.createGain(), L = ctx.createDelay(3), R = ctx.createDelay(3),
           f = ctx.createGain(), pl = ctx.createStereoPanner(), pr = ctx.createStereoPanner(),
@@ -6239,7 +6246,7 @@ function createEngine(ctx, opts) {
     const dk = ctx.createBiquadFilter(); dk.type = "lowpass"; dk.frequency.value = darkHz;
     R.connect(dk); dk.connect(f);
     f.connect(L);
-    return { in: inp, out, L, R, fb: f };
+    return { in: inp, out, L, R, fb: f, dark: dk, darkQ: dk.Q.value };
   }
 
   /* =========================================================================
@@ -7398,6 +7405,10 @@ function createEngine(ctx, opts) {
   // number that changes no sound: this multiplier is read by the tonal voices
   // at note time. Bipolar depth: +100 doubles the corner, -100 halves it.
   const cutoffMod = { 5: 1, 6: 1, 7: 1 };
+  // A THROW opens a lane's echo send to at least its level while the hand holds it, whatever the schedule, the modulators or the
+  // echo trim say. It is read where the sends are written (every step), so it lands on the next 16th and gives itself back on the
+  // next one after release: the send returns to what was under it because nothing else was ever changed.
+  const thrown = ch => (cfg.throw && cfg.throw[ch]) || 0;
   function applyMods(C, barPos, t) {
     for (let i = 0; i < C.mods.length; i++) {
       const mod = C.mods[i];
@@ -7413,7 +7424,7 @@ function createEngine(ctx, opts) {
       const c = A.chan[mod.channel];
       if (!c) continue;
       let value, param;
-      if (mod.verb === "delay")       { value = clamp(C.wet[mod.channel].delay + amount, 0, 2) * cfg.dlyTrim; param = c.dlySend.gain; }
+      if (mod.verb === "delay")       { value = Math.max(clamp(C.wet[mod.channel].delay + amount, 0, 2) * cfg.dlyTrim, thrown(mod.channel)); param = c.dlySend.gain; }
       else if (mod.verb === "reverb") { value = clamp(C.wet[mod.channel].reverb + amount, 0, 2) * cfg.revTrim; param = c.revSend.gain; }
       else if (mod.verb === "cutoff") {
         cutoffMod[mod.channel] = Math.pow(2, amount);        // bipolar, in octaves
@@ -7432,7 +7443,7 @@ function createEngine(ctx, opts) {
     for (const ch of ALL_CHANNELS) {
       const c = A.chan[ch]; if (!c) continue;
       if (!C.mods.some(m => m.channel === ch && m.verb === "delay"))
-        c.dlySend.gain.setTargetAtTime(C.wet[ch].delay * cfg.dlyTrim, t, 0.05);
+        c.dlySend.gain.setTargetAtTime(Math.max(C.wet[ch].delay * cfg.dlyTrim, thrown(ch)), t, 0.05);
       if (!C.mods.some(m => m.channel === ch && m.verb === "reverb"))
         c.revSend.gain.setTargetAtTime(C.wet[ch].reverb * cfg.revTrim, t, 0.05);
       if (!C.mods.some(m => m.channel === ch && m.verb === "level"))
@@ -7758,7 +7769,22 @@ function createEngine(ctx, opts) {
       A.pp.L.delayTime.setTargetAtTime(dt, t, 0.05);
       A.pp.R.delayTime.setTargetAtTime(dt, t, 0.05);
     }
-    if (key === "dlyFbk") A.pp.fb.gain.setTargetAtTime(value, t, 0.05);
+    if (key === "dlyFbk" && !cfg.freeze) A.pp.fb.gain.setTargetAtTime(value, t, 0.05);
+    /* FREEZE, HELD. The echo's input is closed and its feedback is latched just under 1, so what is in the loop keeps going
+       round and nothing new joins it. THE BOUND IS THE POINT: the loop gain is FREEZE_FB < 1 and every pass goes through the
+       dark 2.4 kHz lowpass, so the tail cannot grow — the lows sustain longest and the top thins out, which is the sound of a
+       freeze and not a defect. Release puts the manifest's feedback back and reopens the input; what is left rings out. */
+    if (key === "throw") { cfg.throw = Object.assign({}, value); return; }
+    if (key === "freeze") {
+      // THE LOOP'S WORST GAIN IS THE FEEDBACK TIMES THE DARK FILTER'S PEAK, not the feedback. A Web Audio lowpass has its Q in dB
+      // and this one is left at its default 1 dB, so it peaks above unity at 2.4 kHz: latching the feedback at 0.985 there grew
+      // without limit, and so did 0.878 — MEASURED, the echo bus reached 1.43 and was still rising; the same loop at Q -3.01 dB
+      // (Butterworth, no peak, |H| <= 1 everywhere) decays. So a freeze latches the feedback AND takes the peak out of the loop:
+      // the loop is below unity at every frequency by construction, not by a margin somebody chose. Release restores both.
+      A.pp.fb.gain.setTargetAtTime(value ? FREEZE_FB : cfg.dlyFbk, t, 0.06);
+      A.pp.dark.Q.setTargetAtTime(value ? FREEZE_Q_DB : A.pp.darkQ, t, 0.06);
+      A.dlyIn.gain.setTargetAtTime(value ? 0 : 1, t, 0.03);
+    }
     // the floor moves with a 50 ms time constant like every other bus level
     // here: a noise bed that steps is a click, and a click is the one thing a
     // floor cannot make.
@@ -10500,10 +10526,53 @@ const laneOwnerOf = k => k === "R" ? DECK.owner[0] : k === "N" ? DECK.main : DEC
 const otherLabel = l => l === "A" ? "B" : "A";
 const gateFor = which => k => laneOwnerOf(k) === which || DECK.fading[k] === which;
 
+/* THE DECK ISOLATOR, HELD. Three bands (below 250 Hz, 250 to 2500 Hz, above 2500 Hz), each killable while the hand holds it.
+   Untouched, the signal takes the DRY path and the crossover is not in the way at all — a mix nobody has touched is not coloured
+   by a filter bank it is not using. While any band is killed the signal is switched (an 8 ms ramp) to the split path, where a
+   killed band's gain is 0. The crossovers are Linkwitz-Riley (two cascaded Butterworth, 24 dB per octave), which sum flat with
+   nothing killed; the low band is measured against that in p84-held-iso. Release ramps the dry path back. */
+const ISO_LOW = 250, ISO_HIGH = 2500, ISO_RAMP = 0.008;
+function isoBuild(c) {
+  const bq = (type, f) => { const b = c.createBiquadFilter(); b.type = type; b.frequency.value = f; b.Q.value = 20 * Math.log10(Math.SQRT1_2); return b; };   // a lowpass / highpass Q is in dB: -3.01 dB is Butterworth (#85)
+  const inp = c.createGain(), out = c.createGain(), dry = c.createGain(), split = c.createGain();
+  const band = { low: c.createGain(), mid: c.createGain(), high: c.createGain() };
+  inp.connect(dry); dry.connect(out); inp.connect(split); split.gain.value = 0;
+  const lp1 = bq("lowpass", ISO_LOW), lp2 = bq("lowpass", ISO_LOW);
+  const hpA1 = bq("highpass", ISO_LOW), hpA2 = bq("highpass", ISO_LOW), lpB1 = bq("lowpass", ISO_HIGH), lpB2 = bq("lowpass", ISO_HIGH);
+  const hpB1 = bq("highpass", ISO_HIGH), hpB2 = bq("highpass", ISO_HIGH);
+  split.connect(lp1); lp1.connect(lp2); lp2.connect(band.low);
+  split.connect(hpA1); hpA1.connect(hpA2); hpA2.connect(lpB1); lpB1.connect(lpB2); lpB2.connect(band.mid);
+  split.connect(hpB1); hpB1.connect(hpB2); hpB2.connect(band.high);
+  band.low.connect(out); band.mid.connect(out); band.high.connect(out);
+  const iso = { in: inp, out, kills: { low: false, mid: false, high: false },
+    set(kills) {
+      Object.assign(iso.kills, kills);
+      const t = c.currentTime, any = iso.kills.low || iso.kills.mid || iso.kills.high;
+      for (const k of ["low", "mid", "high"]) band[k].gain.setTargetAtTime(iso.kills[k] ? 0 : 1, t, ISO_RAMP / 3);
+      dry.gain.setTargetAtTime(any ? 0 : 1, t, ISO_RAMP / 3); split.gain.setTargetAtTime(any ? 1 : 0, t, ISO_RAMP / 3);
+    } };
+  return iso;
+}
+// what the hand is holding right now: the held gestures. Not a piece's, so a deck built mid-hold takes them at build.
+const HELD = { freeze: false, throw: {}, iso: { A: { low: false, mid: false, high: false }, B: { low: false, mid: false, high: false } } };
+const THROW_LEVEL = 0.9;
+function holdThrow(ch, on) {
+  if (on) HELD.throw[ch] = THROW_LEVEL; else delete HELD.throw[ch];
+  for (const e of deckEngines()) e.set("throw", HELD.throw);
+}
+function holdFreeze(on) { HELD.freeze = !!on; for (const e of deckEngines()) e.set("freeze", HELD.freeze); }
+function holdIso(deck, band, on) {
+  HELD.iso[deck][band] = !!on;
+  if (DECK.iso && DECK.iso[deck]) DECK.iso[deck].set(HELD.iso[deck]);
+}
 function deckWire() {
   DECK.master = ctx.createGain(); DECK.master.gain.value = muted ? 0 : 1; DECK.master.connect(ctx.destination);
-  DECK.mixA = ctx.createGain(); engine.tail.connect(DECK.mixA); DECK.mixA.connect(DECK.master);
-  DECK.mixB = ctx.createGain(); DECK.mixB.connect(DECK.master);
+  DECK.mixA = ctx.createGain(); engine.tail.connect(DECK.mixA);
+  DECK.mixB = ctx.createGain();
+  DECK.iso = { A: isoBuild(ctx), B: isoBuild(ctx) };
+  DECK.mixA.connect(DECK.iso.A.in); DECK.iso.A.out.connect(DECK.master);
+  DECK.mixB.connect(DECK.iso.B.in); DECK.iso.B.out.connect(DECK.master);
+  for (const d of ["A", "B"]) DECK.iso[d].set(HELD.iso[d]);
   deckXfade(DECK.xf);
 }
 function deckXfade(x) {
@@ -10532,6 +10601,8 @@ function deckEngines() {
 // would be the moment the mix jumped. The controls that follow the piece (pump,
 // echo feedback, room, echo division) are settled by `rebuild` at the swap.
 function replayHandOnly(eng) {
+  if (HELD.freeze) eng.set("freeze", true);
+  eng.set("throw", HELD.throw);
   if (MIX.solo !== null) eng.set("solo", MIX.solo);
   eng.set("master", val("vol"));
   eng.set("stabCut", val("stabcut"));
@@ -11148,7 +11219,7 @@ function stop() {
    Circular drag is not used: on touch the finger hides the knob it turns.
    A control that can do nothing right now says so (`dead()`), the way the old
    desk did — a quiet control that looks alive is the fault this project refuses. */
-const KIT = { list: [], banks: {}, tab: "mix" };
+const KIT = { list: [], banks: {}, tab: "mix", keys: {} };
 const kitEl = (tag, cls, txt) => { const e = document.createElement(tag); if (cls) e.className = cls; if (txt !== undefined) e.textContent = txt; return e; };
 const kitClamp01 = x => Math.max(0, Math.min(1, x));
 
@@ -11270,14 +11341,18 @@ function kitStepped(c) {
 // button kinds: latched {get,set}, fired {fire, state?}, momentary {down, up}
 function kitButton(c) {
   const el = kitEl("button", "kx kx-btn kx-" + c.kind), lab = kitEl("span", "kx-lab", c.label), note = kitEl("span", "kx-note"); el.type = "button"; el.append(lab, note);
+  if (c.key) { const kb = kitEl("i", "kx-key", c.key.length === 1 ? c.key.toUpperCase() : c.key); el.append(kb); el.setAttribute("aria-keyshortcuts", c.key); }
   if (c.tone) el.dataset.tone = c.tone;
+  let down = null, lift = null;
   if (c.kind === "momentary") {
-    let held = false; const rel = () => { if (held) { held = false; el.classList.remove("kx-on"); c.up(); } };
-    el.addEventListener("pointerdown", e => { if (held) return; held = true; el.setPointerCapture(e.pointerId); el.classList.add("kx-on"); c.down(); e.preventDefault(); });
-    el.addEventListener("pointerup", rel); el.addEventListener("pointercancel", rel); el.addEventListener("lostpointercapture", rel);
-    el.addEventListener("keydown", e => { if ((e.key === " " || e.key === "Enter") && !e.repeat && !held) { held = true; el.classList.add("kx-on"); c.down(); e.preventDefault(); } });
-    el.addEventListener("keyup", e => { if (e.key === " " || e.key === "Enter") rel(); });
-    el.addEventListener("blur", rel);
+    let held = false;
+    down = () => { if (held || el.classList.contains("kx-off")) return false; held = true; el.classList.add("kx-on"); c.down(); return true; };
+    lift = () => { if (held) { held = false; el.classList.remove("kx-on"); c.up(); } };
+    el.addEventListener("pointerdown", e => { if (held) return; if (down()) el.setPointerCapture(e.pointerId); e.preventDefault(); });
+    el.addEventListener("pointerup", lift); el.addEventListener("pointercancel", lift); el.addEventListener("lostpointercapture", lift);
+    el.addEventListener("keydown", e => { if ((e.key === " " || e.key === "Enter") && !e.repeat && !held) { down(); e.preventDefault(); } });
+    el.addEventListener("keyup", e => { if (e.key === " " || e.key === "Enter") lift(); });
+    el.addEventListener("blur", lift);
   } else el.addEventListener("click", () => { if (el.classList.contains("kx-off")) return; if (c.kind === "latched") c.set(!c.get()); else c.fire(); w.draw(); });
   const w = kitReg({ el, last: null, draw() {
     if (c.kind === "latched") { const v = !!c.get(); el.setAttribute("aria-pressed", String(v)); el.classList.toggle("kx-on", v); }
@@ -11287,7 +11362,24 @@ function kitButton(c) {
     if (c.prog) el.style.setProperty("--kx-p", String(c.prog()));
     kitDead(el, c);
   } }, c);
+  w.press = down; w.lift = lift; w.trigger = () => { if (el.classList.contains("kx-off")) return; if (c.kind === "latched") c.set(!c.get()); else c.fire(); w.draw(); };
+  if (c.key) KIT.keys[c.key.toLowerCase()] = w;
   return w;
+}
+// KEYS. A pad that has a key shows it on its face and answers it. A momentary is held for as long as the key is; a fired or
+// latched one is pressed once. Typing in a text field, a select, or a chord with ctrl / alt / meta is never a gesture.
+const kitTyping = t => !!t && (t.tagName === "TEXTAREA" || t.tagName === "SELECT" || t.isContentEditable
+  || (t.tagName === "INPUT" && !/^(range|checkbox|radio|button)$/.test(t.type)));
+{
+  const down = {};
+  document.addEventListener("keydown", e => {
+    if (e.repeat || e.ctrlKey || e.metaKey || e.altKey || kitTyping(e.target)) return;
+    const k = e.key.toLowerCase(), w = KIT.keys[k]; if (!w) return;
+    e.preventDefault();
+    if (w.cfg.kind === "momentary") { if (w.press()) down[k] = w; } else w.trigger();
+  });
+  document.addEventListener("keyup", e => { const k = e.key.toLowerCase(); if (down[k]) { down[k].lift(); delete down[k]; } });
+  window.addEventListener("blur", () => { for (const k of Object.keys(down)) { down[k].lift(); delete down[k]; } });
 }
 const kitSync = () => { for (const w of KIT.list) w.draw(); };
 setInterval(kitSync, 200);
@@ -11375,6 +11467,7 @@ function buildSpaceBank() {
 // THE FIRE BANK: the bench's fire buttons and length selects are the model. A press asks; the gesture STARTS ON THE NEXT
 // BAR LINE (promoteFires runs at step % 16 === 0), so a waiting button counts down to it — the fill is how far through the
 // bar the transport is. FIRES is one object shared by every engine, so a fire reaches both decks of a blend.
+const FIRE_KEYS = { drop: "q", buildup: "w", phaseout: "e", reverbout: "r", "ghost-hat": "a", "hats-out": "s", "bass-octave": "d", "stab-lean": "g", turnaround: "h", "kick-ghost": "j" };
 function buildFireBank() {
   const barFrac = () => (T.running ? (T.step % 16) / 16 : 0);
   const stateOf = (id, kind) => () => {
@@ -11392,7 +11485,7 @@ function buildFireBank() {
   };
   const macros = Object.keys(FIRE_MACROS).map(kind => {
     const def = FIRE_MACROS[kind], sel = ui("firelen_" + kind), col = kitEl("div", "kx-strip kx-firecol");
-    const btn = kitButton({ kind: "fired", label: def.label, tone: def.end === "land" ? "land" : "ret", state: stateOf("fire_" + kind, kind), note: noteOf(kind), prog: barFrac,
+    const btn = kitButton({ kind: "fired", label: def.label, key: FIRE_KEYS[kind], tone: def.end === "land" ? "land" : "ret", state: stateOf("fire_" + kind, kind), note: noteOf(kind), prog: barFrac,
       fire: () => ui("fire_" + kind).click(),
       title: def.label + (def.end === "land" ? " — the mix changes and stays changed" : " — the mix comes back") + "; starts on the next bar, press again to cancel" });
     const opts = [...sel.options].map(o => ({ v: o.value, label: o.value }));
@@ -11400,11 +11493,11 @@ function buildFireBank() {
       def: () => String(def.bars), title: def.label + " length in bars" });
     col.append(btn.el, len.el); return col;
   });
-  const micros = FIRE_MICROS.map(kind => kitButton({ kind: "fired", label: kind.replace("-", " "), tone: "micro", state: stateOf("fire_" + kind, kind), prog: barFrac,
+  const micros = FIRE_MICROS.map(kind => kitButton({ kind: "fired", label: kind.replace("-", " "), key: FIRE_KEYS[kind], tone: "micro", state: stateOf("fire_" + kind, kind), prog: barFrac,
     note: () => (ui("fire_" + kind).classList.contains("is-wait") ? (kind === "turnaround" ? "phrase end" : "next bar") : ""),
     fire: () => ui("fire_" + kind).click(), title: kind + " — one bar, on the next bar line" }).el);
   const grp = (name, nodes) => { const g = kitEl("div", "kx-group"); g.append(kitEl("div", "kx-gname", name)); const r = kitEl("div", "kx-grow kx-wrap"); r.append(...nodes); g.append(r); return g; };
-  const rel = kitButton({ kind: "fired", label: "release all", tone: "rel", disabled: () => ui("releaseall").disabled, fire: () => ui("releaseall").click(),
+  const rel = kitButton({ kind: "fired", label: "release all", key: "0", tone: "rel", disabled: () => ui("releaseall").disabled, fire: () => ui("releaseall").click(),
     title: "everything the hand holds and every gesture goes back under the schedule" });
   kitBank("fire", "FIRE", [grp("BIG GESTURES", macros), grp("ONE BAR", micros), grp("BACK", [rel.el])]);
 }
@@ -11481,6 +11574,22 @@ function buildMoveBank() {
   kitBank("move", "MOVE", [g], panel => panel.appendChild(kitButton({ kind: "fired", label: "movers back to the manifest", tone: "rel", fire: () => ui("modreset").click(),
     title: "every modulator trim back to the manifest" }).el));
   fillMoveBank();
+}
+
+// THE HOLD BANK: gestures that last as long as the hand does. ECHO THROW opens one lane's echo send (to THROW_LEVEL) while held;
+// FREEZE latches the echo's loop so its tail sustains itself; the ISOLATOR kills a band of a deck (low under 250 Hz, mid,
+// high over 2.5 kHz) while held. Release gives each back. Every one is on a key, shown on the pad.
+function buildHoldBank() {
+  const grp = (name, nodes) => { const g = kitEl("div", "kx-group"); g.append(kitEl("div", "kx-gname", name)); const r = kitEl("div", "kx-grow kx-wrap"); r.append(...nodes); g.append(r); return g; };
+  const throws = CHANNELS.filter(c => c.ch !== "R").map(c => kitButton({ kind: "momentary", label: c.voice, key: String(c.ch + 1), tone: "echo",
+    down: () => holdThrow(c.ch, true), up: () => holdThrow(c.ch, false), off: () => !!PIECE.empty[c.ch],
+    title: "hold: " + c.voice + " goes into the echo; let go and it comes back" }).el);
+  const freeze = kitButton({ kind: "momentary", label: "freeze", key: "f", tone: "arc", down: () => holdFreeze(true), up: () => holdFreeze(false),
+    title: "hold: the echo stops taking new sound and its tail sustains; let go and it rings out" });
+  const iso = (deck, keys) => ["low", "mid", "high"].map((band, i) => kitButton({ kind: "momentary", label: band, key: keys[i], tone: deck === "A" ? "a" : "b",
+    down: () => holdIso(deck, band, true), up: () => holdIso(deck, band, false),
+    title: "hold: kill the " + band + " of deck " + deck + "; let go and it returns" }).el);
+  kitBank("hold", "HOLD", [grp("ECHO THROW", throws), grp("FREEZE", [freeze.el]), grp("ISOLATOR A", iso("A", ["z", "x", "c"])), grp("ISOLATOR B", iso("B", ["v", "b", "n"]))]);
 }
 
 // the first faces: what Tonight already had as plain sliders, now as widgets over the same inputs
@@ -11624,6 +11733,12 @@ window.p02 = {
          fireAll: () => deckEngines().map(e => { const f = e.composition().fire; return f && f.active ? f.active.kind : null; }),
          fires: () => ({ pending: FIRES.pending.macro && FIRES.pending.macro.kind, events: FIRES.events.map(e => ({ kind: e.kind, at: e.at, bars: e.bars, micro: e.micro })) }),
          bar: () => Math.floor(T.step / 16),
+         sends: ch => deckEngines().map(e => e.A.chan[ch] ? e.A.chan[ch].dlySend.gain.value : null), fb: () => deckEngines().map(e => e.A.pp.fb.gain.value),
+         echoTap: () => { const e = engine; if (!e.A.tapEcho) { e.A.tapEcho = ctx.createAnalyser(); e.A.tapEcho.fftSize = 2048; e.A.pp.out.connect(e.A.tapEcho); } return true; },
+         echoRms: () => { const a = engine.A.tapEcho, b = new Float32Array(a.fftSize); a.getFloatTimeDomainData(b); let r = 0, m = 0; for (const x of b) { r += x * x; m = Math.max(m, Math.abs(x)); } return { rms: Math.sqrt(r / b.length), peak: m }; },
+         held: () => JSON.parse(JSON.stringify(HELD)), isoKills: () => (DECK.iso ? { A: DECK.iso.A.kills, B: DECK.iso.B.kills } : null),
+         isoBuild: c => isoBuild(c), tap: () => { if (!DECK.tap) { DECK.tap = ctx.createAnalyser(); DECK.tap.fftSize = 2048; DECK.master.connect(DECK.tap); } return true; },
+         tapPeak: () => { const a = DECK.tap, b = new Float32Array(a.fftSize); a.getFloatTimeDomainData(b); let m = 0, r = 0; for (const x of b) { m = Math.max(m, Math.abs(x)); r += x * x; } return { peak: m, rms: Math.sqrt(r / b.length) }; },
          moveRows: () => MOD_ROWS.map(r => ({ id: r.id, key: r.key, off: !!ui(r.id).disabled })),
          base: id => (ROOM_UNITS.find(u => u.id === id) || SET_UNITS.find(u => u.id === id)).base(),
          hold: (p, ch) => hand.ask(p, ch),
@@ -11896,6 +12011,7 @@ buildMixBank();
 buildSpaceBank();
 buildFireBank();
 buildKeyBank();
+buildHoldBank();
 buildRides();
 wireRides();
 buildSections();
