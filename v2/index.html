@@ -706,12 +706,25 @@
   #tonight .kx-btn.kx-on, #tonight .kx-btn[aria-pressed="true"] { background:var(--kx); color:#101820; }
   #tonight .kx-fired[data-state]:not([data-state=""]) { background:rgba(230,180,80,.22); }
   #tonight .kx-dead { opacity:.4; }
+  #tonight .kx-off { cursor:default; opacity:.3; }
+  #tonight .kx-held { --kx:#ff9a6c; } #tonight .kx-held .kx-val { color:#ff9a6c; }
+  #tonight .kx[data-tone="echo"] { --kx:#7fb3d5; } #tonight .kx[data-tone="room"] { --kx:#b9a0d8; }
+  #tonight .kx-strip { display:flex; flex-direction:column; align-items:center; gap:10px; width:76px; padding:10px 0 12px; background:#131e26; border-radius:16px; }
+  #tonight .kx-name { font:700 13px/1 'Bricolage Grotesque', system-ui, sans-serif; letter-spacing:.06em; text-transform:uppercase; color:var(--tn-dim); }
+  #tonight .kx-strip .kx-btn { min-width:44px; width:44px; padding:6px 0; min-height:40px; }
+  #tonight .kx-btn[data-tone="mute"] { --kx:#e58a6f; } #tonight .kx-btn[data-tone="solo"] { --kx:#e6c84f; }
+  #tonight .kx-group { background:#131e26; border-radius:16px; padding:10px 16px 12px; }
+  #tonight .kx-gname { font:700 12px/1 'Bricolage Grotesque', system-ui, sans-serif; letter-spacing:.14em; color:var(--tn-dim); margin:0 0 10px; }
+  #tonight .kx-grow { display:flex; gap:14px; align-items:flex-end; }
+  #tonight .kx-sm { width:60px; } #tonight .kx-sm svg { width:46px; height:46px; }
   #tonight .kx-console { margin-top:22px; border-top:1px solid #22303a; padding-top:14px; }
   #tonight .kx-tabs { display:flex; gap:8px; margin-bottom:14px; flex-wrap:wrap; }
   #tonight .kx-tab { border:0; background:#17232c; color:var(--tn-dim); border-radius:12px; padding:10px 20px; min-height:44px; font:700 15px 'Bricolage Grotesque', system-ui, sans-serif; letter-spacing:.06em; cursor:pointer; }
   #tonight .kx-tab.kx-on { background:var(--tn-ink); color:#101820; }
   #tonight .kx-tab:focus-visible { outline:3px solid var(--tn-b); outline-offset:2px; }
   #tonight .kx-bank { display:flex; flex-wrap:wrap; gap:18px 22px; align-items:flex-end; }
+  #tonight .kx-bank[hidden] { display:none; }
+  #tonight .kx-bank:has(.kx-strip) { gap:10px; align-items:stretch; }
   #tonight .tn-enc { display:flex; align-items:flex-end; gap:12px; } #tonight .tn-cap { color:var(--tn-dim); font:400 14px 'Bricolage Grotesque', system-ui, sans-serif; max-width:14ch; padding-bottom:22px; }
   #tonight .tn-dfad { position:absolute; right:18px; top:14px; } #tonight .tn-dfad .kx-track { height:120px; }
   #tonight .tn-deck .tn-lanes { margin-right:70px; }
@@ -9151,7 +9164,7 @@ function wireFaders() {
   for (const c of CHANNELS) {
     const el = ui("fad" + c.ch);
     el.addEventListener("input", () => {
-      if (engine) engine.setLevel(c.ch, parseFloat(el.value));
+      for (const e of deckEngines()) e.setLevel(c.ch, parseFloat(el.value));   // a blend has two engines; the hand is on both
       paintFader(c.ch);
     });
     paintFader(c.ch);
@@ -9160,7 +9173,7 @@ function wireFaders() {
     for (const c of CHANNELS) {
       const v = FADER_START[c.ch];
       ui("fad" + c.ch).value = v;
-      if (engine) engine.setLevel(c.ch, v);
+      for (const e of deckEngines()) e.setLevel(c.ch, v);
       paintFader(c.ch);
     }
     say("faders back to the manifest.");
@@ -10287,25 +10300,27 @@ function setAuto(on) {
 }
 
 function wire() {
-  const bind = (id, key, scale) => ui(id).addEventListener("input", () => {
+  // `all` = a value of the HAND (replayed into every engine built mid-night), so during a blend it reaches
+  // both decks; the ones that follow the piece (pump, repeats) stay on the surface deck, whose piece they follow.
+  const bind = (id, key, scale, all) => ui(id).addEventListener("input", () => {
     if (!engine) return;
-    engine.set(key, scale ? scale(val(id)) : val(id));
+    for (const e of all ? deckEngines() : [engine]) e.set(key, scale ? scale(val(id)) : val(id));
   });
   ui("bpm").addEventListener("input", () => {
     T.bpm = val("bpm");
     if (engine) { engine.cfg.bpm = T.bpm; engine.set("bpm", T.bpm); }
   });
-  bind("vol", "master");
+  bind("vol", "master", null, true);
   bind("pump", "pump");
   bind("fbk", "dlyFbk");
-  bind("dlytrim", "dlyTrim");
-  bind("revtrim", "revTrim");
-  bind("moddepth", "modDepth");
-  bind("stabcut", "stabCut");
-  bind("bed", "bedTrim");
+  bind("dlytrim", "dlyTrim", null, true);
+  bind("revtrim", "revTrim", null, true);
+  bind("moddepth", "modDepth", null, true);
+  bind("stabcut", "stabCut", null, true);
+  bind("bed", "bedTrim", null, true);
   // THE VOICE TRIMS, THROUGH THE SAME ONE DOOR. The row's id and the engine's
   // key come from the same entry, so there is nothing here to keep in step.
-  for (const k of VOICE_KEYS) bind(VOICE_PARAMS[k].id, k);
+  for (const k of VOICE_KEYS) bind(VOICE_PARAMS[k].id, k, null, true);
   // THE MODULATOR TRIMS, THE SAME WAY. The row's id and the engine's key come
   // from one table, so there is nothing to keep in step. The readout is
   // repainted by hand rather than by `outputs()` because it is not a function
@@ -11096,24 +11111,29 @@ const kitClamp01 = x => Math.max(0, Math.min(1, x));
 // resolve a config against an existing <input>, or against closures
 function kitModel(c) {
   if (c.id) {
-    const el = ui(c.id);
-    const min = c.min !== undefined ? c.min : parseFloat(el.min), max = c.max !== undefined ? c.max : parseFloat(el.max);
-    const step = c.step !== undefined ? c.step : (parseFloat(el.step) || (max - min) / 100);
-    return { min, max, step,
-      get: () => parseFloat(el.value),
-      set: v => { el.value = String(v); el.dispatchEvent(new Event("input", { bubbles: true })); },
-      def: c.def || (() => { const b = parseFloat(el.defaultValue); return isNaN(b) ? min : b; }) };
+    const el0 = ui(c.id), el = () => ui(c.id);       // looked up on every use: the input is the model, not a reference to it
+    const min = c.min !== undefined ? c.min : parseFloat(el0.min), max = c.max !== undefined ? c.max : parseFloat(el0.max);
+    const step = c.step !== undefined ? c.step : (parseFloat(el0.step) || (max - min) / 100);
+    return { min, max, step, reset: c.reset,
+      get: () => parseFloat(el().value),
+      set: v => { const e = el(); e.value = String(v); e.dispatchEvent(new Event("input", { bubbles: true }));
+        // a native slider raises `change` on release, not on every pixel; an input whose engine door listens for it
+        // (the room's size rebuilds an impulse response) gets it once the gesture has stopped
+        if (c.change) { clearTimeout(e._kxc); e._kxc = setTimeout(() => e.dispatchEvent(new Event("change", { bubbles: true })), 160); } },
+      def: c.def || (() => { const b = parseFloat(el().defaultValue); return isNaN(b) ? min : b; }) };
   }
-  return { min: c.min, max: c.max, step: c.step || (c.max - c.min) / 100, get: c.get, set: c.set, def: c.def || (() => c.min) };
+  return { min: c.min, max: c.max, step: c.step || (c.max - c.min) / 100, get: c.get, set: c.set, reset: c.reset, def: c.def || (() => c.min) };
 }
 const kitSnap = (m, v) => { const s = Math.round((v - m.min) / m.step) * m.step + m.min; return +Math.max(m.min, Math.min(m.max, s)).toFixed(6); };
 
 // the shared drag: relative, vertical, fine on shift or a second finger. `span` = pixels for the whole range.
 function kitDrag(host, m, span, onchange) {
   const pts = new Map(); let base = 0, y0 = 0;
+  const off = () => host.classList.contains("kx-off");           // a value with nothing behind it takes no gesture
+  const back = () => { if (m.reset) m.reset(); else onchange(kitSnap(m, m.def())); };   // a hold is released, not set to a number
   const fine = e => e.shiftKey || pts.size > 1;
   host.addEventListener("pointerdown", e => {
-    if (e.button > 0) return;
+    if (e.button > 0 || off()) return;
     host.setPointerCapture(e.pointerId); pts.set(e.pointerId, e.clientY);
     base = (m.get() - m.min) / (m.max - m.min); y0 = e.clientY; host._fine = fine(e); host.classList.add("kx-on"); e.preventDefault(); host.focus({ preventScroll: true });
   });
@@ -11127,14 +11147,15 @@ function kitDrag(host, m, span, onchange) {
   });
   const up = e => { pts.delete(e.pointerId); if (!pts.size) host.classList.remove("kx-on"); };
   host.addEventListener("pointerup", up); host.addEventListener("pointercancel", up);
-  host.addEventListener("wheel", e => { e.preventDefault(); const st = Math.max(m.step, (m.max - m.min) / 50) * (e.shiftKey ? 0.2 : 1);
+  host.addEventListener("wheel", e => { e.preventDefault(); if (off()) return; const st = Math.max(m.step, (m.max - m.min) / 50) * (e.shiftKey ? 0.2 : 1);
     onchange(kitSnap(m, m.get() + (e.deltaY < 0 ? st : -st))); }, { passive: false });
-  host.addEventListener("dblclick", () => onchange(kitSnap(m, m.def())));
+  host.addEventListener("dblclick", () => { if (!off()) back(); });
   host.addEventListener("keydown", e => {
+    if (off()) return;
     const k = e.key, st = m.step * (e.shiftKey ? 10 : 1); let v = null;
     if (k === "ArrowUp" || k === "ArrowRight") v = m.get() + st; else if (k === "ArrowDown" || k === "ArrowLeft") v = m.get() - st;
     else if (k === "PageUp") v = m.get() + (m.max - m.min) / 10; else if (k === "PageDown") v = m.get() - (m.max - m.min) / 10;
-    else if (k === "Home") v = m.min; else if (k === "End") v = m.max; else if (k === "Backspace" || k === "Delete") v = m.def();
+    else if (k === "Home") v = m.min; else if (k === "End") v = m.max; else if (k === "Backspace" || k === "Delete") { e.preventDefault(); back(); return; }
     if (v !== null) { e.preventDefault(); onchange(kitSnap(m, v)); }
   });
 }
@@ -11151,7 +11172,7 @@ function kitFader(c) {
   track.append(fill, cap); el.append(val_, track, lab); if (c.tone) el.dataset.tone = c.tone;
   kitDrag(el, m, 150, v => { m.set(v); w.draw(); });
   const w = kitReg({ el, model: m, last: NaN, draw() {
-    const v = m.get(); if (v === this.last && !c.dead) return; this.last = v;
+    const v = m.get(); if (v === this.last && !c.dead && !c.held && !c.off) return; this.last = v;
     const n = kitClamp01((v - m.min) / (m.max - m.min));
     fill.style.height = (n * 100) + "%"; cap.style.bottom = `calc(${n * 100}% - 9px)`;
     val_.textContent = c.fmt ? c.fmt(v) : v.toFixed(2); el.setAttribute("aria-valuenow", v);
@@ -11159,9 +11180,14 @@ function kitFader(c) {
   } }, c);
   return w;
 }
-const kitDead = (el, c) => { const d = c.dead ? c.dead() : ""; el.classList.toggle("kx-dead", !!d); if (c.dead) el.title = d || c.title || ""; };
+// what a face says beyond its value: dead (does nothing now, still answers), off (no gesture reaches anything), held (the hand owns it)
+const kitDead = (el, c) => {
+  const d = c.dead ? c.dead() : ""; el.classList.toggle("kx-dead", !!d); if (c.dead) el.title = d || c.title || "";
+  if (c.off) { const o = !!c.off(); el.classList.toggle("kx-off", o); el.setAttribute("aria-disabled", String(o)); }
+  if (c.held) el.classList.toggle("kx-held", !!c.held());
+};
 function kitEncoder(c) {
-  const m = kitModel(c), el = kitEl("div", "kx kx-enc"), lab = kitEl("div", "kx-lab", c.label), val_ = kitEl("output", "kx-val");
+  const m = kitModel(c), el = kitEl("div", "kx kx-enc" + (c.size ? " kx-" + c.size : "")), lab = kitEl("div", "kx-lab", c.label), val_ = kitEl("output", "kx-val");
   const NS = "http://www.w3.org/2000/svg", svg = document.createElementNS(NS, "svg"); svg.setAttribute("viewBox", "0 0 64 64");
   const R = 24, A0 = 135, SW = 270, pt = (a, r) => [32 + r * Math.cos(a * Math.PI / 180), 32 + r * Math.sin(a * Math.PI / 180)];
   const arc = (a, b) => { const [x0, y0] = pt(a, R), [x1, y1] = pt(b, R); return `M${x0.toFixed(2)} ${y0.toFixed(2)} A${R} ${R} 0 ${b - a > 180 ? 1 : 0} 1 ${x1.toFixed(2)} ${y1.toFixed(2)}`; };
@@ -11172,7 +11198,7 @@ function kitEncoder(c) {
   if (c.tone) el.dataset.tone = c.tone;
   kitDrag(el, m, 160, v => { m.set(v); w.draw(); });
   const w = kitReg({ el, model: m, last: NaN, draw() {
-    const v = m.get(); if (v === this.last && !c.dead) return; this.last = v;
+    const v = m.get(); if (v === this.last && !c.dead && !c.held && !c.off) return; this.last = v;
     const n = kitClamp01((v - m.min) / (m.max - m.min)), a = A0 + n * SW;
     on.setAttribute("d", n > 0.002 ? arc(A0, a) : ""); const [x0, y0] = pt(a, R - 9), [x1, y1] = pt(a, R + 3);
     tick.setAttribute("x1", x0); tick.setAttribute("y1", y0); tick.setAttribute("x2", x1); tick.setAttribute("y2", y1);
@@ -11191,7 +11217,7 @@ function kitStepped(c) {
   el.append(val_, dots, lab); el.tabIndex = 0; el.setAttribute("role", "slider"); el.setAttribute("aria-label", c.label);
   kitDrag(el, m, 24 * opts.length, i => { m.set(i); w.draw(); });
   const w = kitReg({ el, model: m, last: NaN, draw() {
-    const i = idx(); if (i === this.last && !c.dead) return; this.last = i;
+    const i = idx(); if (i === this.last && !c.dead && !c.held && !c.off) return; this.last = i;
     [...dots.children].forEach((d, k) => d.classList.toggle("on", k === i)); val_.textContent = opts[i].label;
     el.setAttribute("aria-valuenow", i); el.setAttribute("aria-valuetext", opts[i].label); kitDead(el, c);
   } }, c);
@@ -11208,7 +11234,7 @@ function kitButton(c) {
     el.addEventListener("keydown", e => { if ((e.key === " " || e.key === "Enter") && !e.repeat && !held) { held = true; el.classList.add("kx-on"); c.down(); e.preventDefault(); } });
     el.addEventListener("keyup", e => { if (e.key === " " || e.key === "Enter") rel(); });
     el.addEventListener("blur", rel);
-  } else el.addEventListener("click", () => { if (c.kind === "latched") c.set(!c.get()); else c.fire(); w.draw(); });
+  } else el.addEventListener("click", () => { if (el.classList.contains("kx-off")) return; if (c.kind === "latched") c.set(!c.get()); else c.fire(); w.draw(); });
   const w = kitReg({ el, last: null, draw() {
     if (c.kind === "latched") { const v = !!c.get(); el.setAttribute("aria-pressed", String(v)); el.classList.toggle("kx-on", v); }
     if (c.state) { const s = c.state(); if (s !== this.last) { this.last = s; el.dataset.state = s || ""; } }
@@ -11237,6 +11263,66 @@ function kitShow(key) {
   kitSync();
 }
 
+
+// THE MIX BANK: one column per strip — lane fader, M and S, echo send, room send. Every face sits on the input
+// the bench's strip sat on (fad<ch>, hs_delay_<ch>, hs_reverb_<ch>) and mute and solo go through the same two functions,
+// so nothing the harnesses hang on those ids moves. A send's reset RELEASES the hold (back under the schedule);
+// it is not a number. Built after buildChannels(): the inputs it sits on have to exist.
+function buildMixBank() {
+  const cols = [];
+  for (const c of CHANNELS) {
+    const ch = c.ch, gone = () => !!PIECE.empty[ch], col = kitEl("div", "kx-strip"), name = kitEl("div", "kx-name", c.voice);
+    const ws = [];
+    ws.push(kitFader({ id: "fad" + ch, label: "level", step: 0.005, def: () => FADER_START[ch], fmt: v => v.toFixed(2),
+      held: () => Math.abs(parseFloat(ui("fad" + ch).value) - FADER_START[ch]) > 1e-9, off: gone, dead: () => gone() ? "no material on this lane" : "",
+      title: c.voice + " level — double-click returns it to the manifest" }));
+    ws.push(kitButton({ kind: "latched", label: "M", tone: "mute", get: () => !!MIX.mutes[ch], set: v => setMute(ch, v), off: gone,
+      title: "mute " + c.voice + "; its fader stays where the hand left it" }));
+    ws.push(kitButton({ kind: "latched", label: "S", tone: "solo", get: () => MIX.solo === ch, set: () => setSolo(ch), off: gone,
+      title: "solo " + c.voice + "; press again for the whole mix" }));
+    for (const v of ["delay", "reverb"]) {
+      const none = () => ch === "R" || gone();
+      ws.push(kitEncoder({ id: "hs_" + v + "_" + ch, size: "sm", label: v === "delay" ? "echo" : "room", tone: v === "delay" ? "echo" : "room",
+        fmt: x => x.toFixed(2), off: none, held: () => !none() && hand.ask(v, ch) !== undefined,
+        dead: () => ch === "R" ? "the rumble is a reverb of its own: no send" : gone() ? "no material on this lane" : "",
+        reset: () => { if (!none()) { hand.release(v, ch); refreshHand(); } },
+        title: c.voice + (v === "delay" ? " echo send" : " room send") + " — double-click releases it back to the schedule" }));
+    }
+    col.append(name, ...ws.map(w => w.el));
+    cols.push(col);
+  }
+  kitBank("mix", "MIX", cols);
+}
+
+// THE SPACE BANK: echo, room, pump and the noise floor, over the drawer's inputs (dlydiv, fbk, dlytrim, revsize, revtrim,
+// pump, bed). Defaults and the "does nothing" refusals come from ROOM_UNITS / SET_UNITS, the descriptors the drawer
+// already reads, so there is one answer to "what did the manifest say" and one to "does this reach anything".
+function buildSpaceBank() {
+  const U = id => ROOM_UNITS.find(u => u.id === id) || SET_UNITS.find(u => u.id === id);
+  const dead = id => () => { const u = U(id); return u.dead ? u.dead(shownComposition()) : ""; };
+  const moved = (id, get) => () => Math.abs(get() - U(id).base()) > 1e-6;
+  const enc = (id, label, fmt, tone, title, extra) => kitEncoder(Object.assign({ id, label, fmt, tone, title,
+    def: () => U(id).base(), dead: dead(id), held: moved(id, () => parseFloat(ui(id).value)) }, extra));
+  const group = (name, ...ws) => { const g = kitEl("div", "kx-group"); g.append(kitEl("div", "kx-gname", name));
+    const row = kitEl("div", "kx-grow"); row.append(...ws.map(w => w.el)); g.append(row); return g; };
+  const div = kitStepped({ label: "division", tone: "echo",
+    options: [{ v: 0.25, label: "1/16" }, { v: 0.5, label: "1/8" }, { v: 0.75, label: "3/16" }, { v: 1, label: "1/4" }],
+    get: () => parseFloat(ui("dlydiv").value),
+    set: v => { const sel = ui("dlydiv"); sel.value = String(v); sel.dispatchEvent(new Event("change")); paintDrawers(shownComposition()); },
+    def: () => U("dlydiv").base(), dead: dead("dlydiv"), held: moved("dlydiv", () => parseFloat(ui("dlydiv").value)),
+    title: "echo division — named steps; double-click returns it to the manifest" });
+  kitBank("space", "SPACE", [
+    group("ECHO", div,
+      enc("fbk", "repeats", v => v.toFixed(2), "echo", "how many times the echo says it again"),
+      enc("dlytrim", "level", v => "\u00d7" + v.toFixed(2), "echo", "a master over every echo send on the desk")),
+    group("ROOM",
+      enc("revsize", "size", v => v.toFixed(1) + " s", "room", "how long the room takes to stop", { change: true }),
+      enc("revtrim", "level", v => "\u00d7" + v.toFixed(2), "room", "a master over every room send on the desk")),
+    group("BODY",
+      enc("pump", "pump", v => v.toFixed(2), "arc", "the kick ducks the mix — the manifest has none, so it starts at zero"),
+      enc("bed", "air", v => v === 0 ? "off" : "\u00d7" + v.toFixed(2), "out", "tape air — it never ducks with the kick"))
+  ]);
+}
 
 // the first faces: what Tonight already had as plain sliders, now as widgets over the same inputs
 {
@@ -11372,7 +11458,13 @@ function window0(buf, from, len) {
 }
 
 window.p02 = {
-  kit: { ids: () => KIT.list.map(w => w.id), engineCfg: k => (engine ? engine.cfg[k] : null), all: () => deckEngines().map(e => e.cfg) },
+  kit: { ids: () => KIT.list.map(w => w.id), engineCfg: k => (engine ? engine.cfg[k] : null), all: () => deckEngines().map(e => e.cfg),
+         // what each engine holds for a lane, and what the hand holds: the harness reads these, never the widget
+         lane: ch => deckEngines().map(e => (e.A.chan[ch] ? e.A.chan[ch].fader : null)),
+         mutesAll: () => deckEngines().map(e => Object.keys(e.cfg.mutes || {}).join(",")),
+         base: id => (ROOM_UNITS.find(u => u.id === id) || SET_UNITS.find(u => u.id === id)).base(),
+         hold: (p, ch) => hand.ask(p, ch),
+         landed: (p, ch) => { const C = engine && engine.composition(); return C ? C.wet[ch][p] : null; } },
   tonight: { paint: () => { TN.sig = ""; tonightPaint(); }, pos: () => TN.pos, ahead: () => TN.ahead.map(a => ({ profile: a.profile, start: a.start })) },
   dj: { start: djStart, stop: djStop, close: djClose, skip: djSkip, budget: djBudget, planCloser: djPlanCloser,
         state: () => ({ on: DJ.on, closing: DJ.closing, fading: DJ.fading, night: DJ.night, n: DJ.n, live: DJ.live, phase: DJ.phase, cur: DJ.cur, plan: DJ.plan,
@@ -11637,6 +11729,8 @@ wireHand();
 wireSpacePads();
 wireFires();
 wireMix();
+buildMixBank();
+buildSpaceBank();
 buildRides();
 wireRides();
 buildSections();
