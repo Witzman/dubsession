@@ -1046,6 +1046,9 @@
         <div class="t" style="margin-top:14px">lanes — a lane belongs to one deck; click hands it to the other</div>
         <div id="decklanes" style="display:flex;flex-wrap:wrap;gap:6px;margin-top:6px"></div>
         <div id="deckstatus" class="t" style="margin-top:12px"></div>
+        <div class="t" style="margin-top:18px">the night — the DJ plans the next track, builds it and hands the lanes over</div>
+        <div class="seekrow" style="margin-top:6px"><button id="djgo" class="sm">start the night</button></div>
+        <div id="djstatus" class="t" style="margin-top:10px"></div>
       </div>
     </details>
 
@@ -1134,7 +1137,10 @@ const D = { PROFILE:0x5052, FRAME:0x4652, DRUM:0x4452, NOTE:0x4E54, VOX:0x5658,
             // from the same ranges as the piece, but they are not the piece
             // and #28 has not spent its coordinates yet. Two dimensions
             // sharing a domain would draw the same path from one seed.
-            RIDE:0x5244 };
+            RIDE:0x5244,
+            // the DJ's own domain (#84): the night's arc, the walk, the seed search.
+            // None of it is the piece, so none of it may share a coordinate with one.
+            DJ:0x444A };
 
 // Reserved coordinates: allocated, not yet spent. They are in check 5's
 // uniqueness set so a later commit cannot quietly take one.
@@ -2261,6 +2267,117 @@ function profileForSeed(seed) {
   const def = PROFILE_DEFS[i];
   return { def: def, style: mergeStyle(STYLE, def.patch), contract: clone(def.contract) };
 }
+
+/* ---------------------------------------------------------------------------
+   3b. THE DJ'S DECISIONS — v2 only (workshop #84, sprint 20). PURE.
+   ---------------------------------------------------------------------------
+   Nothing here touches audio, the transport or the page: a night is a function
+   of its seed, and a plan is a function that RETURNS A SPEC. A composition that
+   fails is retried against the same spec (`djSeedFor`'s `attempt`), never
+   re-planned — the reference re-ran its whole planner on the way back in, and
+   the commission changed under its own feet (dj-machinery, "commissioning").
+
+   EVERY NUMBER THE DJ DECIDES WITH IS IN `DJ_CFG` and nowhere else. That is the
+   provision for producer signatures, personas and night themes (owner decision
+   2026-09-25): a persona is a set of multipliers on these, so they must come
+   from a structure and not sit as constants in the code. Only `patience` is
+   wired so far, and it is 1. */
+const DJ_CFG = {
+  commissionBars: 20,   // the brief is written this many bars before the outgoing track ends
+  leadBars: 4,          // the incoming deck needs this many to be built and on the grid
+  trackBars: [64, 96],  // a track's length, drawn in whole phrases
+  phrase: 8,            // both decks are phrase-locked; a blend is a multiple of this
+  tailBars: 4,          // a deck that has handed over its last lane rings out this long
+  laneBudget: 8,        // lanes scheduled across BOTH decks at any bar (workshop #86)
+  blend: { base: 20, floor: 12, perBpm: 2.5, patience: 1 },
+  tempoStep: 3,         // the most the transport moves per track, in BPM
+  stay: 0.30,           // odds of playing on in the profile while it suits the arc
+  pull: 0.15,           // ...and it stops suiting once the arc is this far from its home
+  arc: { mid: 0.45, wide: 0.20, fast: 0.08, slowBars: 480, fastBars: 170, lo: 0.15, hi: 0.75 },
+  // WHO CROSSES WHEN, as a share of the blend. The tops go first, the low end
+  // swaps in ONE move on the midpoint (kick and sub together, with the rumble,
+  // so the two never overlap), the pad goes last because its tail is the seam.
+  handover: [ { lanes:[3], at:0 }, { lanes:[1], at:0.125 }, { lanes:[2], at:0.25 },
+              { lanes:[0, 5], at:0.5 }, { lanes:[6], at:0.625 }, { lanes:[4], at:0.75 },
+              { lanes:[7], at:0.875 } ]
+};
+const djHome = id => PROFILE_DEFS.find(p => p.id === id).energy[2];
+
+// The night's energy target at a bar: a bounded meandering walk, the reference's
+// two-sines shape (dj-machinery, "The night") on this project's 0..1 scale.
+function djArc(night, bar) {
+  const a = DJ_CFG.arc, tau = 2 * Math.PI;
+  const p1 = rand01(night, D.DJ, 0, 0) * tau, p2 = rand01(night, D.DJ, 0, 1) * tau;
+  return clamp(a.mid + a.wide * Math.sin(tau * bar / a.slowBars + p1)
+                     + a.fast * Math.sin(tau * bar / a.fastBars + p2), a.lo, a.hi);
+}
+
+// Stay, or step ONE hop to a neighbour; never a jump. A profile that suits the
+// arc mostly stays; one that has drifted from it moves, to the neighbour whose
+// home is nearest, with some chance for the others so that a night has form and
+// not a rule.
+function djWalk(night, n, cur, target) {
+  if (Math.abs(djHome(cur) - target) <= DJ_CFG.pull && rand01(night, D.DJ, n, 1) < DJ_CFG.stay) return cur;
+  const near = PROFILE_GRAPH[cur];
+  const w = near.map(q => Math.exp(-Math.abs(djHome(q) - target) / 0.08));
+  let r = rand01(night, D.DJ, n, 2) * w.reduce((a, b) => a + b, 0);
+  for (let i = 0; i < near.length; i++) { r -= w[i]; if (r <= 0) return near[i]; }
+  return near[near.length - 1];
+}
+
+// The `attempt`-th seed that draws `profile` on this night's track n. A seed
+// picks its profile by hash (`profileForSeed`), so this is a search over cheap
+// hashes and not over draws.
+function djSeedFor(profile, night, n, attempt) {
+  let hit = -1;
+  for (let k = 0; k < 4000; k++) {
+    const seed = (rand01(night, D.DJ, n, 100 + k) * 2147483647) | 0;
+    if (profileForSeed(seed).def.id === profile && ++hit === attempt) return seed;
+  }
+  throw new Error("no seed draws " + profile);
+}
+
+// The tempo the transport goes to: toward the incoming piece's, by at most
+// `tempoStep` — a set that lurches 6 BPM between two records is two recordings.
+const djTempoNext = (cur, into) => cur + clamp(into - cur, -DJ_CFG.tempoStep, DJ_CFG.tempoStep);
+
+// THE BLEND, in bars. Widest for a small tempo gap, then bounded, and the ORDER
+// is the lesson: the phrase floor runs FIRST and the remaining-bars clamp LAST.
+// The other way round, an outgoing track with 4 bars left was handed an 8-bar
+// blend (dj-machinery, "How long the blend is"). `rem` is what the outgoing
+// track still has when the incoming one enters.
+function djBlendLen(gapBpm, rem, patience) {
+  const b = DJ_CFG.blend, ph = DJ_CFG.phrase;
+  let len = Math.max(b.floor, b.base - Math.round(gapBpm * b.perBpm)) * (patience || b.patience);
+  len = Math.max(ph, Math.floor(len / ph) * ph);
+  return Math.min(len, rem);
+}
+
+// A track's length in bars: whole phrases, drawn from the night.
+function djTrackBars(night, n) {
+  const ph = DJ_CFG.phrase, lo = DJ_CFG.trackBars[0] / ph, hi = DJ_CFG.trackBars[1] / ph;
+  return ph * (lo + Math.floor(rand01(night, D.DJ, n, 3) * (hi - lo + 1)));
+}
+
+// The spec for the track AFTER `cur` ({profile, bpm, start, bars}). Returns a
+// plain object; composing it may fail and be retried, planning it is done.
+function djPlan(night, n, cur) {
+  const at = cur.start + cur.bars;                    // the bar the outgoing track ends
+  const target = djArc(night, at);
+  const profile = djWalk(night, n, cur.profile, target);
+  const seed = djSeedFor(profile, night, n, 0);
+  const bpm = djTempoNext(cur.bpm, draw(seed).tempo);
+  const rem = DJ_CFG.commissionBars - DJ_CFG.leadBars;
+  const blend = djBlendLen(Math.abs(bpm - cur.bpm), rem, DJ_CFG.blend.patience);
+  return { n: n, profile: profile, seed: seed, target: target, bpm: bpm, blend: blend, bars: djTrackBars(night, n),
+           start: at - blend };
+}
+
+// Which lane changes hands at which bar of the blend: [{at: bar offset, lanes}].
+function djHandovers(blend) {
+  return DJ_CFG.handover.map(h => ({ at: Math.round(h.at * blend), lanes: h.lanes }));
+}
+
 
 // [M] globals.dlytime is an index into the parent's delay divisions [D]:
 // `1/16 · 1/8 · 3/16 · 1/4 · 3/8 · 1/2`. Index 1 is 1/8 — half a beat.
@@ -8093,10 +8210,11 @@ function tick() {
     if (T.step % 16 === 0) promoteFires(Math.floor(T.step / 16));
     if (T.step % 16 === 0) promoteRides(Math.floor(T.step / 16));
     if (T.step % 16 === 0) promoteVoiceRecipes();
-    engine.scheduleStep(T.step, T.nextT, stepDur);
+    if (T.step % 16 === 0) djBar(T.step / 16);
+    engine.scheduleStep(T.step - DECK.aOffset, T.nextT, stepDur);
     if (T.step % 16 === 0) deckBar();
     if (DECK.b) deckStep(T.step, T.nextT, stepDur);
-    uiQueue.push({ step: T.step, at: T.nextT });
+    uiQueue.push({ step: T.step - DECK.aOffset, at: T.nextT });
     T.nextT += stepDur;
     T.step++;
   }
@@ -10141,8 +10259,15 @@ function applyMute() {
    Pins and the hand's holds are A's and reach B too; that is a bench
    simplification and not a design. */
 const DECK_LANES = [0, 1, 2, 3, 4, 5, 6, 7];
+// THE NIGHT'S STATE. `cur` is the track that is live ({profile, bpm, start,
+// bars, seed}, start = the bar its own bar 0 sits on); `plan` is the spec for
+// the next one once it has been commissioned; `phase` is play / blend.
+const DJ = { on: false, night: 0, n: 0, live: "A", cur: null, plan: null, built: null, phase: "play",
+             blendStart: 0, hand: [], bpmFrom: 0, retire: null, log: [], note: "" };
 const DECK = { b: null, pending: null, owner: { 0:"A", 1:"A", 2:"A", 3:"A", 4:"A", 5:"A", 6:"A", 7:"A" },
-               xf: 0, master: null, mixA: null, mixB: null, buildMs: null, note: "" };
+               xf: 0, master: null, mixA: null, mixB: null, buildMs: null, note: "",
+               // where deck A's piece has its bar 0, on the shared step count: 0 until the DJ hands A a new piece
+               aOffset: 0 };
 // the rumble follows the kick, the bed is deck A's
 const laneOwnerOf = k => k === "R" ? DECK.owner[0] : k === "N" ? "A" : DECK.owner[k];
 const gateFor = which => k => laneOwnerOf(k) === which;
@@ -10157,16 +10282,17 @@ function deckXfade(x) {
   DECK.xf = x;
   if (!DECK.mixA) return;
   const t = ctx.currentTime;
+  // the DJ crosses lane by lane, so the decks' sums stay at unity: a lane is
+  // on one deck or the other and nothing is faded twice
+  if (DJ.on) { DECK.mixA.gain.setTargetAtTime(1, t, 0.02); DECK.mixB.gain.setTargetAtTime(1, t, 0.02); return; }
   DECK.mixA.gain.setTargetAtTime(Math.cos(x * Math.PI / 2), t, 0.02);
   DECK.mixB.gain.setTargetAtTime(Math.sin(x * Math.PI / 2), t, 0.02);
 }
 // Building an engine is main-thread work (two impulse responses, the noise
 // bank), so it happens on the button and not inside the scheduler's tick; the
 // bar line only PROMOTES it. The time it took is shown, not assumed.
-function deckLoad(seed) {
-  if (!ctx) { deckNote("press start first — there is no audio context yet."); return false; }
-  deckUnload();
-  const t0 = performance.now(), prev = PIECE;
+function deckBuild(seed) {
+  const prev = PIECE;
   let piece;
   try { piece = draw(seed); }
   catch (e) { piece = draw(DEFAULT_SEED); piece.drawFailed = { seed: seed, why: e.message }; }
@@ -10180,7 +10306,13 @@ function deckLoad(seed) {
   } finally { usePiece(prev); }
   eng.tail.connect(DECK.mixB);
   eng.set("master", val("vol"));
-  DECK.pending = { engine: eng, piece: piece, seed: seed };
+  return { engine: eng, piece: piece, seed: seed };
+}
+function deckLoad(seed) {
+  if (!ctx) { deckNote("press start first — there is no audio context yet."); return false; }
+  deckUnload();
+  const t0 = performance.now();
+  DECK.pending = deckBuild(seed);
   DECK.buildMs = performance.now() - t0;
   deckXfade(0.5);
   ui("deckxf").value = "50";
@@ -10239,6 +10371,157 @@ ui("deckunload").addEventListener("click", deckUnload);
 ui("deckxf").addEventListener("input", () => deckXfade(parseInt(ui("deckxf").value, 10) / 100));
 paintDeckLanes();
 
+/* ---------------------------------------------------------------------------
+   7c. THE NIGHT — v2 only (workshop #84, sprint 20)
+   ---------------------------------------------------------------------------
+   The DJ is the pure layer at 3b plus this: a state machine that runs at BAR
+   LINES, ahead of deck A's own scheduling, so a lane that changes hands does so
+   before the bar that needs it. Three moments, in order:
+
+     COMMISSION   `commissionBars` before the track ends: plan the next one and
+                  build it. Deck B is built (an engine, 200-260 ms on the main
+                  thread, four bars ahead of anything that needs it); deck A
+                  takes its piece by a draw, at the bar it enters.
+     BLEND        the incoming deck enters on a bar line and counts from its own
+                  bar 0. Lanes cross on the plan's bars (`djHandovers`), the
+                  transport tempo glides to the incoming piece's, and the two
+                  decks' sums stay at unity: a lane is on ONE deck.
+     RETIRE       `tailBars` after the last lane crossed, the outgoing deck is
+                  free. B's engine is dropped; A simply owns nothing.
+
+   THE BUDGET IS AN INVARIANT, NOT A LIMIT THAT CAN BE HIT: every lane is
+   owned by exactly one deck, so at most 8 are ever scheduled across both.
+   `djBudget` counts it anyway, at every bar of a blend, so the day a second
+   owner is allowed (per-lane fades) the check is already there.
+
+   THE SHEET AND THE SEED LINE FOLLOW DECK A. When B is the live deck the
+   surface is showing the silent one; the surface is a later sprint (spec 3.3).
+   A COMPOSITION THAT FAILS IS RETRIED, NOT REPLANNED: three attempts at the
+   same spec (`djSeedFor` attempt 0..2), then abandoned out loud and the track
+   is held 16 bars longer. */
+function djLog(ev, extra) {
+  DJ.log.push(Object.assign({ bar: Math.floor(T.step / 16), ev: ev }, extra || {}));
+  if (DJ.log.length > 200) DJ.log.shift();
+}
+function djBudget() {
+  const n = { A: 0, B: 0 };
+  for (const c of DECK_LANES) n[DECK.owner[c]]++;
+  return { A: n.A, B: n.B, total: n.A + n.B, ok: n.A + n.B <= DJ_CFG.laneBudget };
+}
+function djNote(msg) {
+  DJ.note = msg;
+  const el = ui("djstatus");
+  if (!el) return;
+  const c = DJ.cur, pl = DJ.plan;
+  el.textContent = !DJ.on ? msg
+    : `night ${DJ.night} · track ${DJ.n}, ${c.profile} on ${DJ.live} since bar ${c.start}, ends bar ${c.start + c.bars}`
+      + ` · ${DJ.phase}${pl ? ` · next: ${pl.profile} (${pl.seed}), blend ${pl.blend} bars from bar ${pl.start}` : ""}`
+      + (msg ? " · " + msg : "");
+  ui("djgo").textContent = DJ.on ? "close the night" : "start the night";
+}
+function djStart() {
+  if (!T.running || !DECK.mixA) { djNote("press start first — the night needs a running transport."); return false; }
+  if (DJ.on) return true;
+  deckUnload();
+  DJ.on = true; DJ.night = SEED | 0; DJ.n = 0; DJ.live = "A"; DJ.plan = null; DJ.built = null;
+  DJ.phase = "play"; DJ.retire = null; DJ.log = [];
+  const bar = Math.floor(T.step / 16);
+  DJ.cur = { profile: PIECE.profile.id, bpm: T.bpm, start: bar, bars: djTrackBars(DJ.night, 0), seed: PIECE.seed };
+  deckXfade(0);
+  djLog("start", { night: DJ.night, profile: DJ.cur.profile, bars: DJ.cur.bars });
+  djNote("");
+  return true;
+}
+function djStop(why) {
+  if (!DJ.on) return;
+  DJ.on = false; DJ.plan = null; DJ.built = null; DJ.phase = "play"; DJ.retire = null;
+  DECK.aOffset = 0;
+  deckUnload();
+  djLog("stop", { why: why });
+  djNote(why ? "the night stopped: " + why : "");
+}
+// The seed the deck will play. Deck B is built and the build is the test; deck
+// A's is drawn (and dropped) once here so a failure is found four bars before
+// it is needed and not at the bar line.
+function djCompose(plan, incoming) {
+  for (let attempt = 0; attempt < 3; attempt++) {
+    const seed = attempt === 0 ? plan.seed : djSeedFor(plan.profile, DJ.night, plan.n, attempt);
+    try {
+      if (incoming === "B") {
+        const d = deckBuild(seed);
+        if (!d.piece.drawFailed) { plan.seed = seed; return d; }
+        try { d.engine.tail.disconnect(); } catch (e) {}
+      } else { draw(seed); plan.seed = seed; return { seed: seed }; }
+    } catch (e) { /* the attempt failed; the next one is the same spec on another seed */ }
+    djLog("retry", { n: plan.n, attempt: attempt + 1, seed: seed });
+  }
+  return null;
+}
+function djCommission(bar) {
+  const c = DJ.cur, incoming = DJ.live === "A" ? "B" : "A";
+  const plan = djPlan(DJ.night, DJ.n + 1, c);
+  const t0 = performance.now();
+  const built = djCompose(plan, incoming);
+  if (!built) {
+    c.bars += 16;
+    djLog("abandon", { n: plan.n, profile: plan.profile });
+    say(`the DJ could not compose ${plan.profile} in three tries — holding this track 16 bars.`, true);
+    return;
+  }
+  DJ.plan = plan; DJ.built = built; DECK.buildMs = performance.now() - t0;
+  djLog("commission", { n: plan.n, profile: plan.profile, seed: plan.seed, blend: plan.blend,
+                        start: plan.start, bpm: plan.bpm, target: +plan.target.toFixed(3), ms: Math.round(DECK.buildMs) });
+}
+function djEnterBlend(bar) {
+  const p = DJ.plan, incoming = DJ.live === "A" ? "B" : "A";
+  DJ.bpmFrom = T.bpm;                       // BEFORE the draw below: a new piece moves T.bpm to its own tempo
+  if (incoming === "B") { DECK.pending = DJ.built; }
+  else {
+    applySeed(p.seed);                      // deck A takes the piece: a draw, at a bar line
+    DECK.aOffset = T.step;                  // ...and counts it from its own bar 0
+  }
+  DJ.built = null;
+  DJ.phase = "blend"; DJ.blendStart = bar;
+  DJ.hand = djHandovers(p.blend);
+  T.bpm = DJ.bpmFrom;                       // a piece with another tempo does not get to move the clock
+  djLog("blend", { n: p.n, into: incoming, len: p.blend });
+}
+function djBlendBar(bar) {
+  const p = DJ.plan, incoming = DJ.live === "A" ? "B" : "A", k = bar - DJ.blendStart;
+  for (const h of DJ.hand) if (h.at === k) {
+    for (const l of h.lanes) DECK.owner[l] = incoming;
+    const b = djBudget();
+    if (!b.ok) { djLog("budget", b); say(`lane budget ${b.total} > ${DJ_CFG.laneBudget}`, true); }
+    djLog("lanes", { k: k, lanes: h.lanes.join("+"), A: b.A, B: b.B });
+    paintDeckLanes();
+  }
+  T.bpm = DJ.bpmFrom + (p.bpm - DJ.bpmFrom) * Math.min(1, (k + 1) / p.blend);
+  if (k >= p.blend) {
+    DJ.retire = { deck: DJ.live, at: bar + DJ_CFG.tailBars };
+    DJ.live = incoming; DJ.n = p.n;
+    DJ.cur = { profile: p.profile, bpm: p.bpm, start: DJ.blendStart, bars: p.bars, seed: p.seed };
+    DJ.plan = null; DJ.phase = "play";
+    djLog("live", { n: p.n, deck: incoming, profile: p.profile });
+  }
+}
+function djBar(bar) {
+  if (!DJ.on) return;
+  const c = DJ.cur;
+  if (DJ.phase === "play" && !DJ.plan && bar >= c.start + c.bars - DJ_CFG.commissionBars) djCommission(bar);
+  if (DJ.phase === "play" && DJ.plan && bar >= DJ.plan.start) djEnterBlend(bar);
+  if (DJ.phase === "blend") djBlendBar(bar);
+  if (DJ.retire && bar >= DJ.retire.at) {
+    if (DJ.retire.deck === "B" && DECK.b) { try { DECK.b.engine.tail.disconnect(); } catch (e) {} DECK.b = null; }
+    djLog("retire", { deck: DJ.retire.deck });
+    DJ.retire = null;
+  }
+  // deck A's engine is not the transport's to follow by itself
+  if (engine) { engine.cfg.bpm = T.bpm; engine.set("bpm", T.bpm); }
+  if (ui("bpm")) ui("bpm").value = String(Math.round(T.bpm));
+  djNote("");
+}
+ui("djgo").addEventListener("click", () => DJ.on ? djStop("closed by hand") : djStart());
+
 async function start() {
   if (T.running) { stop(); return; }
   if (!ctx) {
@@ -10291,6 +10574,7 @@ async function start() {
   if (!muted) say("playing.");
 }
 function stop() {
+  if (DJ.on) djStop("the transport stopped");
   T.running = false;
   clearInterval(timer); timer = null;
   ui("go").textContent = "start";
@@ -10422,6 +10706,13 @@ function window0(buf, from, len) {
 }
 
 window.p02 = {
+  dj: { start: djStart, stop: djStop, budget: djBudget,
+        state: () => ({ on: DJ.on, night: DJ.night, n: DJ.n, live: DJ.live, phase: DJ.phase, cur: DJ.cur, plan: DJ.plan,
+          owner: Object.assign({}, DECK.owner), aOffset: DECK.aOffset, bpm: T.bpm, bar: Math.floor(T.step / 16),
+          seed: SEED, log: DJ.log.slice() }),
+        cfg: DJ_CFG, arc: djArc, walk: djWalk, seedFor: djSeedFor, blendLen: djBlendLen, plan: djPlan,
+        handovers: djHandovers, graph: PROFILE_GRAPH,
+        homes: () => PROFILE_DEFS.map(p => [p.id, p.energy[2]]) },
   deck: {
     load: deckLoad, unload: deckUnload, hand: deckHand, xfade: deckXfade,
     state: () => ({ b: !!DECK.b, pending: !!DECK.pending, owner: Object.assign({}, DECK.owner), xf: DECK.xf,
