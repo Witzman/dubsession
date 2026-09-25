@@ -715,6 +715,7 @@
   #tonight .kx-btn:disabled { opacity:.35; cursor:default; }
   #tonight .kx-firecol { width:auto; min-width:104px; background:transparent; padding:0; gap:8px; }
   #tonight .kx-wrap { flex-wrap:wrap; }
+  #tonight .kx-strip .kx-step { width:60px; }
   #tonight .kx-key { position:absolute; top:4px; right:6px; font:600 10px/1 'Bricolage Grotesque', system-ui, sans-serif; font-style:normal; color:var(--tn-dim); border:1px solid #33454f; border-radius:4px; padding:2px 4px; }
   #tonight .kx-btn { position:relative; }
   #tonight .kx-btn.kx-on .kx-key { color:#101820; border-color:#101820; }
@@ -730,7 +731,7 @@
   #tonight .kx[data-tone="echo"] { --kx:#7fb3d5; } #tonight .kx[data-tone="room"] { --kx:#b9a0d8; }
   #tonight .kx-strip { display:flex; flex-direction:column; align-items:center; gap:10px; width:76px; padding:10px 0 12px; background:#131e26; border-radius:16px; }
   #tonight .kx-name { font:700 13px/1 'Bricolage Grotesque', system-ui, sans-serif; letter-spacing:.06em; text-transform:uppercase; color:var(--tn-dim); }
-  #tonight .kx-strip .kx-btn { min-width:44px; width:44px; padding:6px 0; min-height:40px; }
+  #tonight .kx-strip .kx-btn { min-width:58px; width:58px; padding:6px 0; min-height:40px; }
   #tonight .kx-btn[data-tone="mute"] { --kx:#e58a6f; } #tonight .kx-btn[data-tone="solo"] { --kx:#e6c84f; }
   #tonight .kx-group { background:#131e26; border-radius:16px; padding:10px 16px 12px; }
   #tonight .kx-gname { font:700 12px/1 'Bricolage Grotesque', system-ui, sans-serif; letter-spacing:.14em; color:var(--tn-dim); margin:0 0 10px; }
@@ -11326,7 +11327,7 @@ function kitEncoder(c) {
 // named steps: a detent knob. Drag steps through the list, a click advances it. Range is the index.
 function kitStepped(c) {
   const opts = c.options, idx = () => Math.max(0, opts.findIndex(o => c.get() === o.v)),
-        m = { min: 0, max: opts.length - 1, step: 1, get: idx, set: i => c.set(opts[Math.round(i)].v), def: () => Math.max(0, opts.findIndex(o => o.v === c.def())) };
+        m = { min: 0, max: opts.length - 1, step: 1, get: idx, set: i => c.set(opts[Math.round(i)].v), reset: c.reset, def: () => Math.max(0, opts.findIndex(o => o.v === c.def())) };
   const el = kitEl("div", "kx kx-step"), lab = kitEl("div", "kx-lab", c.label), val_ = kitEl("output", "kx-val"), dots = kitEl("div", "kx-dots");
   opts.forEach(() => dots.appendChild(kitEl("i")));
   el.append(val_, dots, lab); el.tabIndex = 0; el.setAttribute("role", "slider"); el.setAttribute("aria-label", c.label);
@@ -11576,6 +11577,33 @@ function buildMoveBank() {
   fillMoveBank();
 }
 
+// THE LANE BANK: what each lane PLAYS — density (chance), move, phrase length, LOCK — over the station's own inputs (hs_chance_<ch>,
+// hs_move_<ch>, hs_phrase_<ch>) and its LOCK button. All of it is the hand's HOLD: the value lands on the next bar, and a lane's
+// reset RELEASES the hold (back under the schedule) rather than setting a number. The two sends live in the MIX bank.
+function buildLaneBank() {
+  const cols = [];
+  for (const c of CHANNELS) {
+    if (c.ch === "R") continue;
+    const ch = c.ch, gone = () => !!PIECE.empty[ch], col = kitEl("div", "kx-strip"), name = kitEl("div", "kx-name", c.voice);
+    const held = p => () => !gone() && hand.ask(p, ch) !== undefined;
+    const release = p => () => { if (!gone()) { hand.release(p, ch); refreshHand(); } };
+    const dead = () => gone() ? "no material on this lane" : chReach(ch);
+    const enc = (p, label, tone, fmt, title) => kitEncoder({ id: "hs_" + p + "_" + ch, label, tone, fmt, off: gone, dead, held: held(p), reset: release(p), title });
+    const chance = enc("chance", "density", "arc", x => x.toFixed(2), c.voice + " density — how much of its pattern plays; double-click hands it back to the schedule");
+    const move = enc("move", "move", "arc", x => (hand.ask("move", ch) === LOCK ? "LOCK" : x.toFixed(2)), c.voice + " move — how far its pattern drifts between bars; double-click hands it back");
+    const phrase = kitStepped({ label: "phrase", tone: "arc", options: [1, 2, 3, 4, 5, 6, 7, 8].map(n => ({ v: n, label: String(n) })),
+      get: () => Math.round(parseFloat(ui("hs_phrase_" + ch).value)), set: v => { const e = ui("hs_phrase_" + ch); e.value = String(v); e.dispatchEvent(new Event("input", { bubbles: true })); },
+      def: () => 1, off: gone, dead, held: held("phrase"), reset: release("phrase"), title: c.voice + " phrase — bars before its pattern repeats; double-click hands it back" });
+    const lock = kitButton({ kind: "latched", label: "LOCK", tone: "mute", off: gone,
+      get: () => !gone() && hand.ask("move", ch) === LOCK, set: v => { if (v) hand.hold("move", ch, LOCK); else hand.release("move", ch); refreshHand(); },
+      title: "hold " + c.voice + " on one bar for ever; press again to release" });
+    const rel = kitButton({ kind: "fired", label: "rel", tone: "rel", disabled: () => !!ui("hr_" + ch).disabled, fire: () => ui("hr_" + ch).click(),
+      title: "everything the hand holds on " + c.voice + " goes back under the schedule" });
+    col.append(name, chance.el, move.el, phrase.el, lock.el, rel.el); cols.push(col);
+  }
+  kitBank("lane", "LANE", cols);
+}
+
 // THE HOLD BANK: gestures that last as long as the hand does. ECHO THROW opens one lane's echo send (to THROW_LEVEL) while held;
 // FREEZE latches the echo's loop so its tail sustains itself; the ISOLATOR kills a band of a deck (low under 250 Hz, mid,
 // high over 2.5 kHz) while held. Release gives each back. Every one is on a key, shown on the pad.
@@ -11733,6 +11761,8 @@ window.p02 = {
          fireAll: () => deckEngines().map(e => { const f = e.composition().fire; return f && f.active ? f.active.kind : null; }),
          fires: () => ({ pending: FIRES.pending.macro && FIRES.pending.macro.kind, events: FIRES.events.map(e => ({ kind: e.kind, at: e.at, bars: e.bars, micro: e.micro })) }),
          bar: () => Math.floor(T.step / 16),
+         landedAll: (p, ch) => deckEngines().map(e => { const C = e.composition(); return C ? resolvedOf(C, p, ch) : null; }),
+         landedVerb: (p, ch) => { const C = engine && engine.composition(); return C ? (C.held && C.held[p] ? { v: resolvedOf(C, p, ch), held: C.held[p][ch] === true } : { v: resolvedOf(C, p, ch), held: false }) : null; },
          sends: ch => deckEngines().map(e => e.A.chan[ch] ? e.A.chan[ch].dlySend.gain.value : null), fb: () => deckEngines().map(e => e.A.pp.fb.gain.value),
          echoTap: () => { const e = engine; if (!e.A.tapEcho) { e.A.tapEcho = ctx.createAnalyser(); e.A.tapEcho.fftSize = 2048; e.A.pp.out.connect(e.A.tapEcho); } return true; },
          echoRms: () => { const a = engine.A.tapEcho, b = new Float32Array(a.fftSize); a.getFloatTimeDomainData(b); let r = 0, m = 0; for (const x of b) { r += x * x; m = Math.max(m, Math.abs(x)); } return { rms: Math.sqrt(r / b.length), peak: m }; },
@@ -12008,6 +12038,7 @@ wireSpacePads();
 wireFires();
 wireMix();
 buildMixBank();
+buildLaneBank();
 buildSpaceBank();
 buildFireBank();
 buildKeyBank();
