@@ -567,6 +567,8 @@
                                   transform: none; font-size: 9px; text-align: center; }
   .tone-control .unit .why { display: none; }
   #d_voices, #d_movers { display: none; }
+  /* covered by the console (KEY, SPACE, VOICE, MOVE): their inputs are those banks' models and stay in the page, out of sight */
+  #tonight ~ #bench #pitch, #tonight ~ #bench #d_room, #tonight ~ #bench #d_set { display: none; }
   .space-control { min-height: 74px; }
   .spacepad { position: relative; width: 100%; max-width: 58px; height: 58px; margin: 0 auto;
               border: 1px solid var(--line); touch-action: none; cursor: crosshair;
@@ -713,6 +715,9 @@
   #tonight .kx-btn:disabled { opacity:.35; cursor:default; }
   #tonight .kx-firecol { width:auto; min-width:104px; background:transparent; padding:0; gap:8px; }
   #tonight .kx-wrap { flex-wrap:wrap; }
+  #tonight .kx-mrows { display:flex; flex-wrap:wrap; gap:14px; flex-basis:100%; }
+  #tonight .kx-line { flex-basis:100%; color:var(--tn-dim); font:400 15px 'Bricolage Grotesque', system-ui, sans-serif; }
+  #tonight .kx-step .kx-dots { flex-wrap:wrap; max-width:76px; }
   #tonight .kx-strip.kx-firecol .kx-btn { width:104px; min-width:104px; min-height:60px; padding:8px 6px; }
   #tonight .kx-firecol .kx-step { width:104px; }
   #tonight .kx-dead { opacity:.4; }
@@ -8256,6 +8261,7 @@ function rebuildModRows() {
     if (engine) engine.set(r.key, held[r.key]);
   }
   wireModRows();
+  if (typeof fillMoveBank === "function" && KIT.banks.move) fillMoveBank();
   const gone = was.filter(k => now.indexOf(k) === -1 && held[k] !== undefined && held[k] !== 1);
   if (gone.length) say("seed " + PIECE.seed + ": " + gone.length + " modulator"
     + (gone.length > 1 ? "s are" : " is") + " not in this piece — your trim on "
@@ -8408,7 +8414,7 @@ function tick() {
     if (pendingKey && T.step % 16 === 0) {
       KEY_HAND.root = pendingKey.root; KEY_HAND.scale = pendingKey.scale;
       pendingKey = null;
-      engine.set("keyRoot", KEY_HAND.root); engine.set("keyScale", KEY_HAND.scale);
+      for (const e of deckEngines()) { e.set("keyRoot", KEY_HAND.root); e.set("keyScale", KEY_HAND.scale); }   // the key is the hand's: both decks of a blend
       paintKeyState();
       say("key " + KEY_NAMES[((KEY_HAND.root % 12) + 12) % 12]
         + " " + ui("keyscale").selectedOptions[0].text + " — landed on this bar.");
@@ -8494,7 +8500,7 @@ function requestKey() {
   }
   KEY_HAND.root = wanted.root; KEY_HAND.scale = wanted.scale;
   pendingKey = null;
-  if (engine) { engine.set("keyRoot", KEY_HAND.root); engine.set("keyScale", KEY_HAND.scale); }
+  for (const e of deckEngines()) { e.set("keyRoot", KEY_HAND.root); e.set("keyScale", KEY_HAND.scale); }
   paintKeyState();
   say("key set — starts in " + KEY_NAMES[((KEY_HAND.root % 12) + 12) % 12]
     + " " + ui("keyscale").selectedOptions[0].text + ".");
@@ -9802,7 +9808,7 @@ function wireModRows() {
   for (const r of MOD_ROWS) {
     const el = ui(r.id);
     if (!el) continue;
-    el.addEventListener("input", () => { if (engine) engine.set(r.key, parseFloat(el.value)); });
+    el.addEventListener("input", () => { for (const e of deckEngines()) e.set(r.key, parseFloat(el.value)); });   // the hand's trim: both decks of a blend
     el.addEventListener("input", repaintMods);
   }
 }
@@ -10300,7 +10306,7 @@ function outputs() {
       PITCH_HAND[key] = value;
       out.textContent = fmt(value);
       setFill(el);
-      if (engine) engine.set(key, value);
+      for (const e of deckEngines()) e.set(key, value);      // pitch is the hand's: both decks of a blend
     };
     el.addEventListener("input", update);
     update();
@@ -11403,6 +11409,80 @@ function buildFireBank() {
   kitBank("fire", "FIRE", [grp("BIG GESTURES", macros), grp("ONE BAR", micros), grp("BACK", [rel.el])]);
 }
 
+// THE KEY BANK: root and scale (named steps over the two selects, which still raise `change` into requestKey, so a key lands on
+// the next bar), transpose in scale degrees and semitones over their range inputs. The line under it is #keystate, the same words.
+function buildKeyBank() {
+  const sel = id => ui(id), fire = (id, v) => { const e = sel(id); e.value = String(v); e.dispatchEvent(new Event("change")); };
+  const root = kitStepped({ label: "root", tone: "arc", options: KEY_NAMES.map((n, i) => ({ v: i, label: n })),
+    get: () => parseInt(sel("keyroot").value, 10), set: v => fire("keyroot", v), def: () => ((PIECE.globals.root % 12) + 12) % 12,
+    held: () => parseInt(sel("keyroot").value, 10) !== ((PIECE.globals.root % 12) + 12) % 12, title: "the key's root — lands on the next bar" });
+  const scale = kitStepped({ label: "scale", tone: "arc", options: [...sel("keyscale").options].map(o => ({ v: parseInt(o.value, 10), label: o.textContent })),
+    get: () => parseInt(sel("keyscale").value, 10), set: v => fire("keyscale", v), def: () => PIECE.globals.scale,
+    held: () => parseInt(sel("keyscale").value, 10) !== PIECE.globals.scale, title: "the scale — lands on the next bar" });
+  const deg = kitEncoder({ id: "transpose", label: "transpose", tone: "arc", fmt: v => (v > 0 ? "+" : "") + Math.round(v) + " deg", def: () => 0,
+    held: () => Math.round(parseFloat(sel("transpose").value)) !== 0, title: "in-key scale degrees, new notes" });
+  const semi = kitEncoder({ id: "semi", label: "semitones", tone: "arc", fmt: v => (v > 0 ? "+" : "") + Math.round(v) + " st", def: () => 0,
+    held: () => Math.round(parseFloat(sel("semi").value)) !== 0, title: "chromatic semitones, new notes" });
+  const bpm = kitEncoder({ id: "bpm", label: "tempo", tone: "out", fmt: v => Math.round(v) + " BPM", def: () => PIECE.tempo,
+    held: () => Math.round(parseFloat(sel("bpm").value)) !== Math.round(PIECE.tempo), title: "the pulse — a dub set rarely moves it" });
+  kitBank("key", "KEY", [root, scale, deg, semi, bpm], panel => {
+    const line = kitEl("div", "kx-line"); line.setAttribute("aria-live", "polite"); panel.appendChild(line);
+    KIT.list.push({ id: "keystate", el: line, draw() { const t = ui("keystate").textContent; if (line.textContent !== t) line.textContent = t; } });
+  });
+}
+
+// THE VOICE BANK: the nine voice trims and the stab's cut, one group per voice, over the drawer's range inputs. Each says when it
+// cannot be heard (muted, soloed away, no material) with chReach(), the same refusal the drawer prints.
+function buildVoiceBank() {
+  const byCh = new Map();
+  for (const k of VOICE_KEYS) { const p = VOICE_PARAMS[k]; if (!byCh.has(p.ch)) byCh.set(p.ch, []); byCh.get(p.ch).push(k); }
+  const groups = [];
+  for (const [ch, keys] of byCh) {
+    const ws = keys.map(k => { const p = VOICE_PARAMS[k];
+      return kitEncoder({ id: p.id, label: p.label.replace(/^\w+ /, ""), tone: p.hand === "live" ? "arc" : "out", fmt: fmtVoice(k), def: () => p.def,
+        dead: () => chReach(p.ch), held: () => parseFloat(ui(p.id).value) !== p.def, title: p.label + " — " + p.of }); });
+    if (ch === 6) ws.push(kitEncoder({ id: "stabcut", label: "cut", tone: "arc", fmt: v => "\u00d7" + v.toFixed(2), def: () => 1,
+      dead: () => chReach(6), held: () => parseFloat(ui("stabcut").value) !== 1, title: "how far open the stab's filter starts" }));
+    const g = kitEl("div", "kx-group"); g.append(kitEl("div", "kx-gname", voiceName(ch)));
+    const row = kitEl("div", "kx-grow"); row.append(...ws.map(w => w.el)); g.append(row); groups.push(g);
+  }
+  kitBank("voice", "VOICE", groups, panel => {
+    panel.appendChild(kitButton({ kind: "fired", label: "voices back to the recipe", tone: "rel", fire: () => ui("voicereset").click(),
+      title: "every voice trim back to what the piece drew" }).el);
+  });
+}
+
+// THE MOVE BANK: one encoder per modulator the arrangement binds (how far it swings, as a trim), and the master over all of them.
+// The rows follow the piece: rebuildModRows() calls fillMoveBank() when a new seed changes which modulators exist. A modulator
+// that is not bound at this bar is drawn off, with the drawer's own words.
+function fillMoveBank() {
+  const panel = KIT.banks.move.panel;
+  KIT.list = KIT.list.filter(w => !w.moveRow);
+  panel.querySelectorAll(".kx-mrows").forEach(n => n.remove());
+  const host = kitEl("div", "kx-mrows"), byCh = new Map();
+  for (const r of MOD_ROWS) { const ch = r.slot.channel; if (!byCh.has(ch)) byCh.set(ch, []); byCh.get(ch).push(r); }
+  for (const [ch, rows] of byCh) {
+    const ws = rows.map(r => { const w = kitEncoder({ id: r.id, label: (MOD_VERB_WORD[r.slot.verb] || r.slot.verb), tone: "echo",
+      fmt: () => { const o = ui(r.id + "_v"); return o ? o.textContent : ""; }, def: () => 1,
+      off: () => ui(r.id).disabled, dead: () => (ui(r.id).disabled ? (ui("mw_" + r.id) ? ui("mw_" + r.id).textContent : "not bound") : ""),
+      held: () => parseFloat(ui(r.id).value) !== 1, title: r.label + " — how far it swings; 1 is what the arrangement drew, 0 is still" });
+      w.moveRow = true; return w; });
+    const g = kitEl("div", "kx-group"); g.append(kitEl("div", "kx-gname", voiceName(ch)));
+    const row = kitEl("div", "kx-grow"); row.append(...ws.map(w => w.el)); g.append(row); host.appendChild(g);
+  }
+  panel.appendChild(host);
+  kitSync();
+}
+function buildMoveBank() {
+  const all = kitEncoder({ id: "moddepth", label: "all motion", tone: "echo", fmt: v => "\u00d7" + v.toFixed(2), def: () => 1,
+    dead: () => { const u = ROOM_UNITS.find(x => x.id === "moddepth"); return u.dead(shownComposition()); },
+    held: () => parseFloat(ui("moddepth").value) !== 1, title: "a master on how far every modulator swings — never on the value it swings around" });
+  const g = kitEl("div", "kx-group"); g.append(kitEl("div", "kx-gname", "ALL")); const row = kitEl("div", "kx-grow"); row.append(all.el); g.append(row);
+  kitBank("move", "MOVE", [g], panel => panel.appendChild(kitButton({ kind: "fired", label: "movers back to the manifest", tone: "rel", fire: () => ui("modreset").click(),
+    title: "every modulator trim back to the manifest" }).el));
+  fillMoveBank();
+}
+
 // the first faces: what Tonight already had as plain sliders, now as widgets over the same inputs
 {
   const mount = (id, w) => ui(id).appendChild(w.el);
@@ -11544,6 +11624,7 @@ window.p02 = {
          fireAll: () => deckEngines().map(e => { const f = e.composition().fire; return f && f.active ? f.active.kind : null; }),
          fires: () => ({ pending: FIRES.pending.macro && FIRES.pending.macro.kind, events: FIRES.events.map(e => ({ kind: e.kind, at: e.at, bars: e.bars, micro: e.micro })) }),
          bar: () => Math.floor(T.step / 16),
+         moveRows: () => MOD_ROWS.map(r => ({ id: r.id, key: r.key, off: !!ui(r.id).disabled })),
          base: id => (ROOM_UNITS.find(u => u.id === id) || SET_UNITS.find(u => u.id === id)).base(),
          hold: (p, ch) => hand.ask(p, ch),
          landed: (p, ch) => { const C = engine && engine.composition(); return C ? C.wet[ch][p] : null; } },
@@ -11814,6 +11895,7 @@ wireMix();
 buildMixBank();
 buildSpaceBank();
 buildFireBank();
+buildKeyBank();
 buildRides();
 wireRides();
 buildSections();
@@ -11823,6 +11905,8 @@ mountLiveToneControls();
 buildMods();
 mountChannelMods();
 wireModRows();
+buildVoiceBank();      // after buildVoices() and buildMods(): these banks sit on inputs those build
+buildMoveBank();
 surfaceBuilt = true;
 wireVoiceRecipes();
 ui("seedline").textContent = "seed " + SEED + " · " + PIECE.profile.name
