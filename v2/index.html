@@ -568,7 +568,7 @@
   .tone-control .unit .why { display: none; }
   #d_voices, #d_movers { display: none; }
   /* covered by the console (KEY, SPACE, VOICE, MOVE): their inputs are those banks' models and stay in the page, out of sight */
-  #tonight ~ #bench #pitch, #tonight ~ #bench #d_room, #tonight ~ #bench #d_set { display: none; }
+  #tonight ~ #bench #pitch, #tonight ~ #bench #d_room, #tonight ~ #bench #d_set, #tonight ~ #bench #decks { display: none; }
   .space-control { min-height: 74px; }
   .spacepad { position: relative; width: 100%; max-width: 58px; height: 58px; margin: 0 auto;
               border: 1px solid var(--line); touch-action: none; cursor: crosshair;
@@ -715,6 +715,15 @@
   #tonight .kx-btn:disabled { opacity:.35; cursor:default; }
   #tonight .kx-firecol { width:auto; min-width:104px; background:transparent; padding:0; gap:8px; }
   #tonight .kx-wrap { flex-wrap:wrap; }
+  #tonight .kx-fader.kx-h { width:280px; flex-direction:column; align-items:stretch; cursor:ew-resize; }
+  #tonight .kx-fader.kx-h .kx-track { width:auto; height:14px; margin:8px 20px; } #tonight .kx-fader.kx-h .kx-fill { right:auto; top:0; bottom:0; }
+  #tonight .kx-fader.kx-h .kx-cap { top:-6px; width:40px; height:26px; left:0; bottom:auto; }
+  #tonight .kx-hand { flex-basis:100%; color:var(--tn-dim); font:400 14px 'Bricolage Grotesque', system-ui, sans-serif; display:flex; flex-direction:column; gap:10px; }
+  #tonight .kx-hand .unit { display:flex; align-items:center; gap:10px; } #tonight .kx-hand .t { color:var(--tn-dim); font:600 13px 'Bricolage Grotesque', system-ui, sans-serif; }
+  #tonight .kx-hand input.deckinput { background:#0e161c; color:var(--tn-ink); border:1px solid var(--tn-grid); border-radius:10px; padding:8px 12px; font:500 15px 'Bricolage Grotesque', system-ui, sans-serif; width:130px; }
+  #tonight .kx-hand #decklanes button { background:#0e161c; color:var(--tn-dim); border:1px solid var(--tn-grid); border-radius:12px; padding:9px 14px; min-height:40px; font:600 13px 'Bricolage Grotesque', system-ui, sans-serif; cursor:pointer; }
+  #tonight .kx-hand #decklanes button[aria-pressed="true"] { border-color:var(--tn-b); color:var(--tn-b); }
+  #tonight .kx-hand .t { text-transform:none; letter-spacing:0; }
   #tonight .kx-strip .kx-step { width:60px; }
   #tonight .kx-key { position:absolute; top:4px; right:6px; font:600 10px/1 'Bricolage Grotesque', system-ui, sans-serif; font-style:normal; color:var(--tn-dim); border:1px solid #33454f; border-radius:4px; padding:2px 4px; }
   #tonight .kx-btn { position:relative; }
@@ -11248,17 +11257,18 @@ function kitDrag(host, m, span, onchange) {
   const off = () => host.classList.contains("kx-off");           // a value with nothing behind it takes no gesture
   const back = () => { if (m.reset) m.reset(); else onchange(kitSnap(m, m.def())); };   // a hold is released, not set to a number
   const fine = e => e.shiftKey || pts.size > 1;
+  const X = () => host.dataset.axis === "x", at = e => (X() ? e.clientX : e.clientY);   // a crossfader is dragged along its track, up and right are more
   host.addEventListener("pointerdown", e => {
     if (e.button > 0 || off()) return;
-    host.setPointerCapture(e.pointerId); pts.set(e.pointerId, e.clientY);
-    base = (m.get() - m.min) / (m.max - m.min); y0 = e.clientY; host._fine = fine(e); host.classList.add("kx-on"); e.preventDefault(); host.focus({ preventScroll: true });
+    host.setPointerCapture(e.pointerId); pts.set(e.pointerId, at(e));
+    base = (m.get() - m.min) / (m.max - m.min); y0 = at(e); host._fine = fine(e); host.classList.add("kx-on"); e.preventDefault(); host.focus({ preventScroll: true });
   });
   host.addEventListener("pointermove", e => {
     if (!pts.has(e.pointerId)) return;
-    const dy = y0 - e.clientY, k = fine(e) ? 0.2 : 1;
+    const dy = X() ? at(e) - y0 : y0 - at(e), k = fine(e) ? 0.2 : 1;
     const n = kitClamp01(base + dy / span * k);
     // re-anchor when fine mode toggles, so the value does not jump
-    if (host._fine !== fine(e)) { host._fine = fine(e); base = (m.get() - m.min) / (m.max - m.min); y0 = e.clientY; return; }
+    if (host._fine !== fine(e)) { host._fine = fine(e); base = (m.get() - m.min) / (m.max - m.min); y0 = at(e); return; }
     onchange(kitSnap(m, m.min + n * (m.max - m.min)));
   });
   const up = e => { pts.delete(e.pointerId); if (!pts.size) host.classList.remove("kx-on"); };
@@ -11286,11 +11296,13 @@ function kitFader(c) {
   el.tabIndex = 0; el.setAttribute("role", "slider"); el.setAttribute("aria-label", c.label);
   el.setAttribute("aria-valuemin", m.min); el.setAttribute("aria-valuemax", m.max);
   track.append(fill, cap); el.append(val_, track, lab); if (c.tone) el.dataset.tone = c.tone;
-  kitDrag(el, m, 150, v => { m.set(v); w.draw(); });
+  if (c.horizontal) { el.dataset.axis = "x"; el.classList.add("kx-h"); }
+  kitDrag(el, m, c.horizontal ? 220 : 150, v => { m.set(v); w.draw(); });
   const w = kitReg({ el, model: m, last: NaN, draw() {
     const v = m.get(); if (v === this.last && !c.dead && !c.held && !c.off) return; this.last = v;
     const n = kitClamp01((v - m.min) / (m.max - m.min));
-    fill.style.height = (n * 100) + "%"; cap.style.bottom = `calc(${n * 100}% - 9px)`;
+    if (c.horizontal) { fill.style.width = (n * 100) + "%"; cap.style.left = `calc(${n * 100}% - 20px)`; }
+    else { fill.style.height = (n * 100) + "%"; cap.style.bottom = `calc(${n * 100}% - 9px)`; }
     val_.textContent = c.fmt ? c.fmt(v) : v.toFixed(2); el.setAttribute("aria-valuenow", v);
     kitDead(el, c);
   } }, c);
@@ -11604,6 +11616,23 @@ function buildLaneBank() {
   kitBank("lane", "LANE", cols);
 }
 
+// THE DECK BANK: what the hand does to the decks and the transport — auto, the master mute, release all, the crossfader (along
+// its track), load and unload B. The deck-B seed field, the lane hand-over pads and the two status lines are the drawer's own
+// elements, MOVED here with their ids (their wiring is by id), not copied.
+function buildDeckBank() {
+  const grp = (name, nodes) => { const g = kitEl("div", "kx-group"); g.append(kitEl("div", "kx-gname", name)); const r = kitEl("div", "kx-grow kx-wrap"); r.append(...nodes); g.append(r); return g; };
+  const auto = kitButton({ kind: "latched", label: "auto", key: "u", tone: "arc", get: () => autoOn, set: v => setAuto(v), title: "the schedule runs the arrangement; off, it is yours" });
+  const mute = kitButton({ kind: "latched", label: "mute", key: "m", tone: "mute", get: () => muted, set: v => { if (v !== muted) ui("mute").click(); }, title: "the transport runs, nothing reaches the output" });
+  const rel = kitButton({ kind: "fired", label: "release all", tone: "rel", disabled: () => ui("releaseall").disabled, fire: () => ui("releaseall").click(), title: "every hold and gesture back under the schedule" });
+  const xf = kitFader({ id: "deckxf", horizontal: true, label: "A \u25c2 \u25b8 B", tone: "arc", step: 1, def: () => 0, fmt: v => (v <= 0 ? "A" : v >= 100 ? "B" : Math.round(v) + "%"), title: "equal-power crossfade between the decks; double-click puts it back on A" });
+  const load = kitButton({ kind: "fired", label: "load B", tone: "b", fire: () => ui("deckload").click(), title: "build deck B from the seed beside it" });
+  const unload = kitButton({ kind: "fired", label: "unload B", tone: "b", fire: () => ui("deckunload").click(), title: "drop deck B" });
+  const hand = kitEl("div", "kx-hand");
+  const seedBox = ui("deckseed").closest(".unit"); hand.append(seedBox);
+  const lanes = ui("decklanes"), ltitle = kitEl("div", "kx-note2", "lanes \u2014 a lane belongs to one deck; a press hands it to the other"); hand.append(ltitle, lanes, ui("deckstatus"), ui("djstatus"));
+  kitBank("deck", "DECK", [grp("HAND", [auto.el, mute.el, rel.el]), grp("CROSSFADE", [xf.el, load.el, unload.el])], panel => panel.appendChild(hand));
+}
+
 // THE HOLD BANK: gestures that last as long as the hand does. ECHO THROW opens one lane's echo send (to THROW_LEVEL) while held;
 // FREEZE latches the echo's loop so its tail sustains itself; the ISOLATOR kills a band of a deck (low under 250 Hz, mid,
 // high over 2.5 kHz) while held. Release gives each back. Every one is on a key, shown on the pad.
@@ -11761,6 +11790,7 @@ window.p02 = {
          fireAll: () => deckEngines().map(e => { const f = e.composition().fire; return f && f.active ? f.active.kind : null; }),
          fires: () => ({ pending: FIRES.pending.macro && FIRES.pending.macro.kind, events: FIRES.events.map(e => ({ kind: e.kind, at: e.at, bars: e.bars, micro: e.micro })) }),
          bar: () => Math.floor(T.step / 16),
+         deck: () => ({ xf: DECK.xf, a: DECK.mixA ? DECK.mixA.gain.value : null, b: DECK.mixB ? DECK.mixB.gain.value : null, pending: !!DECK.pending, loaded: !!DECK.b, muted, master: DECK.master ? DECK.master.gain.value : null, auto: autoOn }),
          landedAll: (p, ch) => deckEngines().map(e => { const C = e.composition(); return C ? resolvedOf(C, p, ch) : null; }),
          landedVerb: (p, ch) => { const C = engine && engine.composition(); return C ? (C.held && C.held[p] ? { v: resolvedOf(C, p, ch), held: C.held[p][ch] === true } : { v: resolvedOf(C, p, ch), held: false }) : null; },
          sends: ch => deckEngines().map(e => e.A.chan[ch] ? e.A.chan[ch].dlySend.gain.value : null), fb: () => deckEngines().map(e => e.A.pp.fb.gain.value),
@@ -12043,6 +12073,7 @@ buildSpaceBank();
 buildFireBank();
 buildKeyBank();
 buildHoldBank();
+buildDeckBank();
 buildRides();
 wireRides();
 buildSections();
