@@ -31,7 +31,11 @@ import { fileURLToPath } from 'node:url';
 import { dirname, join } from 'node:path';
 
 const ROOT = join(dirname(fileURLToPath(import.meta.url)), '..', '..');
-const PAGE = join(ROOT, 'public', 'dub', 'index.html');
+// `--page v2` tests the prototype's fork instead of the instrument. The two
+// are separate files on purpose (workshop #84), so each is tested on its own.
+const PAGE = process.argv.includes('--page') && process.argv[process.argv.indexOf('--page') + 1] === 'v2'
+  ? join(ROOT, 'v2', 'index.html')
+  : join(ROOT, 'public', 'dub', 'index.html');
 const PROVE_RED = process.argv.includes('--prove-red');
 const PROVE_RED_DRAW = process.argv.includes('--prove-red-draw');
 
@@ -112,6 +116,9 @@ const exported = [
   'RIDE_RHYTHM', 'rhythmWaypoint', 'rhythmAt', 'rotateMix',
   'RIDE_MELODY', 'MELODY_OFFSET', 'melodyOffsets', 'melodyAt', 'melodyApply',
   'transposeDegrees', 'degreeOf',
+  // #87 — the profile set and its neighbourhood (v2 only carries all seven)
+  'PROFILE_DEFS', 'profileForSeed',
+  ...(region.includes('const PROFILE_GRAPH') ? ['PROFILE_GRAPH'] : []),
 ];
 const L = new Function(`${region}\n; return { ${exported.join(', ')} };`)();
 ok(typeof L.compositionAt === 'function', 'the region evaluates and exports the layer');
@@ -1206,7 +1213,11 @@ for (let i = 0; i < LEADS; i++) {
   if (longestRest < longestRun) answerBad++;
 }
 
-ok(withLead > LEADS / 4 && withLead < LEADS,
+// v2 carries seven profiles, three of them nearly leadless by their own contract
+// (hypnotic avoids a lead outright), so its base rate is lower; the bound there
+// still says "a draw, not a fixture" and no longer pretends five profiles.
+const LEAD_FLOOR = PAGE.includes('v2') ? LEADS / 8 : LEADS / 4;
+ok(withLead > LEAD_FLOOR && withLead < LEADS,
    'a lead is a draw and not a fixture — some pieces have one and some do not',
    `${withLead} of ${LEADS} seeds drew a lead`);
 ok(regBad === 0, 'L-LEAD-REG: the lead sits at least 3 semitones above the stab, every seed',
@@ -1750,6 +1761,52 @@ group('the ride');
       ok(touched.every(k => L.VOX[k] !== undefined),
          'a jump touches voice fields only — it cannot empty a channel', touched.join(', '));
     }
+  }
+}
+
+/* -- 9. the profile set and its neighbourhood (#87) ---------------------
+   The instrument (public/dub) has five profiles and no graph; the prototype
+   (v2) has seven and one. Each page is held to what it declares.  */
+group('the profile set');
+{
+  const defs = L.PROFILE_DEFS, ids = defs.map(d => d.id);
+  ok(new Set(ids).size === ids.length, 'profile ids are unique', ids.join(' '));
+  ok(defs.every(d => Array.isArray(d.energy) && d.energy.length === 3
+      && d.energy.every(x => x >= 0 && x <= 1)
+      && d.energy[0] <= d.energy[2] && d.energy[2] <= d.energy[1]),
+     'every profile has an energy [floor, ceiling, home] on 0..1 with home between');
+  // every profile is reachable, and every profile draws a piece the contract accepts
+  const seen = {};
+  for (let seed = 1; seed <= 600; seed++) {
+    const id = L.profileForSeed(seed).def.id;
+    (seen[id] = seen[id] || []).push(seed);
+  }
+  ok(ids.every(id => (seen[id] || []).length >= 20), 'every profile is drawn by a share of seeds',
+     ids.map(id => `${id}:${(seen[id] || []).length}`).join(' '));
+  const bad = [];
+  for (const id of ids) for (const seed of (seen[id] || []).slice(0, 25)) {
+    const pc = L.draw(seed), q = L.quiz(pc, L.CONTRACT);
+    if (pc.profile.id !== id || q.length || pc.violations.length)
+      bad.push(`${id}@${seed}:${q.map(v => v.fence).concat(pc.violations.map(v => v.fence || v)).join('+') || 'wrong profile'}`);
+  }
+  ok(bad.length === 0, 'every profile draws pieces the contract accepts', bad.slice(0, 4).join(' '));
+  if (L.PROFILE_GRAPH) {
+    const G = L.PROFILE_GRAPH;
+    ok(JSON.stringify(Object.keys(G).sort()) === JSON.stringify([...ids].sort()), 'the graph has exactly the profiles as nodes');
+    ok(ids.every(a => G[a].every(b => G[b].includes(a))), 'every edge has its reverse');
+    ok(ids.every(a => !G[a].includes(a)), 'no profile is its own neighbour');
+    const reach = new Set([ids[0]]), q = [ids[0]];
+    while (q.length) for (const n of G[q.shift()]) if (!reach.has(n)) { reach.add(n); q.push(n); }
+    ok(reach.size === ids.length, 'the graph is connected');
+    ok(ids.every(a => G[a].length >= 2), 'no profile hangs by a single edge', ids.filter(a => G[a].length < 2).join(' '));
+    // the point of seven: the fast band is one real hop from the slow band, not adjacent to all of it
+    const hops = (a, b) => { const d = { [a]: 0 }, qq = [a]; while (qq.length) { const x = qq.shift(); for (const n of G[x]) if (d[n] === undefined) { d[n] = d[x] + 1; qq.push(n); } } return d[b]; };
+    ok(hops('sparse-sub', 'hypnotic') >= 2 && hops('ambient', 'rolling-909') >= 2, 'a walk between the tempo bands takes at least two hops');
+    // no edge spans the whole energy range: a step is never the set's full swing
+    const home = id => defs.find(d => d.id === id).energy[2];
+    const gaps = []; for (const a of ids) for (const b of G[a]) if (a < b) gaps.push(Math.abs(home(a) - home(b)));
+    const spread = Math.max(...ids.map(home)) - Math.min(...ids.map(home));
+    ok(gaps.every(e => e < spread), 'no edge spans the whole energy range', `largest ${Math.max(...gaps).toFixed(2)} of ${spread.toFixed(2)}`);
   }
 }
 
