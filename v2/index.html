@@ -650,11 +650,11 @@
   #tonight .tn-btn { flex:none; border:2px solid var(--tn-ink); background:transparent; color:var(--tn-ink); border-radius:40px;
     font:600 18px 'Bricolage Grotesque', system-ui, sans-serif; padding:13px 24px; cursor:pointer; }
   #tonight .tn-btn:hover { background:rgba(233,228,212,.1); }
-  #tonight .tn-btn:focus-visible, #bench > summary:focus-visible { outline:3px solid var(--tn-b); outline-offset:3px; }
+  #tonight .tn-btn:focus-visible { outline:3px solid var(--tn-b); outline-offset:3px; }
   #tonight svg { display:block; width:100%; height:auto; margin:6px 0 18px; overflow:visible; }
   #tonight .tn-now { transition:transform .9s linear; }
   #tonight .tn-decks { display:grid; grid-template-columns:1fr 1fr; gap:20px; }
-  #tonight .tn-deck { background:var(--tn-panel); border-radius:20px; padding:20px 22px 22px; min-height:190px; position:relative; }
+  #tonight .tn-deck { background:var(--tn-panel); border-radius:20px; padding:20px 22px 22px; min-height:226px; position:relative; }
   #tonight .tn-deck h3 { font:800 27px/1.1 'Bricolage Grotesque', system-ui, sans-serif; margin:0; }
   #tonight .tn-deck p { font:400 16px/1.4 'Bricolage Grotesque', system-ui, sans-serif; color:var(--tn-dim); margin:6px 0 0; }
   #tonight .tn-lanes { display:grid; grid-template-columns:repeat(8,1fr); gap:7px; margin-top:22px; }
@@ -667,7 +667,7 @@
   #tonight .tn-lanes button.mute::after { content:"M"; position:absolute; top:6px; right:8px; font-weight:800; }
   #tonight .tn-lanes button.solo::after { content:"S"; position:absolute; top:6px; right:8px; font-weight:800; color:#101820; background:var(--tn-ink); border-radius:8px; padding:0 5px; }
   #tonight .tn-lanes button.quiet { opacity:.35; }
-  #tonight .tn-ctl { display:grid; grid-template-columns:auto 1fr 1fr; gap:14px 28px; align-items:end; margin:0 0 20px; }
+  #tonight .tn-ctl { display:flex; gap:14px 34px; align-items:flex-end; flex-wrap:wrap; margin:0 0 20px; }
   #tonight .tn-chip { border:2px solid var(--tn-ink); background:transparent; color:var(--tn-ink); border-radius:30px; padding:10px 20px; cursor:pointer;
     font:600 16px 'Bricolage Grotesque', system-ui, sans-serif; }
   #tonight .tn-chip:hover:not(:disabled) { background:rgba(233,228,212,.1); }
@@ -679,13 +679,83 @@
   #tonight .tn-s input { width:100%; accent-color:var(--tn-ink); margin:0; }
   #tonight .tn-deck .tn-s { margin-top:16px; }
   #tonight #tn_dA .tn-s input { accent-color:var(--tn-a); } #tonight #tn_dB .tn-s input { accent-color:var(--tn-b); }
+  /* THE WIDGET KIT (7e). One look per kind of value; the tone says whose it is. */
+  #tonight .kx { --kx:var(--tn-ink); user-select:none; -webkit-user-select:none; touch-action:none; outline:none; cursor:ns-resize; text-align:center; }
+  #tonight .kx[data-tone="a"] { --kx:var(--tn-a); } #tonight .kx[data-tone="b"] { --kx:var(--tn-b); } #tonight .kx[data-tone="arc"] { --kx:var(--tn-ink); } #tonight .kx[data-tone="out"] { --kx:#c9d6d8; }
+  #tonight .kx:focus-visible { outline:3px solid var(--tn-b); outline-offset:3px; border-radius:12px; }
+  #tonight .kx-lab { font:600 13px/1.2 'Bricolage Grotesque', system-ui, sans-serif; color:var(--tn-dim); letter-spacing:.02em; margin-top:4px; }
+  #tonight .kx-val { display:block; font:500 14px/1.2 'Bricolage Grotesque', system-ui, sans-serif; color:var(--tn-ink); font-variant-numeric:tabular-nums; min-height:17px; }
+  #tonight .kx-enc { width:76px; padding:2px 0; }
+  #tonight .kx-enc svg { width:64px; height:64px; display:block; margin:0 auto; overflow:visible; }
+  #tonight .kx-arc0 { fill:none; stroke:#22303a; stroke-width:5; stroke-linecap:round; }
+  #tonight .kx-arc1 { fill:none; stroke:var(--kx); stroke-width:5; stroke-linecap:round; }
+  #tonight .kx-tick { stroke:var(--tn-ink); stroke-width:3; stroke-linecap:round; }
+  #tonight .kx-dflt { fill:#4b606a; }
+  #tonight .kx-on .kx-arc0 { stroke:#2c3d48; }
+  #tonight .kx-fader { width:56px; display:flex; flex-direction:column; align-items:center; }
+  #tonight .kx-fader .kx-track { position:relative; width:14px; height:150px; margin:6px 0 4px; border-radius:8px; background:#0e161c; box-shadow:inset 0 0 0 1px #22303a; }
+  #tonight .kx-fader .kx-fill { position:absolute; left:0; right:0; bottom:0; border-radius:8px; background:var(--kx); opacity:.55; }
+  #tonight .kx-fader .kx-cap { position:absolute; left:-13px; width:40px; height:18px; border-radius:6px; background:#dfe6e3; box-shadow:0 2px 0 #0b1116; border-bottom:3px solid var(--kx); }
+  #tonight .kx-fader.kx-on .kx-cap { background:#fff; }
+  #tonight .kx-step { width:76px; padding:2px 0; }
+  #tonight .kx-dots { display:flex; justify-content:center; gap:5px; margin:6px 0 2px; min-height:12px; }
+  #tonight .kx-dots i { width:9px; height:9px; border-radius:50%; background:#22303a; } #tonight .kx-dots i.on { background:var(--kx); }
+  #tonight .kx-btn { min-width:64px; min-height:48px; padding:8px 14px; border:2px solid var(--kx); border-radius:14px; background:transparent; color:var(--tn-ink); cursor:pointer; touch-action:manipulation; }
+  #tonight .kx-btn .kx-lab { margin:0; color:inherit; font-size:15px; }
+  #tonight .kx-btn:hover { background:rgba(233,228,212,.08); }
+  #tonight .kx-btn.kx-on, #tonight .kx-btn[aria-pressed="true"] { background:var(--kx); color:#101820; }
+  #tonight .kx-fired { position:relative; overflow:hidden; display:flex; flex-direction:column; justify-content:center; align-items:center; gap:2px; min-width:96px; min-height:60px; }
+  #tonight .kx-note { font:500 12px/1 'Bricolage Grotesque', system-ui, sans-serif; color:var(--tn-dim); min-height:12px; }
+  #tonight .kx-fired[data-state="wait"] { background:linear-gradient(90deg, rgba(230,180,80,.38) calc(var(--kx-p,0) * 100%), rgba(230,180,80,.08) 0); }
+  #tonight .kx-fired[data-state="on"] { background:var(--kx); color:#101820; } #tonight .kx-fired[data-state="on"] .kx-note { color:#101820; }
+  #tonight .kx-fired[data-state="landed"] { box-shadow:inset 0 0 0 2px var(--kx); }
+  #tonight .kx-btn[data-tone="land"] { --kx:#e6b450; } #tonight .kx-btn[data-tone="ret"] { --kx:#5fb7a8; } #tonight .kx-btn[data-tone="micro"] { --kx:#9fb0b4; } #tonight .kx-btn[data-tone="rel"] { --kx:#ff9a6c; }
+  #tonight .kx-btn:disabled { opacity:.35; cursor:default; }
+  #tonight .kx-firecol { width:auto; min-width:104px; background:transparent; padding:0; gap:8px; }
+  #tonight .kx-wrap { flex-wrap:wrap; }
+  #tonight .kx-strip.kx-firecol .kx-btn { width:104px; min-width:104px; min-height:60px; padding:8px 6px; }
+  #tonight .kx-firecol .kx-step { width:104px; }
+  #tonight .kx-dead { opacity:.4; }
+  #tonight .kx-off { cursor:default; opacity:.3; }
+  #tonight .kx-held { --kx:#ff9a6c; } #tonight .kx-held .kx-val { color:#ff9a6c; }
+  #tonight .kx[data-tone="echo"] { --kx:#7fb3d5; } #tonight .kx[data-tone="room"] { --kx:#b9a0d8; }
+  #tonight .kx-strip { display:flex; flex-direction:column; align-items:center; gap:10px; width:76px; padding:10px 0 12px; background:#131e26; border-radius:16px; }
+  #tonight .kx-name { font:700 13px/1 'Bricolage Grotesque', system-ui, sans-serif; letter-spacing:.06em; text-transform:uppercase; color:var(--tn-dim); }
+  #tonight .kx-strip .kx-btn { min-width:44px; width:44px; padding:6px 0; min-height:40px; }
+  #tonight .kx-btn[data-tone="mute"] { --kx:#e58a6f; } #tonight .kx-btn[data-tone="solo"] { --kx:#e6c84f; }
+  #tonight .kx-group { background:#131e26; border-radius:16px; padding:10px 16px 12px; }
+  #tonight .kx-gname { font:700 12px/1 'Bricolage Grotesque', system-ui, sans-serif; letter-spacing:.14em; color:var(--tn-dim); margin:0 0 10px; }
+  #tonight .kx-grow { display:flex; gap:14px; align-items:flex-end; }
+  #tonight .kx-sm { width:60px; } #tonight .kx-sm svg { width:46px; height:46px; }
+  #tonight .kx-console { margin-top:22px; border-top:1px solid #22303a; padding-top:14px; }
+  #tonight .kx-tabs { display:flex; gap:8px; margin-bottom:14px; flex-wrap:wrap; }
+  #tonight .kx-tab { border:0; background:#17232c; color:var(--tn-dim); border-radius:12px; padding:10px 20px; min-height:44px; font:700 15px 'Bricolage Grotesque', system-ui, sans-serif; letter-spacing:.06em; cursor:pointer; }
+  #tonight .kx-tab.kx-on { background:var(--tn-ink); color:#101820; }
+  #tonight .kx-tab:focus-visible { outline:3px solid var(--tn-b); outline-offset:2px; }
+  #tonight .kx-bank { display:flex; flex-wrap:wrap; gap:18px 22px; align-items:flex-end; }
+  #tonight .kx-bank[hidden] { display:none; }
+  #tonight .kx-bank:has(.kx-strip) { gap:10px; align-items:stretch; }
+  #tonight .tn-enc { display:flex; align-items:flex-end; gap:12px; } #tonight .tn-cap { color:var(--tn-dim); font:400 14px 'Bricolage Grotesque', system-ui, sans-serif; max-width:14ch; padding-bottom:22px; }
+  #tonight .tn-dfad { position:absolute; right:18px; top:14px; } #tonight .tn-dfad .kx-track { height:120px; }
+  #tonight .tn-deck .tn-lanes { margin-right:70px; }
+  #tonight .tn-piece { margin:18px 0 6px; display:flex; flex-direction:column; gap:10px; }
+  #tonight .seedbar, #tonight .morphbar { display:flex; align-items:center; gap:10px 14px; flex-wrap:wrap; margin:0; padding:0; border:0; color:var(--tn-dim); font:600 14px 'Bricolage Grotesque', system-ui, sans-serif; }
+  #tonight .seedbar label, #tonight .morphbar label { color:var(--tn-dim); }
+  #tonight .seedbar input[type=text] { width:150px; background:#0e161c; color:var(--tn-ink); border:1px solid var(--tn-grid); border-radius:10px; padding:9px 12px; font:500 15px 'Bricolage Grotesque', system-ui, sans-serif; }
+  #tonight .seedbar input[type=text]:focus { outline:3px solid var(--tn-b); outline-offset:2px; }
+  #tonight .seedbar .sm, #tonight .morphbar .sm { border:2px solid var(--tn-ink); background:transparent; color:var(--tn-ink); border-radius:24px; padding:8px 16px; min-height:40px; font:600 14px 'Bricolage Grotesque', system-ui, sans-serif; cursor:pointer; }
+  #tonight .seedbar .sm:hover, #tonight .morphbar .sm:hover { background:rgba(233,228,212,.1); }
+  #tonight .seedbar output, #tonight .morphbar output { color:var(--tn-ink); font-weight:400; min-width:0; }
+  #tonight .seedbar .note { color:var(--tn-dim); font-size:13px; max-width:46ch; }
+  #tonight .morphbar input[type=range] { accent-color:var(--tn-b); min-width:180px; }
+  #tonight .pincount { color:var(--tn-b); }
   #tonight .tn-legend { font:400 14px 'Bricolage Grotesque', system-ui, sans-serif; color:var(--tn-dim); margin:14px 2px 0; }
   @media (max-width: 760px) { #tonight { padding:22px 18px; } #tonight h2 { font-size:34px; } #tonight .tn-decks { grid-template-columns:1fr; } #tonight .tn-ctl { grid-template-columns:1fr; }
     #tonight .tn-head { flex-direction:column; } #tonight .tn-lanes button { font-size:11px; padding:6px; } }
   @media (prefers-reduced-motion: reduce) { #tonight .tn-now { transition:none; } }
-  details#bench > summary { cursor:pointer; padding:14px 2px; font:600 17px 'Bricolage Grotesque', system-ui, sans-serif; color:var(--dim); list-style:none; border-top:1px solid var(--dim); }
-  details#bench > summary::before { content:"+ "; }
-  details#bench[open] > summary::before { content:"− "; }
+  #bench { margin-top:26px; }
+  #bench .bench-h { font:600 17px 'Bricolage Grotesque', system-ui, sans-serif; color:var(--dim); margin:0 0 14px; padding:14px 2px 0; border-top:1px solid var(--dim); }
+  #bench .bench-h span { font-weight:400; font-size:14px; margin-left:10px; }
 </style>
 </head>
 <body>
@@ -713,22 +783,66 @@
       <div><h2 id="tn_title">Tonight</h2><p class="tn-sub" id="tn_sub"></p></div>
       <button id="djgo" class="tn-btn">start the night</button>
     </div>
+    <div class="tn-piece">
+  <div class="seedbar" id="piecebar">
+    <label for="seedin">seed</label>
+    <input id="seedin" type="text" inputmode="text" spellcheck="false"
+      title="A number or a word. A word is hashed the same way ?seed= hashes it, so `dub` here and ?seed=dub are the same piece — and a word is easier to say out loud than a 31-bit integer.">
+    <button id="seedgo" class="sm">take it</button>
+    <button id="seedroll" class="sm" title="a seed nobody chose: the next bar line brings a different piece">new track</button>
+    <output id="seedin_v"></output>
+    <!-- THE PINS, BESIDE THE ROLL THAT WILL NOT TAKE THEM AWAY [#51 §4.3].
+         A pin survives a new seed — the owner's "for ever" — so it survives a
+         reload and being sent to somebody too. A state that outlives every
+         roll with nothing on screen explaining it is a piece that stops
+         changing for no visible reason, which is why the count and the way
+         back out are both here and neither is behind a drawer. -->
+    <span class="pincount" id="pincount" hidden></span>
+    <button id="pinclear" class="sm" hidden>release pins</button>
+    <span class="note" id="piecenote">a new piece — same manifest, same genre, a different draw</span>
+  </div>
+  <div class="morphbar" id="morphbar">
+    <button id="tn_morphgo" class="sm" type="button" title="start the crossing into the next deterministic track, over the number of bars on the right">morph into new track</button>
+    <input id="morph" type="range" min="0" max="1" step="0.01" value="0"
+      aria-label="morph toward the next deterministic track">
+    <output id="morph_v">0% · current piece</output>
+    <label for="morphbars">over</label>
+    <input id="morphbars" type="range" min="32" max="512" step="16" value="128"
+      aria-label="morph length in bars">
+    <output id="morphbars_v">128 bars</output>
+  </div>
+    </div>
     <svg id="tn_arc" viewBox="0 0 1184 330" role="img" aria-label="the energy arc of the night: the tracks played, the one playing, and the ones the DJ has in mind"></svg>
     <div class="tn-ctl">
       <button id="tn_skip" class="tn-chip" type="button">next track now</button>
-      <label class="tn-s"><span>intensity <output id="tn_pv"></output></span><input id="tn_push" type="range" min="-0.2" max="0.2" step="0.01" value="0" aria-label="intensity: an offset on the night's energy arc, double-click to reset"></label>
-      <label class="tn-s"><span>master <output id="tn_mv"></output></span><input id="tn_master" type="range" min="0" max="1" step="0.01" value="0.8" aria-label="master volume"></label>
+      <div class="tn-enc"><div id="kx_push"></div><output id="tn_pv" class="tn-cap"></output></div>
+      <div class="tn-enc"><div id="kx_master"></div></div>
+    </div>
+    <div class="kx-model" hidden>
+      <input id="tn_push" type="range" min="-0.2" max="0.2" step="0.01" value="0" aria-label="intensity model">
+      <input id="tn_master" type="range" min="0" max="1" step="0.01" value="0.8" aria-label="master model">
+      <input id="tn_fA" type="range" min="0" max="1" step="0.01" value="1" aria-label="deck A level model">
+      <input id="tn_fB" type="range" min="0" max="1" step="0.01" value="1" aria-label="deck B level model">
+      <output id="tn_mv"></output><output id="tn_vA"></output><output id="tn_vB"></output>
     </div>
     <div class="tn-decks">
       <div class="tn-deck" id="tn_dA"><h3 id="tn_tA" style="color:var(--tn-a)"></h3><p id="tn_sA"></p><div class="tn-lanes" id="tn_lA"></div>
-        <label class="tn-s"><span>deck A level <output id="tn_vA"></output></span><input id="tn_fA" type="range" min="0" max="1" step="0.01" value="1" aria-label="deck A level"></label></div>
+        <div class="tn-dfad" id="kx_fA"></div></div>
       <div class="tn-deck" id="tn_dB"><h3 id="tn_tB" style="color:var(--tn-b)"></h3><p id="tn_sB"></p><div class="tn-lanes" id="tn_lB"></div>
-        <label class="tn-s"><span>deck B level <output id="tn_vB"></output></span><input id="tn_fB" type="range" min="0" max="1" step="0.01" value="1" aria-label="deck B level"></label></div>
+        <div class="tn-dfad" id="kx_fB"></div></div>
     </div>
     <p class="tn-legend">A pad mutes its lane, shift-click solos it. Muting and soloing hold across decks and across the handover.</p>
+    <div class="kx-console" id="console" aria-label="the console">
+      <div class="kx-tabs" id="kx_tabs" role="tablist"></div>
+      <div id="kx_banks"></div>
+    </div>
   </section>
 
-  <details id="bench"><summary>the bench — every hand on every lane</summary>
+  <!-- NO BENCH FOLDED UNDER THE PAGE (owner, 2026-09-25). What the console does not cover yet stays VISIBLE, in place,
+       until sprint 24 gives it a bank: KEY (pitch), the bar and seek, the station's density / tone / space pad / rides / pins /
+       sheet, the drawers (voices, movers, set, schedule, decks). The FIRE section is fully covered by the FIRE bank; its buttons
+       are that bank's model and stay in the page, out of sight. -->
+  <div id="bench"><h2 class="bench-h">the rest of the desk <span>not yet in the console</span></h2>
   <section id="pitch" aria-label="global pitch controls">
     <div class="pane-head"><b>PITCH</b>
       <span class="pane-note">key for the whole instrument · lands on the next bar</span></div>
@@ -761,7 +875,7 @@
     </div>
   </section>
 
-  <section id="fires" aria-label="fired gestures">
+  <section id="fires" aria-label="fired gestures" hidden style="display:none">
     <div class="fire-head"><b>FIRE</b><span id="firestate">nothing waiting</span></div>
     <div class="fire-macros">
       <div class="fire-unit"><button id="fire_drop" aria-pressed="false">drop · LAND</button><select id="firelen_drop" aria-label="drop length"></select></div>
@@ -830,33 +944,7 @@
        only one that needs no second generator. It is ABOVE the drawers and
        not inside one, because §5 keeps seed and roll on the play surface.
        =================================================================== -->
-  <div class="seedbar" id="piecebar">
-    <label for="seedin">seed</label>
-    <input id="seedin" type="text" inputmode="text" spellcheck="false"
-      title="A number or a word. A word is hashed the same way ?seed= hashes it, so `dub` here and ?seed=dub are the same piece — and a word is easier to say out loud than a 31-bit integer.">
-    <button id="seedgo" class="sm">take it</button>
-    <button id="seedroll" class="sm">roll</button>
-    <output id="seedin_v"></output>
-    <!-- THE PINS, BESIDE THE ROLL THAT WILL NOT TAKE THEM AWAY [#51 §4.3].
-         A pin survives a new seed — the owner's "for ever" — so it survives a
-         reload and being sent to somebody too. A state that outlives every
-         roll with nothing on screen explaining it is a piece that stops
-         changing for no visible reason, which is why the count and the way
-         back out are both here and neither is behind a drawer. -->
-    <span class="pincount" id="pincount" hidden></span>
-    <button id="pinclear" class="sm" hidden>release pins</button>
-    <span class="note" id="piecenote">a new piece — same manifest, same genre, a different draw</span>
-  </div>
-  <div class="morphbar" id="morphbar">
-    <label for="morph">morph</label>
-    <input id="morph" type="range" min="0" max="1" step="0.01" value="0"
-      aria-label="morph toward the next deterministic track">
-    <output id="morph_v">0% · current piece</output>
-    <label for="morphbars">over</label>
-    <input id="morphbars" type="range" min="32" max="512" step="16" value="128"
-      aria-label="morph length in bars">
-    <output id="morphbars_v">128 bars</output>
-  </div>
+
 
   <!-- ===================================================================
        THE DRAWERS. §5: what a hand reaches for while playing stays out; the
@@ -1130,7 +1218,7 @@
 
   </div>
 
-  </details>
+  </div>
 
   <!-- WHERE THE VOICES COME FROM is not printed either. Every source line and
        every input gain is still in `CHANNELS` and `INPUT_GAIN` below, which is
@@ -9104,7 +9192,7 @@ function wireFaders() {
   for (const c of CHANNELS) {
     const el = ui("fad" + c.ch);
     el.addEventListener("input", () => {
-      if (engine) engine.setLevel(c.ch, parseFloat(el.value));
+      for (const e of deckEngines()) e.setLevel(c.ch, parseFloat(el.value));   // a blend has two engines; the hand is on both
       paintFader(c.ch);
     });
     paintFader(c.ch);
@@ -9113,7 +9201,7 @@ function wireFaders() {
     for (const c of CHANNELS) {
       const v = FADER_START[c.ch];
       ui("fad" + c.ch).value = v;
-      if (engine) engine.setLevel(c.ch, v);
+      for (const e of deckEngines()) e.setLevel(c.ch, v);
       paintFader(c.ch);
     }
     say("faders back to the manifest.");
@@ -10240,25 +10328,27 @@ function setAuto(on) {
 }
 
 function wire() {
-  const bind = (id, key, scale) => ui(id).addEventListener("input", () => {
+  // `all` = a value of the HAND (replayed into every engine built mid-night), so during a blend it reaches
+  // both decks; the ones that follow the piece (pump, repeats) stay on the surface deck, whose piece they follow.
+  const bind = (id, key, scale, all) => ui(id).addEventListener("input", () => {
     if (!engine) return;
-    engine.set(key, scale ? scale(val(id)) : val(id));
+    for (const e of all ? deckEngines() : [engine]) e.set(key, scale ? scale(val(id)) : val(id));
   });
   ui("bpm").addEventListener("input", () => {
     T.bpm = val("bpm");
     if (engine) { engine.cfg.bpm = T.bpm; engine.set("bpm", T.bpm); }
   });
-  bind("vol", "master");
+  bind("vol", "master", null, true);
   bind("pump", "pump");
   bind("fbk", "dlyFbk");
-  bind("dlytrim", "dlyTrim");
-  bind("revtrim", "revTrim");
-  bind("moddepth", "modDepth");
-  bind("stabcut", "stabCut");
-  bind("bed", "bedTrim");
+  bind("dlytrim", "dlyTrim", null, true);
+  bind("revtrim", "revTrim", null, true);
+  bind("moddepth", "modDepth", null, true);
+  bind("stabcut", "stabCut", null, true);
+  bind("bed", "bedTrim", null, true);
   // THE VOICE TRIMS, THROUGH THE SAME ONE DOOR. The row's id and the engine's
   // key come from the same entry, so there is nothing here to keep in step.
-  for (const k of VOICE_KEYS) bind(VOICE_PARAMS[k].id, k);
+  for (const k of VOICE_KEYS) bind(VOICE_PARAMS[k].id, k, null, true);
   // THE MODULATOR TRIMS, THE SAME WAY. The row's id and the engine's key come
   // from one table, so there is nothing to keep in step. The readout is
   // repainted by hand rather than by `outputs()` because it is not a function
@@ -10340,6 +10430,7 @@ function wire() {
     takeSeed(String(v));
   });
   ui("morph").addEventListener("input", e => beginMorph(e.target.value));
+  ui("tn_morphgo").addEventListener("click", () => beginMorph(1));
   ui("morphbars").addEventListener("input", e => {
     MORPH.bars = clamp(parseInt(e.target.value, 10) || 128, MORPH_MIN_BARS, MORPH_MAX_BARS);
     paintMorph();
@@ -10940,6 +11031,7 @@ function tonightPaint() {
   const btn = ui("djgo");
   btn.textContent = !DJ.on ? "start the night" : DJ.closing ? "stop now" : "close the night";
   ui("tn_skip").disabled = !(DJ.on && !DJ.closing && DJ.phase === "play");
+  ui("tn_morphgo").disabled = DJ.on;
   // the sliders show the state, and never fight a hand that is on one
   const sync = (id, v, out, txt) => { const el = ui(id); if (document.activeElement !== el) el.value = String(v); ui(out).textContent = txt; };
   sync("tn_push", DJ.push, "tn_pv", DJ.push === 0 ? "as the arc says" : (DJ.push > 0 ? "+" : "−") + Math.abs(DJ.push).toFixed(2) + (DJ.push > 0 ? " · lifts the arc" : " · lowers the arc"));
@@ -10947,6 +11039,14 @@ function tonightPaint() {
   sync("tn_fA", DECK.trim.A, "tn_vA", DECK.trim.A.toFixed(2));
   sync("tn_fB", DECK.trim.B, "tn_vB", DECK.trim.B.toFixed(2));
 }
+// IN A NIGHT "NEW TRACK" IS THE DJ'S, NOT A SEED SWAPPED UNDER THE LIVE DECK: the roll button keeps its id and its wiring, and while a
+// night runs its press goes to the door the night has for it (next track now). Off a night it is the seed roll it always was.
+ui("seedroll").addEventListener("click", e => {
+  if (!DJ.on) return;
+  e.stopImmediatePropagation();
+  const k = ui("tn_skip");
+  if (!k.disabled) k.click(); else say("the DJ already has the next track on its way.");
+}, true);
 ui("tn_skip").addEventListener("click", () => { if (djSkip()) say("the DJ brings the next track forward: it enters at the next phrase."); TN.sig = ""; tonightPaint(); });
 ui("tn_push").addEventListener("input", () => { DJ.push = parseFloat(ui("tn_push").value); tonightPaint(); });
 ui("tn_push").addEventListener("dblclick", () => { DJ.push = 0; tonightPaint(); });
@@ -11020,6 +11120,297 @@ function stop() {
   ui("go").textContent = "start";
   uiQueue.length = 0;
   say("stopped.");
+}
+
+/* ---------------------------------------------------------------------------
+   7e. THE CONSOLE — the widget kit and its banks   (workshop #84, sprint 23)
+   ---------------------------------------------------------------------------
+   Owner, 2026-09-25: there is no "old page under the new one". What already
+   works is worked INTO the new surface. So a widget here is a FACE on a control
+   that already has a door: it reads and writes the existing <input> (same id,
+   same listeners, same `bind() -> engine.set`), and dispatches the same `input`
+   event a hand on the old slider did. The inputs are the model, the widget is
+   the view; nothing that hangs on those ids (the paint code, #51-#60, the
+   harnesses) moves. A control with no input (a mute, a fire) is given closures.
+   ONE WIDGET PER KIND OF VALUE, so the hand learns each once:
+     fader    vertical, long throw     levels
+     encoder  rotary, VERTICAL drag    tone, tune, amount   (up = more; wheel;
+                                       shift or a second finger = fine; double-
+                                       click or Backspace = the default)
+     stepped  detent knob              named steps (echo division, scale)
+     button   latched | fired | momentary
+   Circular drag is not used: on touch the finger hides the knob it turns.
+   A control that can do nothing right now says so (`dead()`), the way the old
+   desk did — a quiet control that looks alive is the fault this project refuses. */
+const KIT = { list: [], banks: {}, tab: "mix" };
+const kitEl = (tag, cls, txt) => { const e = document.createElement(tag); if (cls) e.className = cls; if (txt !== undefined) e.textContent = txt; return e; };
+const kitClamp01 = x => Math.max(0, Math.min(1, x));
+
+// resolve a config against an existing <input>, or against closures
+function kitModel(c) {
+  if (c.id) {
+    const el0 = ui(c.id), el = () => ui(c.id);       // looked up on every use: the input is the model, not a reference to it
+    const min = c.min !== undefined ? c.min : parseFloat(el0.min), max = c.max !== undefined ? c.max : parseFloat(el0.max);
+    const step = c.step !== undefined ? c.step : (parseFloat(el0.step) || (max - min) / 100);
+    return { min, max, step, reset: c.reset,
+      get: () => parseFloat(el().value),
+      set: v => { const e = el(); e.value = String(v); e.dispatchEvent(new Event("input", { bubbles: true }));
+        // a native slider raises `change` on release, not on every pixel; an input whose engine door listens for it
+        // (the room's size rebuilds an impulse response) gets it once the gesture has stopped
+        if (c.change) { clearTimeout(e._kxc); e._kxc = setTimeout(() => e.dispatchEvent(new Event("change", { bubbles: true })), 160); } },
+      def: c.def || (() => { const b = parseFloat(el().defaultValue); return isNaN(b) ? min : b; }) };
+  }
+  return { min: c.min, max: c.max, step: c.step || (c.max - c.min) / 100, get: c.get, set: c.set, reset: c.reset, def: c.def || (() => c.min) };
+}
+const kitSnap = (m, v) => { const s = Math.round((v - m.min) / m.step) * m.step + m.min; return +Math.max(m.min, Math.min(m.max, s)).toFixed(6); };
+
+// the shared drag: relative, vertical, fine on shift or a second finger. `span` = pixels for the whole range.
+function kitDrag(host, m, span, onchange) {
+  const pts = new Map(); let base = 0, y0 = 0;
+  const off = () => host.classList.contains("kx-off");           // a value with nothing behind it takes no gesture
+  const back = () => { if (m.reset) m.reset(); else onchange(kitSnap(m, m.def())); };   // a hold is released, not set to a number
+  const fine = e => e.shiftKey || pts.size > 1;
+  host.addEventListener("pointerdown", e => {
+    if (e.button > 0 || off()) return;
+    host.setPointerCapture(e.pointerId); pts.set(e.pointerId, e.clientY);
+    base = (m.get() - m.min) / (m.max - m.min); y0 = e.clientY; host._fine = fine(e); host.classList.add("kx-on"); e.preventDefault(); host.focus({ preventScroll: true });
+  });
+  host.addEventListener("pointermove", e => {
+    if (!pts.has(e.pointerId)) return;
+    const dy = y0 - e.clientY, k = fine(e) ? 0.2 : 1;
+    const n = kitClamp01(base + dy / span * k);
+    // re-anchor when fine mode toggles, so the value does not jump
+    if (host._fine !== fine(e)) { host._fine = fine(e); base = (m.get() - m.min) / (m.max - m.min); y0 = e.clientY; return; }
+    onchange(kitSnap(m, m.min + n * (m.max - m.min)));
+  });
+  const up = e => { pts.delete(e.pointerId); if (!pts.size) host.classList.remove("kx-on"); };
+  host.addEventListener("pointerup", up); host.addEventListener("pointercancel", up);
+  host.addEventListener("wheel", e => { e.preventDefault(); if (off()) return; const st = Math.max(m.step, (m.max - m.min) / 50) * (e.shiftKey ? 0.2 : 1);
+    onchange(kitSnap(m, m.get() + (e.deltaY < 0 ? st : -st))); }, { passive: false });
+  host.addEventListener("dblclick", () => { if (!off()) back(); });
+  host.addEventListener("keydown", e => {
+    if (off()) return;
+    const k = e.key, st = m.step * (e.shiftKey ? 10 : 1); let v = null;
+    if (k === "ArrowUp" || k === "ArrowRight") v = m.get() + st; else if (k === "ArrowDown" || k === "ArrowLeft") v = m.get() - st;
+    else if (k === "PageUp") v = m.get() + (m.max - m.min) / 10; else if (k === "PageDown") v = m.get() - (m.max - m.min) / 10;
+    else if (k === "Home") v = m.min; else if (k === "End") v = m.max; else if (k === "Backspace" || k === "Delete") { e.preventDefault(); back(); return; }
+    if (v !== null) { e.preventDefault(); onchange(kitSnap(m, v)); }
+  });
+}
+function kitReg(w, c) {
+  w.cfg = c; w.id = c.id || c.key; KIT.list.push(w);
+  if (c.title) w.el.title = c.title;
+  return w;
+}
+function kitFader(c) {
+  const m = kitModel(c), el = kitEl("div", "kx kx-fader"), val_ = kitEl("output", "kx-val"), track = kitEl("div", "kx-track"),
+        fill = kitEl("div", "kx-fill"), cap = kitEl("div", "kx-cap"), lab = kitEl("div", "kx-lab", c.label);
+  el.tabIndex = 0; el.setAttribute("role", "slider"); el.setAttribute("aria-label", c.label);
+  el.setAttribute("aria-valuemin", m.min); el.setAttribute("aria-valuemax", m.max);
+  track.append(fill, cap); el.append(val_, track, lab); if (c.tone) el.dataset.tone = c.tone;
+  kitDrag(el, m, 150, v => { m.set(v); w.draw(); });
+  const w = kitReg({ el, model: m, last: NaN, draw() {
+    const v = m.get(); if (v === this.last && !c.dead && !c.held && !c.off) return; this.last = v;
+    const n = kitClamp01((v - m.min) / (m.max - m.min));
+    fill.style.height = (n * 100) + "%"; cap.style.bottom = `calc(${n * 100}% - 9px)`;
+    val_.textContent = c.fmt ? c.fmt(v) : v.toFixed(2); el.setAttribute("aria-valuenow", v);
+    kitDead(el, c);
+  } }, c);
+  return w;
+}
+// what a face says beyond its value: dead (does nothing now, still answers), off (no gesture reaches anything), held (the hand owns it)
+const kitDead = (el, c) => {
+  const d = c.dead ? c.dead() : ""; el.classList.toggle("kx-dead", !!d); if (c.dead) el.title = d || c.title || "";
+  if (c.off) { const o = !!c.off(); el.classList.toggle("kx-off", o); el.setAttribute("aria-disabled", String(o)); }
+  if (c.held) el.classList.toggle("kx-held", !!c.held());
+};
+function kitEncoder(c) {
+  const m = kitModel(c), el = kitEl("div", "kx kx-enc" + (c.size ? " kx-" + c.size : "")), lab = kitEl("div", "kx-lab", c.label), val_ = kitEl("output", "kx-val");
+  const NS = "http://www.w3.org/2000/svg", svg = document.createElementNS(NS, "svg"); svg.setAttribute("viewBox", "0 0 64 64");
+  const R = 24, A0 = 135, SW = 270, pt = (a, r) => [32 + r * Math.cos(a * Math.PI / 180), 32 + r * Math.sin(a * Math.PI / 180)];
+  const arc = (a, b) => { const [x0, y0] = pt(a, R), [x1, y1] = pt(b, R); return `M${x0.toFixed(2)} ${y0.toFixed(2)} A${R} ${R} 0 ${b - a > 180 ? 1 : 0} 1 ${x1.toFixed(2)} ${y1.toFixed(2)}`; };
+  const back = document.createElementNS(NS, "path"), on = document.createElementNS(NS, "path"), tick = document.createElementNS(NS, "line"), dflt = document.createElementNS(NS, "circle");
+  back.setAttribute("d", arc(A0, A0 + SW)); back.setAttribute("class", "kx-arc0"); on.setAttribute("class", "kx-arc1"); tick.setAttribute("class", "kx-tick"); dflt.setAttribute("class", "kx-dflt"); dflt.setAttribute("r", "1.8");
+  svg.append(back, on, tick, dflt); el.append(svg, val_, lab);
+  el.tabIndex = 0; el.setAttribute("role", "slider"); el.setAttribute("aria-label", c.label); el.setAttribute("aria-valuemin", m.min); el.setAttribute("aria-valuemax", m.max);
+  if (c.tone) el.dataset.tone = c.tone;
+  kitDrag(el, m, 160, v => { m.set(v); w.draw(); });
+  const w = kitReg({ el, model: m, last: NaN, draw() {
+    const v = m.get(); if (v === this.last && !c.dead && !c.held && !c.off) return; this.last = v;
+    const n = kitClamp01((v - m.min) / (m.max - m.min)), a = A0 + n * SW;
+    on.setAttribute("d", n > 0.002 ? arc(A0, a) : ""); const [x0, y0] = pt(a, R - 9), [x1, y1] = pt(a, R + 3);
+    tick.setAttribute("x1", x0); tick.setAttribute("y1", y0); tick.setAttribute("x2", x1); tick.setAttribute("y2", y1);
+    const dn = kitClamp01((m.def() - m.min) / (m.max - m.min)), [dx, dy] = pt(A0 + dn * SW, R + 6); dflt.setAttribute("cx", dx); dflt.setAttribute("cy", dy);
+    val_.textContent = c.fmt ? c.fmt(v) : v.toFixed(2); el.setAttribute("aria-valuenow", v);
+    kitDead(el, c);
+  } }, c);
+  return w;
+}
+// named steps: a detent knob. Drag steps through the list, a click advances it. Range is the index.
+function kitStepped(c) {
+  const opts = c.options, idx = () => Math.max(0, opts.findIndex(o => c.get() === o.v)),
+        m = { min: 0, max: opts.length - 1, step: 1, get: idx, set: i => c.set(opts[Math.round(i)].v), def: () => Math.max(0, opts.findIndex(o => o.v === c.def())) };
+  const el = kitEl("div", "kx kx-step"), lab = kitEl("div", "kx-lab", c.label), val_ = kitEl("output", "kx-val"), dots = kitEl("div", "kx-dots");
+  opts.forEach(() => dots.appendChild(kitEl("i")));
+  el.append(val_, dots, lab); el.tabIndex = 0; el.setAttribute("role", "slider"); el.setAttribute("aria-label", c.label);
+  kitDrag(el, m, 24 * opts.length, i => { m.set(i); w.draw(); });
+  const w = kitReg({ el, model: m, last: NaN, draw() {
+    const i = idx(); if (i === this.last && !c.dead && !c.held && !c.off) return; this.last = i;
+    [...dots.children].forEach((d, k) => d.classList.toggle("on", k === i)); val_.textContent = opts[i].label;
+    el.setAttribute("aria-valuenow", i); el.setAttribute("aria-valuetext", opts[i].label); kitDead(el, c);
+  } }, c);
+  return w;
+}
+// button kinds: latched {get,set}, fired {fire, state?}, momentary {down, up}
+function kitButton(c) {
+  const el = kitEl("button", "kx kx-btn kx-" + c.kind), lab = kitEl("span", "kx-lab", c.label), note = kitEl("span", "kx-note"); el.type = "button"; el.append(lab, note);
+  if (c.tone) el.dataset.tone = c.tone;
+  if (c.kind === "momentary") {
+    let held = false; const rel = () => { if (held) { held = false; el.classList.remove("kx-on"); c.up(); } };
+    el.addEventListener("pointerdown", e => { if (held) return; held = true; el.setPointerCapture(e.pointerId); el.classList.add("kx-on"); c.down(); e.preventDefault(); });
+    el.addEventListener("pointerup", rel); el.addEventListener("pointercancel", rel); el.addEventListener("lostpointercapture", rel);
+    el.addEventListener("keydown", e => { if ((e.key === " " || e.key === "Enter") && !e.repeat && !held) { held = true; el.classList.add("kx-on"); c.down(); e.preventDefault(); } });
+    el.addEventListener("keyup", e => { if (e.key === " " || e.key === "Enter") rel(); });
+    el.addEventListener("blur", rel);
+  } else el.addEventListener("click", () => { if (el.classList.contains("kx-off")) return; if (c.kind === "latched") c.set(!c.get()); else c.fire(); w.draw(); });
+  const w = kitReg({ el, last: null, draw() {
+    if (c.kind === "latched") { const v = !!c.get(); el.setAttribute("aria-pressed", String(v)); el.classList.toggle("kx-on", v); }
+    if (c.disabled) el.disabled = !!c.disabled();
+    if (c.state) { const s = c.state(); if (s !== this.last) { this.last = s; el.dataset.state = s || ""; } }
+    if (c.note) { const n = c.note(); if (note.textContent !== n) note.textContent = n; }
+    if (c.prog) el.style.setProperty("--kx-p", String(c.prog()));
+    kitDead(el, c);
+  } }, c);
+  return w;
+}
+const kitSync = () => { for (const w of KIT.list) w.draw(); };
+setInterval(kitSync, 200);
+
+// banks: a tab per bank; only banks that exist are drawn. A bank is a container the widgets are appended to.
+function kitBank(key, title, widgets, extra) {
+  const host = ui("kx_banks"), tabs = ui("kx_tabs");
+  const tab = kitEl("button", "kx-tab", title); tab.type = "button"; tab.setAttribute("role", "tab"); tab.id = "kt_" + key;
+  const panel = kitEl("div", "kx-bank"); panel.id = "kb_" + key; panel.setAttribute("role", "tabpanel"); panel.setAttribute("aria-labelledby", tab.id);
+  for (const w of widgets) panel.appendChild(w.el || w);
+  if (extra) extra(panel);
+  tab.addEventListener("click", () => kitShow(key));
+  panel.hidden = !!KIT.shown;                       // only the shown bank is drawn; a later one starts hidden
+  tabs.appendChild(tab); host.appendChild(panel); KIT.banks[key] = { tab, panel };
+  if (!KIT.shown) kitShow(key);
+  return panel;
+}
+function kitShow(key) {
+  KIT.shown = key;
+  for (const [k, b] of Object.entries(KIT.banks)) { const on = k === key; b.panel.hidden = !on; b.tab.setAttribute("aria-selected", String(on)); b.tab.classList.toggle("kx-on", on); }
+  kitSync();
+}
+
+
+// THE MIX BANK: one column per strip — lane fader, M and S, echo send, room send. Every face sits on the input
+// the bench's strip sat on (fad<ch>, hs_delay_<ch>, hs_reverb_<ch>) and mute and solo go through the same two functions,
+// so nothing the harnesses hang on those ids moves. A send's reset RELEASES the hold (back under the schedule);
+// it is not a number. Built after buildChannels(): the inputs it sits on have to exist.
+function buildMixBank() {
+  const cols = [];
+  for (const c of CHANNELS) {
+    const ch = c.ch, gone = () => !!PIECE.empty[ch], col = kitEl("div", "kx-strip"), name = kitEl("div", "kx-name", c.voice);
+    const ws = [];
+    ws.push(kitFader({ id: "fad" + ch, label: "level", step: 0.005, def: () => FADER_START[ch], fmt: v => v.toFixed(2),
+      held: () => Math.abs(parseFloat(ui("fad" + ch).value) - FADER_START[ch]) > 1e-9, off: gone, dead: () => gone() ? "no material on this lane" : "",
+      title: c.voice + " level — double-click returns it to the manifest" }));
+    ws.push(kitButton({ kind: "latched", label: "M", tone: "mute", get: () => !!MIX.mutes[ch], set: v => setMute(ch, v), off: gone,
+      title: "mute " + c.voice + "; its fader stays where the hand left it" }));
+    ws.push(kitButton({ kind: "latched", label: "S", tone: "solo", get: () => MIX.solo === ch, set: () => setSolo(ch), off: gone,
+      title: "solo " + c.voice + "; press again for the whole mix" }));
+    for (const v of ["delay", "reverb"]) {
+      const none = () => ch === "R" || gone();
+      ws.push(kitEncoder({ id: "hs_" + v + "_" + ch, size: "sm", label: v === "delay" ? "echo" : "room", tone: v === "delay" ? "echo" : "room",
+        fmt: x => x.toFixed(2), off: none, held: () => !none() && hand.ask(v, ch) !== undefined,
+        dead: () => ch === "R" ? "the rumble is a reverb of its own: no send" : gone() ? "no material on this lane" : "",
+        reset: () => { if (!none()) { hand.release(v, ch); refreshHand(); } },
+        title: c.voice + (v === "delay" ? " echo send" : " room send") + " — double-click releases it back to the schedule" }));
+    }
+    col.append(name, ...ws.map(w => w.el));
+    cols.push(col);
+  }
+  kitBank("mix", "MIX", cols);
+}
+
+// THE SPACE BANK: echo, room, pump and the noise floor, over the drawer's inputs (dlydiv, fbk, dlytrim, revsize, revtrim,
+// pump, bed). Defaults and the "does nothing" refusals come from ROOM_UNITS / SET_UNITS, the descriptors the drawer
+// already reads, so there is one answer to "what did the manifest say" and one to "does this reach anything".
+function buildSpaceBank() {
+  const U = id => ROOM_UNITS.find(u => u.id === id) || SET_UNITS.find(u => u.id === id);
+  const dead = id => () => { const u = U(id); return u.dead ? u.dead(shownComposition()) : ""; };
+  const moved = (id, get) => () => Math.abs(get() - U(id).base()) > 1e-6;
+  const enc = (id, label, fmt, tone, title, extra) => kitEncoder(Object.assign({ id, label, fmt, tone, title,
+    def: () => U(id).base(), dead: dead(id), held: moved(id, () => parseFloat(ui(id).value)) }, extra));
+  const group = (name, ...ws) => { const g = kitEl("div", "kx-group"); g.append(kitEl("div", "kx-gname", name));
+    const row = kitEl("div", "kx-grow"); row.append(...ws.map(w => w.el)); g.append(row); return g; };
+  const div = kitStepped({ label: "division", tone: "echo",
+    options: [{ v: 0.25, label: "1/16" }, { v: 0.5, label: "1/8" }, { v: 0.75, label: "3/16" }, { v: 1, label: "1/4" }],
+    get: () => parseFloat(ui("dlydiv").value),
+    set: v => { const sel = ui("dlydiv"); sel.value = String(v); sel.dispatchEvent(new Event("change")); paintDrawers(shownComposition()); },
+    def: () => U("dlydiv").base(), dead: dead("dlydiv"), held: moved("dlydiv", () => parseFloat(ui("dlydiv").value)),
+    title: "echo division — named steps; double-click returns it to the manifest" });
+  kitBank("space", "SPACE", [
+    group("ECHO", div,
+      enc("fbk", "repeats", v => v.toFixed(2), "echo", "how many times the echo says it again"),
+      enc("dlytrim", "level", v => "\u00d7" + v.toFixed(2), "echo", "a master over every echo send on the desk")),
+    group("ROOM",
+      enc("revsize", "size", v => v.toFixed(1) + " s", "room", "how long the room takes to stop", { change: true }),
+      enc("revtrim", "level", v => "\u00d7" + v.toFixed(2), "room", "a master over every room send on the desk")),
+    group("BODY",
+      enc("pump", "pump", v => v.toFixed(2), "arc", "the kick ducks the mix — the manifest has none, so it starts at zero"),
+      enc("bed", "air", v => v === 0 ? "off" : "\u00d7" + v.toFixed(2), "out", "tape air — it never ducks with the kick"))
+  ]);
+}
+
+// THE FIRE BANK: the bench's fire buttons and length selects are the model. A press asks; the gesture STARTS ON THE NEXT
+// BAR LINE (promoteFires runs at step % 16 === 0), so a waiting button counts down to it — the fill is how far through the
+// bar the transport is. FIRES is one object shared by every engine, so a fire reaches both decks of a blend.
+function buildFireBank() {
+  const barFrac = () => (T.running ? (T.step % 16) / 16 : 0);
+  const stateOf = (id, kind) => () => {
+    const b = ui(id); if (!b) return "";
+    if (b.classList.contains("is-wait")) return "wait";
+    if (b.getAttribute("aria-pressed") === "true") return "on";
+    return b.classList.contains("is-landed") ? "landed" : "";
+  };
+  const noteOf = kind => () => {
+    const b = ui("fire_" + kind);
+    if (b.classList.contains("is-wait")) return "next bar";
+    const C = shownComposition(), a = C.fire && C.fire.active;
+    if (a && a.kind === kind) return `bar ${C.bar - a.at + 1}/${a.bars}`;
+    return b.classList.contains("is-landed") ? "landed" : "";
+  };
+  const macros = Object.keys(FIRE_MACROS).map(kind => {
+    const def = FIRE_MACROS[kind], sel = ui("firelen_" + kind), col = kitEl("div", "kx-strip kx-firecol");
+    const btn = kitButton({ kind: "fired", label: def.label, tone: def.end === "land" ? "land" : "ret", state: stateOf("fire_" + kind, kind), note: noteOf(kind), prog: barFrac,
+      fire: () => ui("fire_" + kind).click(),
+      title: def.label + (def.end === "land" ? " — the mix changes and stays changed" : " — the mix comes back") + "; starts on the next bar, press again to cancel" });
+    const opts = [...sel.options].map(o => ({ v: o.value, label: o.value }));
+    const len = kitStepped({ label: "bars", options: opts, get: () => sel.value, set: v => { sel.value = v; sel.dispatchEvent(new Event("input", { bubbles: true })); },
+      def: () => String(def.bars), title: def.label + " length in bars" });
+    col.append(btn.el, len.el); return col;
+  });
+  const micros = FIRE_MICROS.map(kind => kitButton({ kind: "fired", label: kind.replace("-", " "), tone: "micro", state: stateOf("fire_" + kind, kind), prog: barFrac,
+    note: () => (ui("fire_" + kind).classList.contains("is-wait") ? (kind === "turnaround" ? "phrase end" : "next bar") : ""),
+    fire: () => ui("fire_" + kind).click(), title: kind + " — one bar, on the next bar line" }).el);
+  const grp = (name, nodes) => { const g = kitEl("div", "kx-group"); g.append(kitEl("div", "kx-gname", name)); const r = kitEl("div", "kx-grow kx-wrap"); r.append(...nodes); g.append(r); return g; };
+  const rel = kitButton({ kind: "fired", label: "release all", tone: "rel", disabled: () => ui("releaseall").disabled, fire: () => ui("releaseall").click(),
+    title: "everything the hand holds and every gesture goes back under the schedule" });
+  kitBank("fire", "FIRE", [grp("BIG GESTURES", macros), grp("ONE BAR", micros), grp("BACK", [rel.el])]);
+}
+
+// the first faces: what Tonight already had as plain sliders, now as widgets over the same inputs
+{
+  const mount = (id, w) => ui(id).appendChild(w.el);
+  mount("kx_push", kitEncoder({ id: "tn_push", label: "intensity", tone: "arc", fmt: v => (v > 0 ? "+" : v < 0 ? "\u2212" : "") + Math.abs(v).toFixed(2), def: () => 0,
+    title: "an offset on the night's energy arc — double-click resets" }));
+  mount("kx_master", kitEncoder({ id: "tn_master", label: "master", tone: "out", fmt: v => v.toFixed(2), def: () => 0.8, title: "master volume" }));
+  mount("kx_fA", kitFader({ id: "tn_fA", label: "level", tone: "a", fmt: v => v.toFixed(2), def: () => 1, title: "deck A level" }));
+  mount("kx_fB", kitFader({ id: "tn_fB", label: "level", tone: "b", fmt: v => v.toFixed(2), def: () => 1, title: "deck B level" }));
 }
 
 /* ---------------------------------------------------------------------------
@@ -11146,6 +11537,16 @@ function window0(buf, from, len) {
 }
 
 window.p02 = {
+  kit: { ids: () => KIT.list.map(w => w.id), engineCfg: k => (engine ? engine.cfg[k] : null), all: () => deckEngines().map(e => e.cfg),
+         // what each engine holds for a lane, and what the hand holds: the harness reads these, never the widget
+         lane: ch => deckEngines().map(e => (e.A.chan[ch] ? e.A.chan[ch].fader : null)),
+         mutesAll: () => deckEngines().map(e => Object.keys(e.cfg.mutes || {}).join(",")),
+         fireAll: () => deckEngines().map(e => { const f = e.composition().fire; return f && f.active ? f.active.kind : null; }),
+         fires: () => ({ pending: FIRES.pending.macro && FIRES.pending.macro.kind, events: FIRES.events.map(e => ({ kind: e.kind, at: e.at, bars: e.bars, micro: e.micro })) }),
+         bar: () => Math.floor(T.step / 16),
+         base: id => (ROOM_UNITS.find(u => u.id === id) || SET_UNITS.find(u => u.id === id)).base(),
+         hold: (p, ch) => hand.ask(p, ch),
+         landed: (p, ch) => { const C = engine && engine.composition(); return C ? C.wet[ch][p] : null; } },
   tonight: { paint: () => { TN.sig = ""; tonightPaint(); }, pos: () => TN.pos, ahead: () => TN.ahead.map(a => ({ profile: a.profile, start: a.start })) },
   dj: { start: djStart, stop: djStop, close: djClose, skip: djSkip, budget: djBudget, planCloser: djPlanCloser,
         state: () => ({ on: DJ.on, closing: DJ.closing, fading: DJ.fading, night: DJ.night, n: DJ.n, live: DJ.live, phase: DJ.phase, cur: DJ.cur, plan: DJ.plan,
@@ -11410,6 +11811,9 @@ wireHand();
 wireSpacePads();
 wireFires();
 wireMix();
+buildMixBank();
+buildSpaceBank();
+buildFireBank();
 buildRides();
 wireRides();
 buildSections();
