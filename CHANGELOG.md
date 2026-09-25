@@ -10,7 +10,13 @@
   the lanes split the pair does.
 - **Two more profiles and a neighbourhood, on `/v2/` only:** `hypnotic` and
   `hypnagogic`, with hand-set neighbours and an energy home for all seven.
-- **`https://witzman.de/dub` is unchanged** apart from the bed level above.
+- **`https://witzman.de/dub` is unchanged** apart from the bed level below.
+
+## 2026-09-25 — the noise floor is 6 dB quieter
+
+- **The continuous bed now starts at half its level.** The owner heard it as
+  noise rather than air. The bed slider is unchanged and still reaches every
+  level; only its starting point moved (`BED_LEVEL` 0.07 → 0.035).
 
 ## 2026-09-25 — a stage for the successor, under /v2/ on Pages
 
