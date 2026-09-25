@@ -3,6 +3,8 @@
 <head>
 <meta charset="utf-8">
 <link rel="icon" href="data:,">
+<link rel="preconnect" href="https://fonts.googleapis.com"><link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Bricolage+Grotesque:opsz,wght@12..96,400;12..96,600;12..96,800&display=swap" rel="stylesheet">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>Dubsession v2</title>
 <style>
@@ -631,6 +633,41 @@
   @media (max-width: 560px) { #pitch .grid2 { grid-template-columns: 1fr; } }
   #perf { color: var(--dim); font-size: 12px; margin-top: 10px; }
   a { color: var(--hot); }
+
+  /* ---------------------------------------------------------------------------
+     TONIGHT — the night view (v2 only; workshop #84, sprint 22). Variant C of the
+     owner's pick of 2026-09-25: the energy arc of the whole night is the hero, the
+     decks and their lanes are small underneath. It has its OWN palette on purpose:
+     verdigris is deck A, brass is deck B, bone is the arc, and nothing here uses
+     the oxide/lacquer hues of the bench below it (--hot is the hand's and --time
+     is time's, and this view is neither). --------------------------------------- */
+  #tonight { --tn-bg:#101820; --tn-panel:#17232c; --tn-ink:#e9e4d4; --tn-dim:#9fb0b4; --tn-a:#5fb7a8; --tn-b:#e6b450; --tn-grid:#22303a;
+    background:var(--tn-bg); color:var(--tn-ink); border-radius:22px; padding:30px 34px 26px; margin:18px 0 22px;
+    font-family:'Bricolage Grotesque', system-ui, sans-serif; }
+  #tonight .tn-head { display:flex; justify-content:space-between; align-items:flex-start; gap:24px; }
+  #tonight h2 { font:800 46px/1 'Bricolage Grotesque', system-ui, sans-serif; letter-spacing:-.03em; margin:0; }
+  #tonight .tn-sub { font:400 17px/1.45 'Bricolage Grotesque', system-ui, sans-serif; color:var(--tn-dim); margin-top:9px; max-width:64ch; }
+  #tonight .tn-btn { flex:none; border:2px solid var(--tn-ink); background:transparent; color:var(--tn-ink); border-radius:40px;
+    font:600 18px 'Bricolage Grotesque', system-ui, sans-serif; padding:13px 24px; cursor:pointer; }
+  #tonight .tn-btn:hover { background:rgba(233,228,212,.1); }
+  #tonight .tn-btn:focus-visible, #bench > summary:focus-visible { outline:3px solid var(--tn-b); outline-offset:3px; }
+  #tonight svg { display:block; width:100%; height:auto; margin:6px 0 18px; overflow:visible; }
+  #tonight .tn-now { transition:transform .9s linear; }
+  #tonight .tn-decks { display:grid; grid-template-columns:1fr 1fr; gap:20px; }
+  #tonight .tn-deck { background:var(--tn-panel); border-radius:20px; padding:20px 22px 22px; min-height:190px; position:relative; }
+  #tonight .tn-deck h3 { font:800 27px/1.1 'Bricolage Grotesque', system-ui, sans-serif; margin:0; }
+  #tonight .tn-deck p { font:400 16px/1.4 'Bricolage Grotesque', system-ui, sans-serif; color:var(--tn-dim); margin:6px 0 0; }
+  #tonight .tn-lanes { display:grid; grid-template-columns:repeat(8,1fr); gap:7px; margin-top:22px; }
+  #tonight .tn-lanes div { height:54px; border-radius:13px; font:600 13px 'Bricolage Grotesque', system-ui, sans-serif;
+    display:flex; align-items:flex-end; padding:8px 9px; background:#0e161c; color:#4b606a; overflow:hidden; }
+  #tonight .tn-lanes div.own { color:#101820; }
+  #tonight .tn-lanes div.fade { color:#101820; }
+  @media (max-width: 760px) { #tonight { padding:22px 18px; } #tonight h2 { font-size:34px; } #tonight .tn-decks { grid-template-columns:1fr; }
+    #tonight .tn-head { flex-direction:column; } #tonight .tn-lanes div { font-size:11px; padding:6px; } }
+  @media (prefers-reduced-motion: reduce) { #tonight .tn-now { transition:none; } }
+  details#bench > summary { cursor:pointer; padding:14px 2px; font:600 17px 'Bricolage Grotesque', system-ui, sans-serif; color:var(--dim); list-style:none; border-top:1px solid var(--dim); }
+  details#bench > summary::before { content:"+ "; }
+  details#bench[open] > summary::before { content:"− "; }
 </style>
 </head>
 <body>
@@ -653,6 +690,19 @@
 
   <div id="status"></div>
 
+  <section id="tonight" aria-label="tonight: the night at a glance">
+    <div class="tn-head">
+      <div><h2 id="tn_title">Tonight</h2><p class="tn-sub" id="tn_sub"></p></div>
+      <button id="djgo" class="tn-btn">start the night</button>
+    </div>
+    <svg id="tn_arc" viewBox="0 0 1184 330" role="img" aria-label="the energy arc of the night: the tracks played, the one playing, and the ones the DJ has in mind"></svg>
+    <div class="tn-decks">
+      <div class="tn-deck" id="tn_dA"><h3 id="tn_tA" style="color:var(--tn-a)"></h3><p id="tn_sA"></p><div class="tn-lanes" id="tn_lA"></div></div>
+      <div class="tn-deck" id="tn_dB"><h3 id="tn_tB" style="color:var(--tn-b)"></h3><p id="tn_sB"></p><div class="tn-lanes" id="tn_lB"></div></div>
+    </div>
+  </section>
+
+  <details id="bench"><summary>the bench — every hand on every lane</summary>
   <section id="pitch" aria-label="global pitch controls">
     <div class="pane-head"><b>PITCH</b>
       <span class="pane-note">key for the whole instrument · lands on the next bar</span></div>
@@ -1048,12 +1098,13 @@
         <div id="decklanes" style="display:flex;flex-wrap:wrap;gap:6px;margin-top:6px"></div>
         <div id="deckstatus" class="t" style="margin-top:12px"></div>
         <div class="t" style="margin-top:18px">the night — the DJ plans the next track, builds it and hands the lanes over</div>
-        <div class="seekrow" style="margin-top:6px"><button id="djgo" class="sm">start the night</button></div>
         <div id="djstatus" class="t" style="margin-top:10px"></div>
       </div>
     </details>
 
   </div>
+
+  </details>
 
   <!-- WHERE THE VOICES COME FROM is not printed either. Every source line and
        every input gain is still in `CHANNELS` and `INPUT_GAIN` below, which is
@@ -10308,7 +10359,7 @@ const DECK_LANES = [0, 1, 2, 3, 4, 5, 6, 7];
 // THE NIGHT'S STATE. `cur` is the track that is live ({profile, bpm, start,
 // bars, seed}, start = the bar its own bar 0 sits on); `plan` is the spec for
 // the next one once it has been commissioned; `phase` is play / blend.
-const DJ = { closing: false, fading: false, on: false, night: 0, n: 0, live: "A", cur: null, plan: null, built: null, phase: "play",
+const DJ = { trail: [], closing: false, fading: false, on: false, night: 0, n: 0, live: "A", cur: null, plan: null, built: null, phase: "play",
              blendStart: 0, hand: [], bpmFrom: 0, retire: null, log: [], note: "" };
 const DECK = { b: null, pending: null, owner: { 0:"A", 1:"A", 2:"A", 3:"A", 4:"A", 5:"A", 6:"A", 7:"A" },
                xf: 0, master: null, mixA: null, mixB: null, buildMs: null, note: "",
@@ -10507,7 +10558,7 @@ function djStart() {
   if (DJ.on) return true;
   deckUnload();
   DJ.on = true; DJ.closing = false; DJ.fading = false; DJ.night = SEED | 0; DJ.n = 0; DJ.live = DECK.main; DJ.plan = null; DJ.built = null;
-  DJ.phase = "play"; DJ.retire = null; DJ.log = [];
+  DJ.phase = "play"; DJ.retire = null; DJ.log = []; DJ.trail = [];
   const bar = Math.floor(T.step / 16);
   DJ.cur = { profile: PIECE.profile.id, bpm: T.bpm, start: bar, bars: djTrackBars(DJ.night, 0), seed: PIECE.seed };
   deckXfade(0);
@@ -10654,6 +10705,7 @@ function djBlendBar(bar) {
   T.bpm = DJ.bpmFrom + (p.bpm - DJ.bpmFrom) * Math.min(1, (k + 1) / p.blend);
   if (k >= p.blend) {
     DJ.retire = { deck: DJ.live, at: bar + DJ_CFG.tailBars };
+    DJ.trail.push({ profile: DJ.cur.profile, start: DJ.cur.start, bars: DJ.cur.bars });
     DJ.live = incoming; DJ.n = p.n;
     djSwapMain();
     DJ.cur = { profile: p.profile, bpm: p.bpm, start: DJ.blendStart, bars: p.bars, seed: p.seed, closer: !!p.closer };
@@ -10685,7 +10737,152 @@ function djBar(bar) {
   if (ui("bpm")) ui("bpm").value = String(Math.round(T.bpm));
   djNote("");
 }
-ui("djgo").addEventListener("click", () => !DJ.on ? djStart() : DJ.closing ? djStop("stopped by hand") : djClose());
+ui("djgo").addEventListener("click", async () => {
+  if (DJ.on) { DJ.closing ? djStop("stopped by hand") : djClose(); return; }
+  if (!T.running) await start();            // one press does both: the transport, then the night
+  djStart();
+});
+
+/* ---------------------------------------------------------------------------
+   7d. TONIGHT — the night view, variant C (owner's pick, 2026-09-25)
+   ---------------------------------------------------------------------------
+   Read-only: it draws what the DJ, the decks and the transport already say and
+   changes nothing. THE ARC IS THE NIGHT'S OWN FUNCTION: the tracks ahead are not
+   a guess, they are `djPlan` chained from the live track (a plan is a function
+   of the night's seed), so what is dotted is what will be played unless a
+   composition fails and is retried. Before the night starts the same chain is
+   drawn from the piece that is loaded, on the seed `start the night` would use.
+   `tonightPaint` runs on a timer and returns at once unless something it draws
+   has changed, so it costs nothing between bars. */
+const TN = { sig: "", ahead: [], aheadKey: "" };
+const TN_LANES = ["kick", "rimshot", "clap", "hats", "lead", "sub", "stab", "pad"];
+const TN_COL = { A: "#5fb7a8", B: "#e6b450" };
+function tonightAhead(night, cur, n0) {
+  const closer = cur.closer, planKey = DJ.plan ? DJ.plan.seed + ":" + DJ.plan.start : "-";
+  const key = [night, n0, cur.profile, cur.start, cur.bars, DJ.closing ? 1 : 0, planKey].join("|");
+  if (key === TN.aheadKey) return TN.ahead;
+  const out = [];
+  if (DJ.closing) {
+    if (!closer) out.push(DJ.plan && DJ.plan.closer ? DJ.plan : djPlanCloser(night, n0 + 1, cur));
+  } else {
+    let c = cur;
+    for (let i = 1; i <= 4; i++) {
+      const p = (i === 1 && DJ.plan && !DJ.plan.closer) ? DJ.plan : djPlan(night, n0 + i, c);
+      out.push(p); c = { profile: p.profile, bpm: p.bpm, start: p.start, bars: p.bars };
+    }
+  }
+  TN.ahead = out; TN.aheadKey = key;
+  // where a close would take the arc, worked out once per track: it draws a piece
+  TN.low = DJ.closing ? (out[0] ? out[0].target : djHome(cur.profile)) : djHome(djPlanCloser(night, n0 + 1, cur).profile);
+  return out;
+}
+function tonightDeck(label, bar) {
+  const owned = DECK_LANES.filter(l => DECK.owner[l] === label).length + DECK_LANES.filter(l => DECK.fading[l] === label).length;
+  if (!DJ.on) return label === DECK.main
+    ? { title: "Deck " + label + " — " + PIECE.profile.id, sub: T.running ? "playing the loaded piece · seed " + PIECE.seed : "the loaded piece · seed " + PIECE.seed }
+    : { title: "Deck " + label, sub: (DECK.b || DECK.pending) ? "loaded by hand" : "idle" };
+  const c = DJ.cur, p = DJ.plan;
+  const incoming = DJ.phase === "blend" && label !== DJ.live;
+  if (label === DJ.live && DJ.phase === "play")
+    return { title: "Deck " + label + " — " + c.profile, sub: `${DJ.closing && c.closer ? "closing" : "live"} · bar ${Math.max(1, bar - c.start + 1)} of ${c.bars}` };
+  if (label === DJ.live) return { title: "Deck " + label + " — " + c.profile, sub: `leaving · bar ${Math.max(1, bar - c.start + 1)} of ${c.bars}` };
+  if (incoming && p) return { title: "Deck " + label + " — " + p.profile, sub: `arriving · bar ${Math.max(1, bar - DJ.blendStart + 1)} of ${p.bars}` };
+  if (DJ.retire && DJ.retire.deck === label) return { title: "Deck " + label, sub: "ringing out" };
+  if (p) return { title: "Deck " + label + " — " + p.profile, sub: `ready · enters at bar ${p.start}` };
+  return { title: "Deck " + label, sub: "waiting for the next track" };
+}
+function tonightPaint() {
+  const el = ui("tn_arc"); if (!el) return;
+  const night = DJ.on ? DJ.night : (SEED | 0);
+  const cur = DJ.on ? DJ.cur : { profile: PIECE.profile.id, bpm: T.bpm, start: 0, bars: djTrackBars(night, 0), closer: false };
+  const n0 = DJ.on ? DJ.n : 0;
+  const bar = DJ.on ? Math.floor(T.step / 16) : 0;
+  const own = DECK_LANES.map(l => DECK.owner[l] + (DECK.fading[l] || "")).join("");
+  const sig = [DJ.on, DJ.closing, DJ.phase, DJ.live, DECK.main, bar, own, DJ.plan ? DJ.plan.seed : 0, DJ.trail.length, T.running, PIECE.seed].join("|");
+  if (sig === TN.sig) return;
+  TN.sig = sig;
+  const ahead = tonightAhead(night, cur, n0);
+
+  // the sequence on the page: up to three played, the live one at slot 3, up to four ahead
+  const past = (DJ.on ? DJ.trail : []).slice(-3);
+  const seq = past.map(t => Object.assign({ kind: "past" }, t))
+    .concat([{ kind: "cur", profile: cur.profile, start: cur.start, bars: cur.bars, closer: cur.closer }])
+    .concat(ahead.map(a => ({ kind: "next", profile: a.profile, start: a.start, bars: a.bars, closer: a.closer, target: a.target })));
+  const slot0 = 3 - past.length, W = 1184, X0 = 56, X1 = W - 72, Y0 = 44, H = 236;
+  const homeOf = id => PROFILE_DEFS.find(q => q.id === id).energy[2];
+  const yOf = e => Y0 + (1 - (clamp(e, 0.15, 0.75) - 0.15) / 0.6) * H;
+  const xOfSlot = i => X0 + (slot0 + i) * (X1 - X0) / 7;
+  const pts = seq.map((t, i) => [xOfSlot(i), yOf(homeOf(t.profile))]);
+  const xOfBar = b => {                                   // piecewise linear over the track starts
+    if (b <= seq[0].start) return pts[0][0];
+    for (let i = 0; i < seq.length - 1; i++)
+      if (b < seq[i + 1].start) return pts[i][0] + (b - seq[i].start) / Math.max(1, seq[i + 1].start - seq[i].start) * (pts[i + 1][0] - pts[i][0]);
+    return pts[pts.length - 1][0];
+  };
+  let d = "M" + pts[0][0] + " " + pts[0][1];
+  for (let i = 1; i < pts.length; i++) { const a = pts[i - 1], b = pts[i], mx = (a[0] + b[0]) / 2; d += ` C${mx} ${a[1]} ${mx} ${b[1]} ${b[0]} ${b[1]}`; }
+  const nowX = xOfBar(DJ.on ? bar : cur.start);
+  let g = "";
+  [0.2, 0.4, 0.6].forEach(v => { g += `<line x1="${X0 - 20}" x2="${W - 30}" y1="${yOf(v)}" y2="${yOf(v)}" stroke="#22303a"/><text x="${X0 - 20}" y="${yOf(v) - 7}" fill="#6f8890" font-size="13">energy ${v.toFixed(1)}</text>`; });
+  // the night's own arc target, the function the walk follows
+  let ad = "";
+  const b0 = seq[0].start, b1 = seq[seq.length - 1].start;
+  for (let k = 0; k <= 60; k++) { const b = b0 + (b1 - b0) * k / 60; ad += (k ? "L" : "M") + xOfBar(b).toFixed(1) + " " + yOf(djArc(night, b)).toFixed(1); }
+  g += `<path d="${ad}" fill="none" stroke="#6f8890" stroke-width="1.5" stroke-dasharray="7 6" opacity=".7"/>`;
+  g += `<clipPath id="tn_past"><rect x="0" y="0" width="${nowX}" height="400"/></clipPath><clipPath id="tn_fut"><rect x="${nowX}" y="0" width="2000" height="400"/></clipPath>`;
+  g += `<path d="${d}" fill="none" stroke="#e9e4d4" stroke-width="5" stroke-linecap="round" clip-path="url(#tn_past)"/>`;
+  g += `<path d="${d}" fill="none" stroke="#e9e4d4" stroke-width="3" stroke-dasharray="2 9" stroke-linecap="round" clip-path="url(#tn_fut)" opacity=".75"/>`;
+  seq.forEach((t, i) => {
+    const played = t.kind !== "next", dy = (i % 2) ? 34 : -20;
+    g += `<circle cx="${pts[i][0]}" cy="${pts[i][1]}" r="${played ? 9 : 7}" fill="${played ? "#e9e4d4" : "#101820"}" stroke="#e9e4d4" stroke-width="3"/>`
+       + `<text x="${pts[i][0]}" y="${pts[i][1] + dy}" text-anchor="middle" fill="${played ? "#e9e4d4" : "#9fb0b4"}" font-size="17" font-weight="600">${t.closer ? t.profile + " · last" : t.profile}</text>`;
+  });
+  if (DJ.closing && seq.length) {                         // the end of the night, after the closer
+    const last = pts[pts.length - 1];
+    g += `<text x="${last[0] + 22}" y="${last[1] + 5}" fill="#9fb0b4" font-size="16" font-style="italic">then silence</text>`;
+  }
+  // where the night is now: a line, a brass point on the curve, and what is happening
+  const path = document.createElementNS("http://www.w3.org/2000/svg", "path"); path.setAttribute("d", d);
+  const tl = path.getTotalLength(); let best = 0, bd = 1e9;
+  for (let k = 0; k <= 240; k++) { const q = path.getPointAtLength(tl * k / 240), dd = Math.abs(q.x - nowX); if (dd < bd) { bd = dd; best = k; } }
+  const nowY = path.getPointAtLength(tl * best / 240).y;
+  const what = !DJ.on ? "not started" : DJ.phase === "blend" ? `now · ${cur.profile} → ${DJ.plan.profile}, ${DJ.plan.blend}-bar blend`
+             : DJ.closing && cur.closer ? "now · the last track" : `now · ${cur.profile}`;
+  g += `<g class="tn-now"><line x1="${nowX}" x2="${nowX}" y1="${Y0 - 30}" y2="${Y0 + H + 22}" stroke="#e6b450" stroke-width="2"/><circle cx="${nowX}" cy="${nowY}" r="12" fill="#e6b450"/>`
+     + `<text x="${nowX + 18}" y="${Y0 - 16}" fill="#e6b450" font-size="17" font-weight="600">${what}</text></g>`;
+  el.innerHTML = g;
+
+  // the words
+  const t = ui("tn_title"), sub = ui("tn_sub");
+  const key = KEY_NAMES[((KEY_HAND.root % 12) + 12) % 12] + " " + ui("keyscale").selectedOptions[0].text;
+  if (!DJ.on) {
+    t.textContent = "Tonight";
+    sub.textContent = T.running
+      ? `Nothing is planned yet. Press start the night and the DJ takes it from ${cur.profile}. The dotted line is what it would play.`
+      : `Press start the night. It starts the transport and the DJ takes it from ${cur.profile}. The dotted line is what it would play.`;
+  } else {
+    t.textContent = DJ.closing ? "Closing" : "Tonight";
+    const low = TN.low;
+    sub.textContent = `track ${DJ.n + 1} of an endless set · ${key} · ${Math.round(T.bpm)} bpm · `
+      + (DJ.closing ? `the arc falls to ${low.toFixed(2)} and stops` : `the arc would fall to ${low.toFixed(2)} if you closed now`);
+  }
+  for (const lab of ["A", "B"]) {
+    const dk = tonightDeck(lab, bar);
+    ui("tn_t" + lab).textContent = dk.title; ui("tn_s" + lab).textContent = dk.sub;
+    const host = ui("tn_l" + lab);
+    if (!host.children.length) TN_LANES.forEach(n => { const q = document.createElement("div"); q.textContent = n; host.appendChild(q); });
+    DECK_LANES.forEach(l => {
+      const q = host.children[l], mine = DECK.owner[l] === lab, fad = DECK.fading[l] === lab;
+      q.className = mine ? "own" : fad ? "fade" : "";
+      q.style.background = mine ? TN_COL[lab] : fad ? TN_COL[lab] : "";
+      q.style.opacity = fad ? ".55" : "";
+    });
+  }
+  const btn = ui("djgo");
+  btn.textContent = !DJ.on ? "start the night" : DJ.closing ? "stop now" : "close the night";
+}
+setInterval(tonightPaint, 400);
+tonightPaint();
 
 async function start() {
   if (T.running) { stop(); return; }
@@ -10872,6 +11069,7 @@ function window0(buf, from, len) {
 }
 
 window.p02 = {
+  tonight: { paint: () => { TN.sig = ""; tonightPaint(); }, ahead: () => TN.ahead.map(a => ({ profile: a.profile, start: a.start })) },
   dj: { start: djStart, stop: djStop, close: djClose, budget: djBudget, planCloser: djPlanCloser,
         state: () => ({ on: DJ.on, closing: DJ.closing, fading: DJ.fading, night: DJ.night, n: DJ.n, live: DJ.live, phase: DJ.phase, cur: DJ.cur, plan: DJ.plan,
           owner: Object.assign({}, DECK.owner), aOffset: DECK.aOffset,
