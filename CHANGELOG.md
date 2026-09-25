@@ -1,5 +1,18 @@
 # Changelog
 
+## 2026-09-25 — the night can be closed, on the prototype stage only
+
+- **"close the night" on `/v2/`.** Pressing it plans a closing track that steps
+  down the arc and never lifts the tempo, blends it in within a few bars, plays it,
+  fades the master over eight bars and stops. A second press ("stop now") stops
+  hard. If a blend is running, the closer waits for it to end.
+- **A line under the title names the live deck**, and says so when the sheet and
+  faders below belong to the silent one. They still do.
+- **Lanes now fade instead of cutting** when the DJ hands them over: two bars,
+  equal power, except the kick and sub, which still swap in one move. Up to ten
+  lanes are scheduled at once during a blend (eight before).
+- **`https://witzman.de/dub` is unchanged.**
+
 ## 2026-09-25 — the night runs itself, on the prototype stage only
 
 - **`/v2/` has a "start the night" button in the decks drawer.** The DJ plans the
