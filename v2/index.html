@@ -1,0 +1,121 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="robots" content="noindex, nofollow">
+<title>Dubsession v2 — the stage is wired, the instrument is not built</title>
+<!-- Inline, so the page makes no request it does not need: a 404 in the
+     console is noise that trains the next reader to ignore the console. -->
+<link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 16 16'%3E%3Crect width='16' height='16' fill='%230a0b0d'/%3E%3Crect x='3' y='6' width='2' height='7' fill='%23c8a45c'/%3E%3Crect x='7' y='3' width='2' height='10' fill='%23c8a45c'/%3E%3Crect x='11' y='8' width='2' height='5' fill='%23c8a45c'/%3E%3C/svg%3E">
+<style>
+  :root {
+    --bg: #0a0b0d;
+    --ink: #e8e6e1;
+    --dim: #6d7078;
+    --line: #1c1f24;
+    --acc: #c8a45c;
+    --live: #3f8f5a;
+  }
+  * { box-sizing: border-box; }
+  html, body { margin: 0; padding: 0; }
+  body {
+    background: var(--bg);
+    color: var(--ink);
+    font: 15px/1.65 ui-monospace, "SF Mono", Menlo, Consolas, monospace;
+    -webkit-font-smoothing: antialiased;
+    padding: 0 16px;
+  }
+  main { max-width: 62ch; margin: 0 auto; padding: 14vh 0 12vh; }
+  h1 {
+    font-size: clamp(22px, 4.2vw, 34px);
+    line-height: 1.15;
+    letter-spacing: -0.01em;
+    margin: 0 0 6px;
+    font-weight: 600;
+  }
+  .sub { color: var(--dim); margin: 0 0 40px; }
+  .badge {
+    display: inline-block;
+    border: 1px solid var(--line);
+    border-radius: 2px;
+    padding: 3px 9px;
+    font-size: 11px;
+    letter-spacing: 0.12em;
+    text-transform: uppercase;
+    color: var(--acc);
+    margin-bottom: 22px;
+  }
+  h2 {
+    font-size: 12px;
+    letter-spacing: 0.14em;
+    text-transform: uppercase;
+    color: var(--dim);
+    font-weight: 600;
+    margin: 38px 0 12px;
+    padding-top: 14px;
+    border-top: 1px solid var(--line);
+  }
+  ul { margin: 0; padding-left: 1.1em; }
+  li { margin: 7px 0; }
+  li::marker { color: var(--line); }
+  .done::marker { color: var(--live); }
+  strong { color: #fff; font-weight: 600; }
+  a { color: var(--acc); }
+  .note {
+    border-left: 2px solid var(--line);
+    padding-left: 14px;
+    color: var(--dim);
+    margin: 26px 0 0;
+  }
+  footer {
+    margin-top: 46px;
+    padding-top: 14px;
+    border-top: 1px solid var(--line);
+    color: var(--dim);
+    font-size: 13px;
+  }
+</style>
+</head>
+<body>
+<main>
+  <div class="badge">Prototype · not the deployed instrument</div>
+
+  <h1>Dubsession v2</h1>
+  <p class="sub">A generative dub-techno DJ. Two decks, drawn tracks, and a hand
+  on the stems while it runs.</p>
+
+  <p>This page is a placeholder. It exists so the stage is wired before anything
+  needs it — so that the first thing built can be played rather than described.
+  There is no audio here yet.</p>
+
+  <h2>What this will be</h2>
+  <ul>
+    <li>A continuous, autonomously generated dub-techno set that does not end</li>
+    <li>Two decks with a beatmatched, phrase-aligned crossfade between them</li>
+    <li>Track requests, inside the one genre</li>
+    <li><strong>Stem mixing</strong> — each lane of each deck moved on its own,
+        not just the two deck faders</li>
+    <li>Live sound design while the set runs: filter, echo, delay, reverb, bass,
+        drums — without interrupting generation, playback or the mix</li>
+  </ul>
+
+  <h2>Where it stands</h2>
+  <ul>
+    <li class="done">The reference DJ machinery is read and written down</li>
+    <li class="done">The architecture is drafted: two decks over one audio
+        context, the transition on two levels — symbolic and acoustic</li>
+    <li class="done">This stage</li>
+    <li>The decks</li>
+    <li>The DJ</li>
+    <li>The surface</li>
+  </ul>
+
+  <p class="note">The instrument that is finished and playable lives at
+  <a href="../">dubsession</a>. Nothing here replaces it, and the public
+  instrument does not change until that is decided separately.</p>
+
+  <footer>witzman.de/dub is the one deployed thing. This is not it.</footer>
+</main>
+</body>
+</html>

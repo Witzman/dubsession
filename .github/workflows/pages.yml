@@ -20,10 +20,26 @@ jobs:
         uses: actions/checkout@v4
       - name: Configure Pages
         uses: actions/configure-pages@v5
-      - name: Package the instrument as the site root
+      # THE SITE ROOT IS THE INSTRUMENT; `v2/` IS THE PROTOTYPE STAGE.
+      # `v2/` deliberately sits OUTSIDE `public/`, because the Dockerfile
+      # copies `public/` wholesale and the container must carry exactly one
+      # thing. Owner decision 2026-09-17: there is one deploy and it is
+      # https://witzman.de/dub. Pages is not that deploy — it is where the
+      # successor can be played before anyone decides whether it replaces
+      # anything.
+      - name: Assemble the site — the instrument at the root, the prototype under /v2/
+        run: |
+          set -e
+          rm -rf _site
+          mkdir -p _site
+          cp -R public/dub/. _site/
+          cp -R v2 _site/v2
+          test -f _site/index.html    || { echo "::error::the instrument is missing from the site root"; exit 1; }
+          test -f _site/v2/index.html || { echo "::error::the prototype stage is missing from /v2/"; exit 1; }
+      - name: Package the assembled site
         uses: actions/upload-pages-artifact@v4
         with:
-          path: public/dub
+          path: _site
 
   deploy:
     needs: build
