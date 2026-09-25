@@ -636,6 +636,7 @@
 <body>
 <main>
   <h1>dubsession playing <b>dub techno</b> · <span id="seedline">seed —</span></h1>
+  <p id="djlive" class="t" hidden style="margin:2px 0 14px"></p>
 
   <!-- THE TRANSPORT AND THE TWO SWITCHES THAT DECIDE WHO OWNS THE PIECE.
        `auto` is the ring; `release all` is the way back out of everything the
@@ -2291,6 +2292,7 @@ const DJ_CFG = {
   laneBudget: 8,        // lanes scheduled across BOTH decks at any bar (workshop #86)
   blend: { base: 20, floor: 12, perBpm: 2.5, patience: 1 },
   tempoStep: 3,         // the most the transport moves per track, in BPM
+  close: { bars: 48, fadeBars: 8 },   // the closing track's length, and the master fade at its end
   stay: 0.30,           // odds of playing on in the profile while it suits the arc
   pull: 0.15,           // ...and it stops suiting once the arc is this far from its home
   arc: { mid: 0.45, wide: 0.20, fast: 0.08, slowBars: 480, fastBars: 170, lo: 0.15, hi: 0.75 },
@@ -2371,6 +2373,24 @@ function djPlan(night, n, cur) {
   const blend = djBlendLen(Math.abs(bpm - cur.bpm), rem, DJ_CFG.blend.patience);
   return { n: n, profile: profile, seed: seed, target: target, bpm: bpm, blend: blend, bars: djTrackBars(night, n),
            start: at - blend };
+}
+
+// THE CLOSER (owner decision 2026-09-25: the night is endless with a close
+// button). The reference's rules, as far as this engine can say them: it goes
+// DOWN the arc (the lowest energy home among the current profile and its
+// neighbours: a step, never a jump), it NEVER LIFTS THE TEMPO, and the key is
+// the transport's one key, so it is the key the outgoing track mixes out of by
+// construction. A profile whose own tempo is above the clock does not raise
+// the clock: the style is relaxed, the tempo is not (dj-machinery, "Key and
+// tempo"; the closing plan).
+function djPlanCloser(night, n, cur) {
+  const ids = [cur.profile].concat(PROFILE_GRAPH[cur.profile]);
+  const profile = ids.reduce((a, b) => djHome(b) < djHome(a) ? b : a);
+  const seed = djSeedFor(profile, night, n, 0);
+  const bpm = Math.min(cur.bpm, djTempoNext(cur.bpm, draw(seed).tempo));
+  const blend = djBlendLen(Math.abs(bpm - cur.bpm), DJ_CFG.commissionBars - DJ_CFG.leadBars, DJ_CFG.blend.patience);
+  return { n: n, profile: profile, seed: seed, target: djHome(profile), bpm: bpm, blend: blend,
+           bars: DJ_CFG.close.bars, start: 0, closer: true };
 }
 
 // Which lane changes hands at which bar of the blend: [{at: bar offset, lanes}].
@@ -10262,7 +10282,7 @@ const DECK_LANES = [0, 1, 2, 3, 4, 5, 6, 7];
 // THE NIGHT'S STATE. `cur` is the track that is live ({profile, bpm, start,
 // bars, seed}, start = the bar its own bar 0 sits on); `plan` is the spec for
 // the next one once it has been commissioned; `phase` is play / blend.
-const DJ = { on: false, night: 0, n: 0, live: "A", cur: null, plan: null, built: null, phase: "play",
+const DJ = { closing: false, fading: false, on: false, night: 0, n: 0, live: "A", cur: null, plan: null, built: null, phase: "play",
              blendStart: 0, hand: [], bpmFrom: 0, retire: null, log: [], note: "" };
 const DECK = { b: null, pending: null, owner: { 0:"A", 1:"A", 2:"A", 3:"A", 4:"A", 5:"A", 6:"A", 7:"A" },
                xf: 0, master: null, mixA: null, mixB: null, buildMs: null, note: "",
@@ -10413,17 +10433,26 @@ function djNote(msg) {
   const el = ui("djstatus");
   if (!el) return;
   const c = DJ.cur, pl = DJ.plan;
+  // THE SURFACE IS DECK A'S. Say which deck is playing, and say so where the
+  // stale part is, rather than let the sheet below pass for the live piece.
+  const lv = ui("djlive");
+  if (lv) {
+    lv.hidden = !DJ.on;
+    if (DJ.on) lv.textContent = DJ.live === "A"
+      ? `the night: deck A is live — ${c.profile}, seed ${c.seed}${DJ.closing ? ", closing" : ""}`
+      : `the night: deck B is live — ${c.profile}, seed ${c.seed}${DJ.closing ? ", closing" : ""}. The sheet, faders and seed line below are deck A's, which is silent.`;
+  }
   el.textContent = !DJ.on ? msg
     : `night ${DJ.night} · track ${DJ.n}, ${c.profile} on ${DJ.live} since bar ${c.start}, ends bar ${c.start + c.bars}`
-      + ` · ${DJ.phase}${pl ? ` · next: ${pl.profile} (${pl.seed}), blend ${pl.blend} bars from bar ${pl.start}` : ""}`
+      + ` · ${DJ.closing ? "closing, " : ""}${DJ.phase}${pl ? ` · next: ${pl.profile} (${pl.seed}), blend ${pl.blend} bars from bar ${pl.start}` : ""}`
       + (msg ? " · " + msg : "");
-  ui("djgo").textContent = DJ.on ? "close the night" : "start the night";
+  ui("djgo").textContent = !DJ.on ? "start the night" : DJ.closing ? "stop now" : "close the night";
 }
 function djStart() {
   if (!T.running || !DECK.mixA) { djNote("press start first — the night needs a running transport."); return false; }
   if (DJ.on) return true;
   deckUnload();
-  DJ.on = true; DJ.night = SEED | 0; DJ.n = 0; DJ.live = "A"; DJ.plan = null; DJ.built = null;
+  DJ.on = true; DJ.closing = false; DJ.fading = false; DJ.night = SEED | 0; DJ.n = 0; DJ.live = "A"; DJ.plan = null; DJ.built = null;
   DJ.phase = "play"; DJ.retire = null; DJ.log = [];
   const bar = Math.floor(T.step / 16);
   DJ.cur = { profile: PIECE.profile.id, bpm: T.bpm, start: bar, bars: djTrackBars(DJ.night, 0), seed: PIECE.seed };
@@ -10434,8 +10463,13 @@ function djStart() {
 }
 function djStop(why) {
   if (!DJ.on) return;
+  const wasFading = DJ.fading;
   DJ.on = false; DJ.plan = null; DJ.built = null; DJ.phase = "play"; DJ.retire = null;
+  DJ.closing = false; DJ.fading = false;
   DECK.aOffset = 0;
+  // A faded-out master stays down: what still rings (hall, echo) must not come
+  // back up when the night ends. `start()` puts it back.
+  if (DECK.master && !wasFading) { DECK.master.gain.cancelScheduledValues(ctx.currentTime); DECK.master.gain.value = muted ? 0 : 1; }
   deckUnload();
   djLog("stop", { why: why });
   djNote(why ? "the night stopped: " + why : "");
@@ -10472,6 +10506,42 @@ function djCommission(bar) {
   djLog("commission", { n: plan.n, profile: plan.profile, seed: plan.seed, blend: plan.blend,
                         start: plan.start, bpm: plan.bpm, target: +plan.target.toFixed(3), ms: Math.round(DECK.buildMs) });
 }
+// The closer is commissioned the moment the button is pressed, and enters
+// `leadBars` later: waiting for the end of a 90-bar track would be a button
+// that does nothing for three minutes. The outgoing track's end moves to the
+// end of the blend, so nothing is left dangling after it.
+function djCommissionCloser(bar) {
+  const c = DJ.cur, incoming = DJ.live === "A" ? "B" : "A";
+  const plan = djPlanCloser(DJ.night, DJ.n + 1, c);
+  const t0 = performance.now();
+  const built = djCompose(plan, incoming);
+  if (!built) { c.bars += 16; djLog("abandon", { n: plan.n, profile: plan.profile, closer: true }); return; }
+  DECK.buildMs = performance.now() - t0;
+  plan.start = bar + DJ_CFG.leadBars;
+  c.bars = plan.start + plan.blend - c.start;
+  DJ.plan = plan; DJ.built = built;
+  djLog("commission", { n: plan.n, profile: plan.profile, seed: plan.seed, blend: plan.blend, start: plan.start,
+                        bpm: plan.bpm, closer: true });
+}
+function djClose() {
+  if (!DJ.on || DJ.closing) return;
+  DJ.closing = true;
+  // a commissioned-but-not-entered track is dropped: the closer replaces it
+  if (DJ.phase === "play" && DJ.plan) {
+    if (DJ.built && DJ.built.engine) { try { DJ.built.engine.tail.disconnect(); } catch (e) {} }
+    DJ.built = null; DJ.plan = null;
+  }
+  djLog("close");
+  djNote("");
+}
+function djFade(bar) {
+  DJ.fading = true;
+  const dur = DJ_CFG.close.fadeBars * 16 * 60 / T.bpm / 4, t = ctx.currentTime;
+  DECK.master.gain.cancelScheduledValues(t);
+  DECK.master.gain.setValueAtTime(DECK.master.gain.value, t);
+  DECK.master.gain.linearRampToValueAtTime(0, t + dur);
+  djLog("fade", { seconds: +dur.toFixed(1) });
+}
 function djEnterBlend(bar) {
   const p = DJ.plan, incoming = DJ.live === "A" ? "B" : "A";
   DJ.bpmFrom = T.bpm;                       // BEFORE the draw below: a new piece moves T.bpm to its own tempo
@@ -10499,7 +10569,7 @@ function djBlendBar(bar) {
   if (k >= p.blend) {
     DJ.retire = { deck: DJ.live, at: bar + DJ_CFG.tailBars };
     DJ.live = incoming; DJ.n = p.n;
-    DJ.cur = { profile: p.profile, bpm: p.bpm, start: DJ.blendStart, bars: p.bars, seed: p.seed };
+    DJ.cur = { profile: p.profile, bpm: p.bpm, start: DJ.blendStart, bars: p.bars, seed: p.seed, closer: !!p.closer };
     DJ.plan = null; DJ.phase = "play";
     djLog("live", { n: p.n, deck: incoming, profile: p.profile });
   }
@@ -10507,7 +10577,8 @@ function djBlendBar(bar) {
 function djBar(bar) {
   if (!DJ.on) return;
   const c = DJ.cur;
-  if (DJ.phase === "play" && !DJ.plan && bar >= c.start + c.bars - DJ_CFG.commissionBars) djCommission(bar);
+  if (DJ.closing && DJ.phase === "play" && !DJ.plan && !c.closer) djCommissionCloser(bar);
+  else if (!DJ.closing && DJ.phase === "play" && !DJ.plan && bar >= c.start + c.bars - DJ_CFG.commissionBars) djCommission(bar);
   if (DJ.phase === "play" && DJ.plan && bar >= DJ.plan.start) djEnterBlend(bar);
   if (DJ.phase === "blend") djBlendBar(bar);
   if (DJ.retire && bar >= DJ.retire.at) {
@@ -10515,12 +10586,17 @@ function djBar(bar) {
     djLog("retire", { deck: DJ.retire.deck });
     DJ.retire = null;
   }
+  if (DJ.cur.closer && DJ.phase === "play") {
+    const end = DJ.cur.start + DJ.cur.bars;
+    if (!DJ.fading && bar >= end - DJ_CFG.close.fadeBars) djFade(bar);
+    if (bar >= end) { say("the night is closed."); stop(); return; }
+  }
   // deck A's engine is not the transport's to follow by itself
   if (engine) { engine.cfg.bpm = T.bpm; engine.set("bpm", T.bpm); }
   if (ui("bpm")) ui("bpm").value = String(Math.round(T.bpm));
   djNote("");
 }
-ui("djgo").addEventListener("click", () => DJ.on ? djStop("closed by hand") : djStart());
+ui("djgo").addEventListener("click", () => !DJ.on ? djStart() : DJ.closing ? djStop("stopped by hand") : djClose());
 
 async function start() {
   if (T.running) { stop(); return; }
@@ -10565,6 +10641,7 @@ async function start() {
   }
   if (ctx.state !== "running") await ctx.resume();
   T.bpm = val("bpm");
+  if (DECK.master) { DECK.master.gain.cancelScheduledValues(ctx.currentTime); DECK.master.gain.value = muted ? 0 : 1; }
   T.step = parseInt(ui("seek").value, 10) * 16;   // start where the seek is set
   T.nextT = ctx.currentTime + 0.1;
   T.running = true;
@@ -10706,8 +10783,8 @@ function window0(buf, from, len) {
 }
 
 window.p02 = {
-  dj: { start: djStart, stop: djStop, budget: djBudget,
-        state: () => ({ on: DJ.on, night: DJ.night, n: DJ.n, live: DJ.live, phase: DJ.phase, cur: DJ.cur, plan: DJ.plan,
+  dj: { start: djStart, stop: djStop, close: djClose, budget: djBudget, planCloser: djPlanCloser,
+        state: () => ({ on: DJ.on, closing: DJ.closing, fading: DJ.fading, night: DJ.night, n: DJ.n, live: DJ.live, phase: DJ.phase, cur: DJ.cur, plan: DJ.plan,
           owner: Object.assign({}, DECK.owner), aOffset: DECK.aOffset, bpm: T.bpm, bar: Math.floor(T.step / 16),
           seed: SEED, log: DJ.log.slice() }),
         cfg: DJ_CFG, arc: djArc, walk: djWalk, seedFor: djSeedFor, blendLen: djBlendLen, plan: djPlan,
