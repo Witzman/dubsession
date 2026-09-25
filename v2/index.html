@@ -5948,27 +5948,32 @@ function createEngine(ctx, opts) {
   A.revWet = ctx.createGain(); A.revWet.gain.value = 0.28;
   A.revLp = ctx.createBiquadFilter(); A.revLp.type = "lowpass";
   A.revLp.frequency.value = 3100; A.revLp.Q.value = 0.5;
-  /* THE REDUCED DECK (workshop #86/#84). `opts.singleHall` builds ONE hall.
-     Measured 2026-09-25: two full decks do not keep up, and the three
-     convolvers are ~38% of a deck. The second hall is what makes a size change
-     free of a cut, and a deck that never changes size does not need it — the
-     incoming deck of a crossfade is exactly that. The room stays PER DECK (the
-     owner's call on sharing one is still open); only the spare goes. */
-  A.halls = (opts.singleHall ? [0] : [0, 1]).map(() => {
+  /* THE REDUCED DECK (workshop #86/#84). `opts.halls` is how many halls this
+     deck builds: 2 (the default, and what the instrument has), 1, or 0.
+     Measured 2026-09-25: two full decks do not keep up, and the halls are
+     almost all of the convolver cost. The second hall is what makes a size
+     change free of a cut, and a deck that never changes size does not need
+     it — the incoming deck of a crossfade is exactly that. The room stays PER
+     DECK (whether to share one is the owner's call and is still open); a deck
+     with 0 halls has no room of its own and its sends go nowhere. */
+  const HALLS = opts.halls === undefined ? 2 : opts.halls;
+  A.halls = [0, 1].slice(0, HALLS).map(() => {
     const conv = ctx.createConvolver();
     const g = ctx.createGain();
     A.revIn.connect(conv); conv.connect(g); g.connect(A.revWet);
     return { conv: conv, gain: g };
   });
   A.hall = 0;                                   // which one is sounding
-  A.halls[0].conv.buffer = makeImpulse(cfg.revSeconds, 2.2);
-  A.halls[0].gain.gain.value = 1;
+  if (A.halls[0]) {
+    A.halls[0].conv.buffer = makeImpulse(cfg.revSeconds, 2.2);
+    A.halls[0].gain.gain.value = 1;
+  }
   if (A.halls[1]) {
     A.halls[1].conv.buffer = makeImpulse(cfg.revSeconds, 2.2);
     A.halls[1].gain.gain.value = 0;
   }
   // `A.rev` stays as a name so nothing that reads it has to know there are two
-  A.rev = A.halls[0].conv;
+  A.rev = A.halls[0] ? A.halls[0].conv : null;
   A.revWet.connect(A.revLp);
   A.revLp.connect(A.pump);
 
@@ -5979,6 +5984,7 @@ function createEngine(ctx, opts) {
   const REV_XFADE = 0.25;
   function swapHall(seconds, t) {
     // a single-hall deck has no idle hall to build into: it takes the cut
+    if (A.halls.length === 0) return;
     if (A.halls.length === 1) { A.halls[0].conv.buffer = makeImpulse(seconds, 2.2); return; }
     const from = A.halls[A.hall], to = A.halls[A.hall ^ 1];
     to.conv.buffer = makeImpulse(seconds, 2.2);   // silent node: nothing to cut
@@ -6082,7 +6088,9 @@ function createEngine(ctx, opts) {
   A.rHp = ctx.createBiquadFilter(); A.rHp.type = "highpass"; A.rHp.frequency.value = 32;  A.rHp.Q.value = 0.7;
   A.rLp = ctx.createBiquadFilter(); A.rLp.type = "lowpass";  A.rLp.frequency.value = 120; A.rLp.Q.value = 0.7;
   A.rOut = ctx.createGain(); A.rOut.gain.value = capOf();
-  A.rIn.connect(A.rConv); A.rConv.connect(rSatIn); rSatIn.connect(A.rSat);
+  // `opts.rumble === false`: the reduced deck leaves the rumble's convolver out of the graph
+  if (opts.rumble !== false) A.rIn.connect(A.rConv);
+  A.rConv.connect(rSatIn); rSatIn.connect(A.rSat);
   A.rSat.connect(A.rHp); A.rHp.connect(A.rLp); A.rLp.connect(A.rOut);
   A.rOut.connect(A.pump);        // [E] :8235 — "also rides the deck's kick-pump"
 
