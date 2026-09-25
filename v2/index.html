@@ -10312,12 +10312,17 @@ const DJ = { closing: false, fading: false, on: false, night: 0, n: 0, live: "A"
              blendStart: 0, hand: [], bpmFrom: 0, retire: null, log: [], note: "" };
 const DECK = { b: null, pending: null, owner: { 0:"A", 1:"A", 2:"A", 3:"A", 4:"A", 5:"A", 6:"A", 7:"A" },
                xf: 0, master: null, mixA: null, mixB: null, buildMs: null, note: "",
-               // where deck A's piece has its bar 0, on the shared step count: 0 until the DJ hands A a new piece
-               aOffset: 0,
+               // THE SURFACE DECK: the label ("A" or "B") of the deck the page's `engine` and PIECE are,
+               // and `aOffset` is where ITS piece has its bar 0 on the shared step count. The DJ
+               // re-points both when a blend completes (djSwapMain), so the sheet, the faders and
+               // the seed line are always the live deck's. The labels are identities of engines
+               // (the gate each was built with), not roles.
+               main: "A", aOffset: 0,
                // lane -> the deck still playing it out while a fade hands it over, and the bar it stops
                fading: {}, fadeEnd: {} };
-// the rumble follows the kick, the bed is deck A's
-const laneOwnerOf = k => k === "R" ? DECK.owner[0] : k === "N" ? "A" : DECK.owner[k];
+// the rumble follows the kick, the bed is the surface deck's
+const laneOwnerOf = k => k === "R" ? DECK.owner[0] : k === "N" ? DECK.main : DECK.owner[k];
+const otherLabel = l => l === "A" ? "B" : "A";
 const gateFor = which => k => laneOwnerOf(k) === which || DECK.fading[k] === which;
 
 function deckWire() {
@@ -10333,13 +10338,31 @@ function deckXfade(x) {
   // the DJ crosses lane by lane, so the decks' sums stay at unity: a lane is
   // on one deck or the other and nothing is faded twice
   if (DJ.on) { DECK.mixA.gain.setTargetAtTime(1, t, 0.02); DECK.mixB.gain.setTargetAtTime(1, t, 0.02); return; }
-  DECK.mixA.gain.setTargetAtTime(Math.cos(x * Math.PI / 2), t, 0.02);
-  DECK.mixB.gain.setTargetAtTime(Math.sin(x * Math.PI / 2), t, 0.02);
+  // the crossfader runs surface deck -> the other one, whichever label each has
+  const mixMain = DECK["mix" + DECK.main], mixOther = DECK["mix" + otherLabel(DECK.main)];
+  mixMain.gain.setTargetAtTime(Math.cos(x * Math.PI / 2), t, 0.02);
+  mixOther.gain.setTargetAtTime(Math.sin(x * Math.PI / 2), t, 0.02);
 }
 // Building an engine is main-thread work (two impulse responses, the noise
 // bank), so it happens on the button and not inside the scheduler's tick; the
 // bar line only PROMOTES it. The time it took is shown, not assumed.
-function deckBuild(seed) {
+// The hand's controls that belong to the HAND and not to a piece: what a deck
+// built mid-night must start with, or the swap that makes it the surface deck
+// would be the moment the mix jumped. The controls that follow the piece (pump,
+// echo feedback, room, echo division) are settled by `rebuild` at the swap.
+function replayHandOnly(eng) {
+  if (MIX.solo !== null) eng.set("solo", MIX.solo);
+  eng.set("master", val("vol"));
+  eng.set("stabCut", val("stabcut"));
+  eng.set("bedTrim", val("bed"));
+  eng.set("modDepth", val("moddepth"));
+  eng.set("dlyTrim", val("dlytrim"));
+  eng.set("revTrim", val("revtrim"));
+  for (const k of VOICE_KEYS) eng.set(k, val(VOICE_PARAMS[k].id));
+  for (const r of MOD_ROWS) eng.set(r.key, val(r.id));
+  for (const c of CHANNELS) eng.setLevel(c.ch, parseFloat(ui("fad" + c.ch).value));
+}
+function deckBuild(seed, label) {
   const prev = PIECE;
   let piece;
   try { piece = draw(seed); }
@@ -10350,17 +10373,20 @@ function deckBuild(seed) {
     eng = createEngine(ctx, { seed: seed, movement: MOVEMENT, auto: false,
                               keyRoot: KEY_HAND.root, keyScale: KEY_HAND.scale,
                               transpose: PITCH_HAND.transpose, semi: PITCH_HAND.semi,
-                              gate: gateFor("B") });
+                              // the hand's own objects, by reference, as deck A's engine has them:
+                              // a deck that becomes the surface deck must answer to the same hand
+                              holds: HOLDS, fires: FIRES, mutes: MIX.mutes,
+                              gate: gateFor(label) });
+    replayHandOnly(eng);
   } finally { usePiece(prev); }
-  eng.tail.connect(DECK.mixB);
-  eng.set("master", val("vol"));
-  return { engine: eng, piece: piece, seed: seed };
+  eng.tail.connect(DECK["mix" + label]);
+  return { engine: eng, piece: piece, seed: seed, label: label };
 }
 function deckLoad(seed) {
   if (!ctx) { deckNote("press start first — there is no audio context yet."); return false; }
   deckUnload();
   const t0 = performance.now();
-  DECK.pending = deckBuild(seed);
+  DECK.pending = deckBuild(seed, otherLabel(DECK.main));
   DECK.buildMs = performance.now() - t0;
   deckXfade(0.5);
   ui("deckxf").value = "50";
@@ -10371,7 +10397,7 @@ function deckUnload() {
   const d = DECK.b || DECK.pending;
   if (d) { try { d.engine.tail.disconnect(); } catch (e) {} }
   DECK.b = null; DECK.pending = null;
-  for (const c of DECK_LANES) DECK.owner[c] = "A";
+  for (const c of DECK_LANES) DECK.owner[c] = DECK.main;
   DECK.fading = {}; DECK.fadeEnd = {};
   deckXfade(0); if (ui("deckxf")) ui("deckxf").value = "0";
   deckNote(""); paintDeckLanes();
@@ -10391,14 +10417,15 @@ function deckStep(step, when, stepDur) {
   finally { usePiece(keep); }
 }
 function deckHand(ch) {
-  DECK.owner[ch] = DECK.owner[ch] === "A" ? "B" : "A";
+  DECK.owner[ch] = DECK.owner[ch] === DECK.main ? otherLabel(DECK.main) : DECK.main;
   paintDeckLanes();
 }
 function deckNote(msg) {
   DECK.note = msg;
   const b = DECK.b || DECK.pending;
-  ui("mv_decks").textContent = DECK.b ? "B playing" : DECK.pending ? "B queued" : "B not loaded";
-  ui("deckstatus").textContent = (b ? `deck B — seed ${b.seed}, ${b.piece.profile.name}, built in ${DECK.buildMs.toFixed(0)} ms. ` : "") + msg;
+  const ol = otherLabel(DECK.main);
+  ui("mv_decks").textContent = DECK.b ? ol + " playing" : DECK.pending ? ol + " queued" : ol + " not loaded";
+  ui("deckstatus").textContent = (b ? `deck ${b.label || otherLabel(DECK.main)} — seed ${b.seed}, ${b.piece.profile.name}, built in ${DECK.buildMs.toFixed(0)} ms. ` : "") + msg;
 }
 function paintDeckLanes() {
   const host = ui("decklanes");
@@ -10412,8 +10439,8 @@ function paintDeckLanes() {
     b.addEventListener("click", () => deckHand(ch));
     host.appendChild(b);
   }
-  const n = DECK_LANES.filter(c => DECK.owner[c] === "B").length;
-  ui("decksum").textContent = (DECK.b || DECK.pending) ? `${8 - n} on A, ${n} on B` : "";
+  const n = DECK_LANES.filter(c => DECK.owner[c] !== DECK.main).length;
+  ui("decksum").textContent = (DECK.b || DECK.pending) ? `${8 - n} on ${DECK.main}, ${n} on ${otherLabel(DECK.main)}` : "";
 }
 ui("deckload").addEventListener("click", () => deckLoad(parseInt(ui("deckseed").value, 10) | 0));
 ui("deckunload").addEventListener("click", deckUnload);
@@ -10462,14 +10489,12 @@ function djNote(msg) {
   const el = ui("djstatus");
   if (!el) return;
   const c = DJ.cur, pl = DJ.plan;
-  // THE SURFACE IS DECK A'S. Say which deck is playing, and say so where the
-  // stale part is, rather than let the sheet below pass for the live piece.
+  // Say which deck is playing; the sheet and the faders below follow it.
   const lv = ui("djlive");
   if (lv) {
     lv.hidden = !DJ.on;
-    if (DJ.on) lv.textContent = DJ.live === "A"
-      ? `the night: deck A is live — ${c.profile}, seed ${c.seed}${DJ.closing ? ", closing" : ""}`
-      : `the night: deck B is live — ${c.profile}, seed ${c.seed}${DJ.closing ? ", closing" : ""}. The sheet, faders and seed line below are deck A's, which is silent.`;
+    if (DJ.on) lv.textContent = `the night: deck ${DJ.live} is live — ${c.profile}, seed ${c.seed}${DJ.closing ? ", closing" : ""}`
+      + (DJ.phase === "blend" && pl ? ` · blending into ${pl.profile}` : "");
   }
   el.textContent = !DJ.on ? msg
     : `night ${DJ.night} · track ${DJ.n}, ${c.profile} on ${DJ.live} since bar ${c.start}, ends bar ${c.start + c.bars}`
@@ -10481,7 +10506,7 @@ function djStart() {
   if (!T.running || !DECK.mixA) { djNote("press start first — the night needs a running transport."); return false; }
   if (DJ.on) return true;
   deckUnload();
-  DJ.on = true; DJ.closing = false; DJ.fading = false; DJ.night = SEED | 0; DJ.n = 0; DJ.live = "A"; DJ.plan = null; DJ.built = null;
+  DJ.on = true; DJ.closing = false; DJ.fading = false; DJ.night = SEED | 0; DJ.n = 0; DJ.live = DECK.main; DJ.plan = null; DJ.built = null;
   DJ.phase = "play"; DJ.retire = null; DJ.log = [];
   const bar = Math.floor(T.step / 16);
   DJ.cur = { profile: PIECE.profile.id, bpm: T.bpm, start: bar, bars: djTrackBars(DJ.night, 0), seed: PIECE.seed };
@@ -10510,11 +10535,9 @@ function djCompose(plan, incoming) {
   for (let attempt = 0; attempt < 3; attempt++) {
     const seed = attempt === 0 ? plan.seed : djSeedFor(plan.profile, DJ.night, plan.n, attempt);
     try {
-      if (incoming === "B") {
-        const d = deckBuild(seed);
-        if (!d.piece.drawFailed) { plan.seed = seed; return d; }
-        try { d.engine.tail.disconnect(); } catch (e) {}
-      } else { draw(seed); plan.seed = seed; return { seed: seed }; }
+      const d = deckBuild(seed, incoming);
+      if (!d.piece.drawFailed) { plan.seed = seed; return d; }
+      try { d.engine.tail.disconnect(); } catch (e) {}
     } catch (e) { /* the attempt failed; the next one is the same spec on another seed */ }
     djLog("retry", { n: plan.n, attempt: attempt + 1, seed: seed });
   }
@@ -10571,25 +10594,48 @@ function djFade(bar) {
   DECK.master.gain.linearRampToValueAtTime(0, t + dur);
   djLog("fade", { seconds: +dur.toFixed(1) });
 }
+// THE SURFACE FOLLOWS THE LIVE DECK. When a blend completes the incoming engine
+// becomes the page's `engine` and its piece the page's PIECE, through the same
+// `rebuild` a seed change goes through, so the sheet, the seed line, the modulator
+// rows and every slider that follows a piece are the new track's. The old surface
+// deck becomes the "other" one and plays out its fading lanes and its tails until
+// it is retired. What the HAND owns (faders, trims, mutes, solo, the pump, the room)
+// is put into the new engine from the controls themselves: the surface's word wins.
+function djSwapMain() {
+  const nb = DECK.b;
+  if (!nb || nb.engine === engine) return;
+  const keepBpm = T.bpm, before = PIECE;
+  DECK.b = { engine: engine, piece: PIECE, seed: PIECE.seed, offset: DECK.aOffset, label: DECK.main };
+  engine = nb.engine; DECK.aOffset = nb.offset; DECK.main = nb.label;
+  usePiece(nb.piece);
+  SEED = nb.seed | 0;
+  resetMorph(); pieceTrimPending = null; preparePieceTrim(SEED); rideReset();
+  rebuild(before);
+  replayHandOnly(engine);
+  engine.set("pump", val("pump")); engine.set("dlyFbk", val("fbk")); engine.set("revSeconds", val("revsize"));
+  engine.set("dlyBeats", parseFloat(ui("dlydiv").value));
+  engine.set("auto", autoOn);
+  T.bpm = keepBpm; engine.cfg.bpm = T.bpm; engine.set("bpm", T.bpm);
+  if (ui("bpm")) ui("bpm").value = String(Math.round(T.bpm));
+  ui("seedline").textContent = "seed " + SEED + " · " + PIECE.profile.name;
+  ui("seedin_v").textContent = String(SEED);
+  writeUrl(); lastPainted = -1; refreshHand();
+  djLog("surface", { deck: DECK.main, seed: SEED });
+}
 function djEnterBlend(bar) {
   const p = DJ.plan, incoming = DJ.live === "A" ? "B" : "A";
-  DJ.bpmFrom = T.bpm;                       // BEFORE the draw below: a new piece moves T.bpm to its own tempo
-  if (incoming === "B") { DECK.pending = DJ.built; }
-  else {
-    applySeed(p.seed);                      // deck A takes the piece: a draw, at a bar line
-    DECK.aOffset = T.step;                  // ...and counts it from its own bar 0
-  }
+  DJ.bpmFrom = T.bpm;
+  DECK.pending = DJ.built;                  // both decks are built engines now: the incoming one is always the other
   DJ.built = null;
   DJ.phase = "blend"; DJ.blendStart = bar;
   DJ.hand = djHandovers(p.blend);
-  T.bpm = DJ.bpmFrom;                       // a piece with another tempo does not get to move the clock
   djLog("blend", { n: p.n, into: incoming, len: p.blend });
 }
 function djBlendBar(bar) {
   const p = DJ.plan, incoming = DJ.live === "A" ? "B" : "A", k = bar - DJ.blendStart;
   for (const h of DJ.hand) if (h.at === k) {
     const out = incoming === "A" ? "B" : "A";
-    const eng = d => d === "A" ? engine : (DECK.b || DECK.pending || {}).engine;
+    const eng = d => d === DECK.main ? engine : (DECK.b || DECK.pending || {}).engine;
     const f = DJ_CFG.fade, when = T.nextT, dur = f.bars * 16 * 60 / T.bpm / 4;
     for (const l of h.lanes) {
       DECK.owner[l] = incoming;
@@ -10609,6 +10655,7 @@ function djBlendBar(bar) {
   if (k >= p.blend) {
     DJ.retire = { deck: DJ.live, at: bar + DJ_CFG.tailBars };
     DJ.live = incoming; DJ.n = p.n;
+    djSwapMain();
     DJ.cur = { profile: p.profile, bpm: p.bpm, start: DJ.blendStart, bars: p.bars, seed: p.seed, closer: !!p.closer };
     DJ.plan = null; DJ.phase = "play";
     djLog("live", { n: p.n, deck: incoming, profile: p.profile });
@@ -10624,7 +10671,7 @@ function djBar(bar) {
   if (DJ.phase === "play" && DJ.plan && bar >= DJ.plan.start) djEnterBlend(bar);
   if (DJ.phase === "blend") djBlendBar(bar);
   if (DJ.retire && bar >= DJ.retire.at) {
-    if (DJ.retire.deck === "B" && DECK.b) { try { DECK.b.engine.tail.disconnect(); } catch (e) {} DECK.b = null; }
+    if (DECK.b && DECK.b.label === DJ.retire.deck) { try { DECK.b.engine.tail.disconnect(); } catch (e) {} DECK.b = null; }
     djLog("retire", { deck: DJ.retire.deck });
     DJ.retire = null;
   }
@@ -10828,8 +10875,11 @@ window.p02 = {
   dj: { start: djStart, stop: djStop, close: djClose, budget: djBudget, planCloser: djPlanCloser,
         state: () => ({ on: DJ.on, closing: DJ.closing, fading: DJ.fading, night: DJ.night, n: DJ.n, live: DJ.live, phase: DJ.phase, cur: DJ.cur, plan: DJ.plan,
           owner: Object.assign({}, DECK.owner), aOffset: DECK.aOffset,
-          ho: { A: engine ? DECK_LANES.map(l => +engine.A.chan[l].ho.gain.value.toFixed(3)) : null,
-                B: (DECK.b || DECK.pending) ? DECK_LANES.map(l => +(DECK.b || DECK.pending).engine.A.chan[l].ho.gain.value.toFixed(3)) : null }, bpm: T.bpm, bar: Math.floor(T.step / 16),
+          main: DECK.main, surfaceSeed: SEED, pieceSeed: PIECE.seed, engineSeed: engine ? engine.cfg.seed : null,
+          seedLine: ui("seedline").textContent, fader3: engine ? engine.A.chan[3].fader : null,
+          fader3Slider: parseFloat(ui("fad3").value), mutes: engine ? Object.keys(engine.cfg.mutes) : null,
+          ho: (() => { const o = { A: null, B: null }, oth = DECK.b || DECK.pending, h = e => DECK_LANES.map(l => +e.A.chan[l].ho.gain.value.toFixed(3));
+                       if (engine) o[DECK.main] = h(engine); if (oth) o[oth.label || otherLabel(DECK.main)] = h(oth.engine); return o; })(), bpm: T.bpm, bar: Math.floor(T.step / 16),
           seed: SEED, log: DJ.log.slice() }),
         cfg: DJ_CFG, arc: djArc, walk: djWalk, seedFor: djSeedFor, blendLen: djBlendLen, plan: djPlan,
         handovers: djHandovers, graph: PROFILE_GRAPH,
