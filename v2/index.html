@@ -704,7 +704,17 @@
   #tonight .kx-btn .kx-lab { margin:0; color:inherit; font-size:15px; }
   #tonight .kx-btn:hover { background:rgba(233,228,212,.08); }
   #tonight .kx-btn.kx-on, #tonight .kx-btn[aria-pressed="true"] { background:var(--kx); color:#101820; }
-  #tonight .kx-fired[data-state]:not([data-state=""]) { background:rgba(230,180,80,.22); }
+  #tonight .kx-fired { position:relative; overflow:hidden; display:flex; flex-direction:column; justify-content:center; align-items:center; gap:2px; min-width:96px; min-height:60px; }
+  #tonight .kx-note { font:500 12px/1 'Bricolage Grotesque', system-ui, sans-serif; color:var(--tn-dim); min-height:12px; }
+  #tonight .kx-fired[data-state="wait"] { background:linear-gradient(90deg, rgba(230,180,80,.38) calc(var(--kx-p,0) * 100%), rgba(230,180,80,.08) 0); }
+  #tonight .kx-fired[data-state="on"] { background:var(--kx); color:#101820; } #tonight .kx-fired[data-state="on"] .kx-note { color:#101820; }
+  #tonight .kx-fired[data-state="landed"] { box-shadow:inset 0 0 0 2px var(--kx); }
+  #tonight .kx-btn[data-tone="land"] { --kx:#e6b450; } #tonight .kx-btn[data-tone="ret"] { --kx:#5fb7a8; } #tonight .kx-btn[data-tone="micro"] { --kx:#9fb0b4; } #tonight .kx-btn[data-tone="rel"] { --kx:#ff9a6c; }
+  #tonight .kx-btn:disabled { opacity:.35; cursor:default; }
+  #tonight .kx-firecol { width:auto; min-width:104px; background:transparent; padding:0; gap:8px; }
+  #tonight .kx-wrap { flex-wrap:wrap; }
+  #tonight .kx-strip.kx-firecol .kx-btn { width:104px; min-width:104px; min-height:60px; padding:8px 6px; }
+  #tonight .kx-firecol .kx-step { width:104px; }
   #tonight .kx-dead { opacity:.4; }
   #tonight .kx-off { cursor:default; opacity:.3; }
   #tonight .kx-held { --kx:#ff9a6c; } #tonight .kx-held .kx-val { color:#ff9a6c; }
@@ -728,6 +738,17 @@
   #tonight .tn-enc { display:flex; align-items:flex-end; gap:12px; } #tonight .tn-cap { color:var(--tn-dim); font:400 14px 'Bricolage Grotesque', system-ui, sans-serif; max-width:14ch; padding-bottom:22px; }
   #tonight .tn-dfad { position:absolute; right:18px; top:14px; } #tonight .tn-dfad .kx-track { height:120px; }
   #tonight .tn-deck .tn-lanes { margin-right:70px; }
+  #tonight .tn-piece { margin:18px 0 6px; display:flex; flex-direction:column; gap:10px; }
+  #tonight .seedbar, #tonight .morphbar { display:flex; align-items:center; gap:10px 14px; flex-wrap:wrap; margin:0; padding:0; border:0; color:var(--tn-dim); font:600 14px 'Bricolage Grotesque', system-ui, sans-serif; }
+  #tonight .seedbar label, #tonight .morphbar label { color:var(--tn-dim); }
+  #tonight .seedbar input[type=text] { width:150px; background:#0e161c; color:var(--tn-ink); border:1px solid var(--tn-grid); border-radius:10px; padding:9px 12px; font:500 15px 'Bricolage Grotesque', system-ui, sans-serif; }
+  #tonight .seedbar input[type=text]:focus { outline:3px solid var(--tn-b); outline-offset:2px; }
+  #tonight .seedbar .sm, #tonight .morphbar .sm { border:2px solid var(--tn-ink); background:transparent; color:var(--tn-ink); border-radius:24px; padding:8px 16px; min-height:40px; font:600 14px 'Bricolage Grotesque', system-ui, sans-serif; cursor:pointer; }
+  #tonight .seedbar .sm:hover, #tonight .morphbar .sm:hover { background:rgba(233,228,212,.1); }
+  #tonight .seedbar output, #tonight .morphbar output { color:var(--tn-ink); font-weight:400; min-width:0; }
+  #tonight .seedbar .note { color:var(--tn-dim); font-size:13px; max-width:46ch; }
+  #tonight .morphbar input[type=range] { accent-color:var(--tn-b); min-width:180px; }
+  #tonight .pincount { color:var(--tn-b); }
   #tonight .tn-legend { font:400 14px 'Bricolage Grotesque', system-ui, sans-serif; color:var(--tn-dim); margin:14px 2px 0; }
   @media (max-width: 760px) { #tonight { padding:22px 18px; } #tonight h2 { font-size:34px; } #tonight .tn-decks { grid-template-columns:1fr; } #tonight .tn-ctl { grid-template-columns:1fr; }
     #tonight .tn-head { flex-direction:column; } #tonight .tn-lanes button { font-size:11px; padding:6px; } }
@@ -761,6 +782,35 @@
     <div class="tn-head">
       <div><h2 id="tn_title">Tonight</h2><p class="tn-sub" id="tn_sub"></p></div>
       <button id="djgo" class="tn-btn">start the night</button>
+    </div>
+    <div class="tn-piece">
+  <div class="seedbar" id="piecebar">
+    <label for="seedin">seed</label>
+    <input id="seedin" type="text" inputmode="text" spellcheck="false"
+      title="A number or a word. A word is hashed the same way ?seed= hashes it, so `dub` here and ?seed=dub are the same piece — and a word is easier to say out loud than a 31-bit integer.">
+    <button id="seedgo" class="sm">take it</button>
+    <button id="seedroll" class="sm" title="a seed nobody chose: the next bar line brings a different piece">new track</button>
+    <output id="seedin_v"></output>
+    <!-- THE PINS, BESIDE THE ROLL THAT WILL NOT TAKE THEM AWAY [#51 §4.3].
+         A pin survives a new seed — the owner's "for ever" — so it survives a
+         reload and being sent to somebody too. A state that outlives every
+         roll with nothing on screen explaining it is a piece that stops
+         changing for no visible reason, which is why the count and the way
+         back out are both here and neither is behind a drawer. -->
+    <span class="pincount" id="pincount" hidden></span>
+    <button id="pinclear" class="sm" hidden>release pins</button>
+    <span class="note" id="piecenote">a new piece — same manifest, same genre, a different draw</span>
+  </div>
+  <div class="morphbar" id="morphbar">
+    <button id="tn_morphgo" class="sm" type="button" title="start the crossing into the next deterministic track, over the number of bars on the right">morph into new track</button>
+    <input id="morph" type="range" min="0" max="1" step="0.01" value="0"
+      aria-label="morph toward the next deterministic track">
+    <output id="morph_v">0% · current piece</output>
+    <label for="morphbars">over</label>
+    <input id="morphbars" type="range" min="32" max="512" step="16" value="128"
+      aria-label="morph length in bars">
+    <output id="morphbars_v">128 bars</output>
+  </div>
     </div>
     <svg id="tn_arc" viewBox="0 0 1184 330" role="img" aria-label="the energy arc of the night: the tracks played, the one playing, and the ones the DJ has in mind"></svg>
     <div class="tn-ctl">
@@ -890,33 +940,7 @@
        only one that needs no second generator. It is ABOVE the drawers and
        not inside one, because §5 keeps seed and roll on the play surface.
        =================================================================== -->
-  <div class="seedbar" id="piecebar">
-    <label for="seedin">seed</label>
-    <input id="seedin" type="text" inputmode="text" spellcheck="false"
-      title="A number or a word. A word is hashed the same way ?seed= hashes it, so `dub` here and ?seed=dub are the same piece — and a word is easier to say out loud than a 31-bit integer.">
-    <button id="seedgo" class="sm">take it</button>
-    <button id="seedroll" class="sm">roll</button>
-    <output id="seedin_v"></output>
-    <!-- THE PINS, BESIDE THE ROLL THAT WILL NOT TAKE THEM AWAY [#51 §4.3].
-         A pin survives a new seed — the owner's "for ever" — so it survives a
-         reload and being sent to somebody too. A state that outlives every
-         roll with nothing on screen explaining it is a piece that stops
-         changing for no visible reason, which is why the count and the way
-         back out are both here and neither is behind a drawer. -->
-    <span class="pincount" id="pincount" hidden></span>
-    <button id="pinclear" class="sm" hidden>release pins</button>
-    <span class="note" id="piecenote">a new piece — same manifest, same genre, a different draw</span>
-  </div>
-  <div class="morphbar" id="morphbar">
-    <label for="morph">morph</label>
-    <input id="morph" type="range" min="0" max="1" step="0.01" value="0"
-      aria-label="morph toward the next deterministic track">
-    <output id="morph_v">0% · current piece</output>
-    <label for="morphbars">over</label>
-    <input id="morphbars" type="range" min="32" max="512" step="16" value="128"
-      aria-label="morph length in bars">
-    <output id="morphbars_v">128 bars</output>
-  </div>
+
 
   <!-- ===================================================================
        THE DRAWERS. §5: what a hand reaches for while playing stays out; the
@@ -10402,6 +10426,7 @@ function wire() {
     takeSeed(String(v));
   });
   ui("morph").addEventListener("input", e => beginMorph(e.target.value));
+  ui("tn_morphgo").addEventListener("click", () => beginMorph(1));
   ui("morphbars").addEventListener("input", e => {
     MORPH.bars = clamp(parseInt(e.target.value, 10) || 128, MORPH_MIN_BARS, MORPH_MAX_BARS);
     paintMorph();
@@ -11002,6 +11027,7 @@ function tonightPaint() {
   const btn = ui("djgo");
   btn.textContent = !DJ.on ? "start the night" : DJ.closing ? "stop now" : "close the night";
   ui("tn_skip").disabled = !(DJ.on && !DJ.closing && DJ.phase === "play");
+  ui("tn_morphgo").disabled = DJ.on;
   // the sliders show the state, and never fight a hand that is on one
   const sync = (id, v, out, txt) => { const el = ui(id); if (document.activeElement !== el) el.value = String(v); ui(out).textContent = txt; };
   sync("tn_push", DJ.push, "tn_pv", DJ.push === 0 ? "as the arc says" : (DJ.push > 0 ? "+" : "−") + Math.abs(DJ.push).toFixed(2) + (DJ.push > 0 ? " · lifts the arc" : " · lowers the arc"));
@@ -11009,6 +11035,14 @@ function tonightPaint() {
   sync("tn_fA", DECK.trim.A, "tn_vA", DECK.trim.A.toFixed(2));
   sync("tn_fB", DECK.trim.B, "tn_vB", DECK.trim.B.toFixed(2));
 }
+// IN A NIGHT "NEW TRACK" IS THE DJ'S, NOT A SEED SWAPPED UNDER THE LIVE DECK: the roll button keeps its id and its wiring, and while a
+// night runs its press goes to the door the night has for it (next track now). Off a night it is the seed roll it always was.
+ui("seedroll").addEventListener("click", e => {
+  if (!DJ.on) return;
+  e.stopImmediatePropagation();
+  const k = ui("tn_skip");
+  if (!k.disabled) k.click(); else say("the DJ already has the next track on its way.");
+}, true);
 ui("tn_skip").addEventListener("click", () => { if (djSkip()) say("the DJ brings the next track forward: it enters at the next phrase."); TN.sig = ""; tonightPaint(); });
 ui("tn_push").addEventListener("input", () => { DJ.push = parseFloat(ui("tn_push").value); tonightPaint(); });
 ui("tn_push").addEventListener("dblclick", () => { DJ.push = 0; tonightPaint(); });
@@ -11225,7 +11259,7 @@ function kitStepped(c) {
 }
 // button kinds: latched {get,set}, fired {fire, state?}, momentary {down, up}
 function kitButton(c) {
-  const el = kitEl("button", "kx kx-btn kx-" + c.kind), lab = kitEl("span", "kx-lab", c.label); el.type = "button"; el.append(lab);
+  const el = kitEl("button", "kx kx-btn kx-" + c.kind), lab = kitEl("span", "kx-lab", c.label), note = kitEl("span", "kx-note"); el.type = "button"; el.append(lab, note);
   if (c.tone) el.dataset.tone = c.tone;
   if (c.kind === "momentary") {
     let held = false; const rel = () => { if (held) { held = false; el.classList.remove("kx-on"); c.up(); } };
@@ -11237,7 +11271,10 @@ function kitButton(c) {
   } else el.addEventListener("click", () => { if (el.classList.contains("kx-off")) return; if (c.kind === "latched") c.set(!c.get()); else c.fire(); w.draw(); });
   const w = kitReg({ el, last: null, draw() {
     if (c.kind === "latched") { const v = !!c.get(); el.setAttribute("aria-pressed", String(v)); el.classList.toggle("kx-on", v); }
+    if (c.disabled) el.disabled = !!c.disabled();
     if (c.state) { const s = c.state(); if (s !== this.last) { this.last = s; el.dataset.state = s || ""; } }
+    if (c.note) { const n = c.note(); if (note.textContent !== n) note.textContent = n; }
+    if (c.prog) el.style.setProperty("--kx-p", String(c.prog()));
     kitDead(el, c);
   } }, c);
   return w;
@@ -11322,6 +11359,43 @@ function buildSpaceBank() {
       enc("pump", "pump", v => v.toFixed(2), "arc", "the kick ducks the mix — the manifest has none, so it starts at zero"),
       enc("bed", "air", v => v === 0 ? "off" : "\u00d7" + v.toFixed(2), "out", "tape air — it never ducks with the kick"))
   ]);
+}
+
+// THE FIRE BANK: the bench's fire buttons and length selects are the model. A press asks; the gesture STARTS ON THE NEXT
+// BAR LINE (promoteFires runs at step % 16 === 0), so a waiting button counts down to it — the fill is how far through the
+// bar the transport is. FIRES is one object shared by every engine, so a fire reaches both decks of a blend.
+function buildFireBank() {
+  const barFrac = () => (T.running ? (T.step % 16) / 16 : 0);
+  const stateOf = (id, kind) => () => {
+    const b = ui(id); if (!b) return "";
+    if (b.classList.contains("is-wait")) return "wait";
+    if (b.getAttribute("aria-pressed") === "true") return "on";
+    return b.classList.contains("is-landed") ? "landed" : "";
+  };
+  const noteOf = kind => () => {
+    const b = ui("fire_" + kind);
+    if (b.classList.contains("is-wait")) return "next bar";
+    const C = shownComposition(), a = C.fire && C.fire.active;
+    if (a && a.kind === kind) return `bar ${C.bar - a.at + 1}/${a.bars}`;
+    return b.classList.contains("is-landed") ? "landed" : "";
+  };
+  const macros = Object.keys(FIRE_MACROS).map(kind => {
+    const def = FIRE_MACROS[kind], sel = ui("firelen_" + kind), col = kitEl("div", "kx-strip kx-firecol");
+    const btn = kitButton({ kind: "fired", label: def.label, tone: def.end === "land" ? "land" : "ret", state: stateOf("fire_" + kind, kind), note: noteOf(kind), prog: barFrac,
+      fire: () => ui("fire_" + kind).click(),
+      title: def.label + (def.end === "land" ? " — the mix changes and stays changed" : " — the mix comes back") + "; starts on the next bar, press again to cancel" });
+    const opts = [...sel.options].map(o => ({ v: o.value, label: o.value }));
+    const len = kitStepped({ label: "bars", options: opts, get: () => sel.value, set: v => { sel.value = v; sel.dispatchEvent(new Event("input", { bubbles: true })); },
+      def: () => String(def.bars), title: def.label + " length in bars" });
+    col.append(btn.el, len.el); return col;
+  });
+  const micros = FIRE_MICROS.map(kind => kitButton({ kind: "fired", label: kind.replace("-", " "), tone: "micro", state: stateOf("fire_" + kind, kind), prog: barFrac,
+    note: () => (ui("fire_" + kind).classList.contains("is-wait") ? (kind === "turnaround" ? "phrase end" : "next bar") : ""),
+    fire: () => ui("fire_" + kind).click(), title: kind + " — one bar, on the next bar line" }).el);
+  const grp = (name, nodes) => { const g = kitEl("div", "kx-group"); g.append(kitEl("div", "kx-gname", name)); const r = kitEl("div", "kx-grow kx-wrap"); r.append(...nodes); g.append(r); return g; };
+  const rel = kitButton({ kind: "fired", label: "release all", tone: "rel", disabled: () => ui("releaseall").disabled, fire: () => ui("releaseall").click(),
+    title: "everything the hand holds and every gesture goes back under the schedule" });
+  kitBank("fire", "FIRE", [grp("BIG GESTURES", macros), grp("ONE BAR", micros), grp("BACK", [rel.el])]);
 }
 
 // the first faces: what Tonight already had as plain sliders, now as widgets over the same inputs
@@ -11462,6 +11536,9 @@ window.p02 = {
          // what each engine holds for a lane, and what the hand holds: the harness reads these, never the widget
          lane: ch => deckEngines().map(e => (e.A.chan[ch] ? e.A.chan[ch].fader : null)),
          mutesAll: () => deckEngines().map(e => Object.keys(e.cfg.mutes || {}).join(",")),
+         fireAll: () => deckEngines().map(e => { const f = e.composition().fire; return f && f.active ? f.active.kind : null; }),
+         fires: () => ({ pending: FIRES.pending.macro && FIRES.pending.macro.kind, events: FIRES.events.map(e => ({ kind: e.kind, at: e.at, bars: e.bars, micro: e.micro })) }),
+         bar: () => Math.floor(T.step / 16),
          base: id => (ROOM_UNITS.find(u => u.id === id) || SET_UNITS.find(u => u.id === id)).base(),
          hold: (p, ch) => hand.ask(p, ch),
          landed: (p, ch) => { const C = engine && engine.composition(); return C ? C.wet[ch][p] : null; } },
@@ -11731,6 +11808,7 @@ wireFires();
 wireMix();
 buildMixBank();
 buildSpaceBank();
+buildFireBank();
 buildRides();
 wireRides();
 buildSections();
