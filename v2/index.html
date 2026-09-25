@@ -3,6 +3,8 @@
 <head>
 <meta charset="utf-8">
 <link rel="icon" href="data:,">
+<link rel="preconnect" href="https://fonts.googleapis.com"><link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Bricolage+Grotesque:opsz,wght@12..96,400;12..96,600;12..96,800&display=swap" rel="stylesheet">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>Dubsession v2</title>
 <style>
@@ -76,7 +78,7 @@
      The exemption is named at the block, and every element INSIDE it that is
      prose takes the cap back explicitly — `#sections` and `.foot .note`
      rather than a positional rule nobody can see. */
-  main > *:not(#chanbox):not(#barbox):not(#drawers):not(#piecebar) { max-width: 720px; }
+  main > *:not(#tonight):not(#chanbox):not(#barbox):not(#drawers):not(#piecebar) { max-width: 720px; }
   h1 { font-size: 13px; font-weight: 400; color: var(--dim); margin: 0 0 20px; letter-spacing: .08em; }
   h1 b { color: var(--ink); font-weight: 400; }
   button {
@@ -631,6 +633,59 @@
   @media (max-width: 560px) { #pitch .grid2 { grid-template-columns: 1fr; } }
   #perf { color: var(--dim); font-size: 12px; margin-top: 10px; }
   a { color: var(--hot); }
+
+  /* ---------------------------------------------------------------------------
+     TONIGHT — the night view (v2 only; workshop #84, sprint 22). Variant C of the
+     owner's pick of 2026-09-25: the energy arc of the whole night is the hero, the
+     decks and their lanes are small underneath. It has its OWN palette on purpose:
+     verdigris is deck A, brass is deck B, bone is the arc, and nothing here uses
+     the oxide/lacquer hues of the bench below it (--hot is the hand's and --time
+     is time's, and this view is neither). --------------------------------------- */
+  #tonight { --tn-bg:#101820; --tn-panel:#17232c; --tn-ink:#e9e4d4; --tn-dim:#9fb0b4; --tn-a:#5fb7a8; --tn-b:#e6b450; --tn-grid:#22303a;
+    background:var(--tn-bg); color:var(--tn-ink); border-radius:22px; padding:30px 34px 26px; margin:18px 0 22px;
+    font-family:'Bricolage Grotesque', system-ui, sans-serif; }
+  #tonight .tn-head { display:flex; justify-content:space-between; align-items:flex-start; gap:24px; }
+  #tonight h2 { font:800 46px/1 'Bricolage Grotesque', system-ui, sans-serif; letter-spacing:-.03em; margin:0; }
+  #tonight .tn-sub { font:400 17px/1.45 'Bricolage Grotesque', system-ui, sans-serif; color:var(--tn-dim); margin-top:9px; max-width:64ch; }
+  #tonight .tn-btn { flex:none; border:2px solid var(--tn-ink); background:transparent; color:var(--tn-ink); border-radius:40px;
+    font:600 18px 'Bricolage Grotesque', system-ui, sans-serif; padding:13px 24px; cursor:pointer; }
+  #tonight .tn-btn:hover { background:rgba(233,228,212,.1); }
+  #tonight .tn-btn:focus-visible, #bench > summary:focus-visible { outline:3px solid var(--tn-b); outline-offset:3px; }
+  #tonight svg { display:block; width:100%; height:auto; margin:6px 0 18px; overflow:visible; }
+  #tonight .tn-now { transition:transform .9s linear; }
+  #tonight .tn-decks { display:grid; grid-template-columns:1fr 1fr; gap:20px; }
+  #tonight .tn-deck { background:var(--tn-panel); border-radius:20px; padding:20px 22px 22px; min-height:190px; position:relative; }
+  #tonight .tn-deck h3 { font:800 27px/1.1 'Bricolage Grotesque', system-ui, sans-serif; margin:0; }
+  #tonight .tn-deck p { font:400 16px/1.4 'Bricolage Grotesque', system-ui, sans-serif; color:var(--tn-dim); margin:6px 0 0; }
+  #tonight .tn-lanes { display:grid; grid-template-columns:repeat(8,1fr); gap:7px; margin-top:22px; }
+  #tonight .tn-lanes button { height:54px; border-radius:13px; border:0; font:600 13px 'Bricolage Grotesque', system-ui, sans-serif; text-align:left;
+    display:flex; align-items:flex-end; padding:8px 9px; background:#0e161c; color:#4b606a; overflow:hidden; position:relative; cursor:pointer; min-width:0; }
+  #tonight .tn-lanes button:hover { outline:1px solid var(--tn-dim); }
+  #tonight .tn-lanes button:focus-visible { outline:3px solid var(--tn-b); outline-offset:2px; }
+  #tonight .tn-lanes button.own, #tonight .tn-lanes button.fade { color:#101820; }
+  #tonight .tn-lanes button.mute { background-image:repeating-linear-gradient(135deg, transparent 0 6px, rgba(16,24,32,.55) 6px 9px); }
+  #tonight .tn-lanes button.mute::after { content:"M"; position:absolute; top:6px; right:8px; font-weight:800; }
+  #tonight .tn-lanes button.solo::after { content:"S"; position:absolute; top:6px; right:8px; font-weight:800; color:#101820; background:var(--tn-ink); border-radius:8px; padding:0 5px; }
+  #tonight .tn-lanes button.quiet { opacity:.35; }
+  #tonight .tn-ctl { display:grid; grid-template-columns:auto 1fr 1fr; gap:14px 28px; align-items:end; margin:0 0 20px; }
+  #tonight .tn-chip { border:2px solid var(--tn-ink); background:transparent; color:var(--tn-ink); border-radius:30px; padding:10px 20px; cursor:pointer;
+    font:600 16px 'Bricolage Grotesque', system-ui, sans-serif; }
+  #tonight .tn-chip:hover:not(:disabled) { background:rgba(233,228,212,.1); }
+  #tonight .tn-chip:disabled { opacity:.35; cursor:default; }
+  #tonight .tn-chip:focus-visible { outline:3px solid var(--tn-b); outline-offset:3px; }
+  #tonight .tn-s { display:flex; flex-direction:column; gap:6px; font:600 14px 'Bricolage Grotesque', system-ui, sans-serif; color:var(--tn-dim); min-width:0; }
+  #tonight .tn-s span { display:flex; justify-content:space-between; gap:10px; }
+  #tonight .tn-s output { color:var(--tn-ink); font-weight:400; }
+  #tonight .tn-s input { width:100%; accent-color:var(--tn-ink); margin:0; }
+  #tonight .tn-deck .tn-s { margin-top:16px; }
+  #tonight #tn_dA .tn-s input { accent-color:var(--tn-a); } #tonight #tn_dB .tn-s input { accent-color:var(--tn-b); }
+  #tonight .tn-legend { font:400 14px 'Bricolage Grotesque', system-ui, sans-serif; color:var(--tn-dim); margin:14px 2px 0; }
+  @media (max-width: 760px) { #tonight { padding:22px 18px; } #tonight h2 { font-size:34px; } #tonight .tn-decks { grid-template-columns:1fr; } #tonight .tn-ctl { grid-template-columns:1fr; }
+    #tonight .tn-head { flex-direction:column; } #tonight .tn-lanes button { font-size:11px; padding:6px; } }
+  @media (prefers-reduced-motion: reduce) { #tonight .tn-now { transition:none; } }
+  details#bench > summary { cursor:pointer; padding:14px 2px; font:600 17px 'Bricolage Grotesque', system-ui, sans-serif; color:var(--dim); list-style:none; border-top:1px solid var(--dim); }
+  details#bench > summary::before { content:"+ "; }
+  details#bench[open] > summary::before { content:"− "; }
 </style>
 </head>
 <body>
@@ -653,6 +708,27 @@
 
   <div id="status"></div>
 
+  <section id="tonight" aria-label="tonight: the night at a glance">
+    <div class="tn-head">
+      <div><h2 id="tn_title">Tonight</h2><p class="tn-sub" id="tn_sub"></p></div>
+      <button id="djgo" class="tn-btn">start the night</button>
+    </div>
+    <svg id="tn_arc" viewBox="0 0 1184 330" role="img" aria-label="the energy arc of the night: the tracks played, the one playing, and the ones the DJ has in mind"></svg>
+    <div class="tn-ctl">
+      <button id="tn_skip" class="tn-chip" type="button">next track now</button>
+      <label class="tn-s"><span>intensity <output id="tn_pv"></output></span><input id="tn_push" type="range" min="-0.2" max="0.2" step="0.01" value="0" aria-label="intensity: an offset on the night's energy arc, double-click to reset"></label>
+      <label class="tn-s"><span>master <output id="tn_mv"></output></span><input id="tn_master" type="range" min="0" max="1" step="0.01" value="0.8" aria-label="master volume"></label>
+    </div>
+    <div class="tn-decks">
+      <div class="tn-deck" id="tn_dA"><h3 id="tn_tA" style="color:var(--tn-a)"></h3><p id="tn_sA"></p><div class="tn-lanes" id="tn_lA"></div>
+        <label class="tn-s"><span>deck A level <output id="tn_vA"></output></span><input id="tn_fA" type="range" min="0" max="1" step="0.01" value="1" aria-label="deck A level"></label></div>
+      <div class="tn-deck" id="tn_dB"><h3 id="tn_tB" style="color:var(--tn-b)"></h3><p id="tn_sB"></p><div class="tn-lanes" id="tn_lB"></div>
+        <label class="tn-s"><span>deck B level <output id="tn_vB"></output></span><input id="tn_fB" type="range" min="0" max="1" step="0.01" value="1" aria-label="deck B level"></label></div>
+    </div>
+    <p class="tn-legend">A pad mutes its lane, shift-click solos it. Muting and soloing hold across decks and across the handover.</p>
+  </section>
+
+  <details id="bench"><summary>the bench — every hand on every lane</summary>
   <section id="pitch" aria-label="global pitch controls">
     <div class="pane-head"><b>PITCH</b>
       <span class="pane-note">key for the whole instrument · lands on the next bar</span></div>
@@ -1048,12 +1124,13 @@
         <div id="decklanes" style="display:flex;flex-wrap:wrap;gap:6px;margin-top:6px"></div>
         <div id="deckstatus" class="t" style="margin-top:12px"></div>
         <div class="t" style="margin-top:18px">the night — the DJ plans the next track, builds it and hands the lanes over</div>
-        <div class="seekrow" style="margin-top:6px"><button id="djgo" class="sm">start the night</button></div>
         <div id="djstatus" class="t" style="margin-top:10px"></div>
       </div>
     </details>
 
   </div>
+
+  </details>
 
   <!-- WHERE THE VOICES COME FROM is not printed either. Every source line and
        every input gain is still in `CHANNELS` and `INPUT_GAIN` below, which is
@@ -2318,8 +2395,9 @@ const djHome = id => PROFILE_DEFS.find(p => p.id === id).energy[2];
 function djArc(night, bar) {
   const a = DJ_CFG.arc, tau = 2 * Math.PI;
   const p1 = rand01(night, D.DJ, 0, 0) * tau, p2 = rand01(night, D.DJ, 0, 1) * tau;
+  // DJ.push is the hand's INTENSITY: a plain offset on the target, 0 = the night's own arc
   return clamp(a.mid + a.wide * Math.sin(tau * bar / a.slowBars + p1)
-                     + a.fast * Math.sin(tau * bar / a.fastBars + p2), a.lo, a.hi);
+                     + a.fast * Math.sin(tau * bar / a.fastBars + p2) + (DJ.push || 0), a.lo, a.hi);
 }
 
 // Stay, or step ONE hop to a neighbour; never a jump. A profile that suits the
@@ -9164,7 +9242,7 @@ function setMute(ch, on) {
 }
 function setSolo(ch) {
   MIX.solo = (MIX.solo === ch) ? null : ch;
-  if (engine) engine.set("solo", MIX.solo);
+  for (const e of deckEngines()) e.set("solo", MIX.solo);
   paintMix();
   say(MIX.solo === null ? "solo cleared — the whole mix again."
                         : `channel ${MIX.solo} soloed — everything else is silent, and says so.`);
@@ -10308,16 +10386,21 @@ const DECK_LANES = [0, 1, 2, 3, 4, 5, 6, 7];
 // THE NIGHT'S STATE. `cur` is the track that is live ({profile, bpm, start,
 // bars, seed}, start = the bar its own bar 0 sits on); `plan` is the spec for
 // the next one once it has been commissioned; `phase` is play / blend.
-const DJ = { closing: false, fading: false, on: false, night: 0, n: 0, live: "A", cur: null, plan: null, built: null, phase: "play",
+const DJ = { push: 0, trail: [], closing: false, fading: false, on: false, night: 0, n: 0, live: "A", cur: null, plan: null, built: null, phase: "play",
              blendStart: 0, hand: [], bpmFrom: 0, retire: null, log: [], note: "" };
 const DECK = { b: null, pending: null, owner: { 0:"A", 1:"A", 2:"A", 3:"A", 4:"A", 5:"A", 6:"A", 7:"A" },
-               xf: 0, master: null, mixA: null, mixB: null, buildMs: null, note: "",
-               // where deck A's piece has its bar 0, on the shared step count: 0 until the DJ hands A a new piece
-               aOffset: 0,
+               xf: 0, trim: { A: 1, B: 1 }, master: null, mixA: null, mixB: null, buildMs: null, note: "",
+               // THE SURFACE DECK: the label ("A" or "B") of the deck the page's `engine` and PIECE are,
+               // and `aOffset` is where ITS piece has its bar 0 on the shared step count. The DJ
+               // re-points both when a blend completes (djSwapMain), so the sheet, the faders and
+               // the seed line are always the live deck's. The labels are identities of engines
+               // (the gate each was built with), not roles.
+               main: "A", aOffset: 0,
                // lane -> the deck still playing it out while a fade hands it over, and the bar it stops
                fading: {}, fadeEnd: {} };
-// the rumble follows the kick, the bed is deck A's
-const laneOwnerOf = k => k === "R" ? DECK.owner[0] : k === "N" ? "A" : DECK.owner[k];
+// the rumble follows the kick, the bed is the surface deck's
+const laneOwnerOf = k => k === "R" ? DECK.owner[0] : k === "N" ? DECK.main : DECK.owner[k];
+const otherLabel = l => l === "A" ? "B" : "A";
 const gateFor = which => k => laneOwnerOf(k) === which || DECK.fading[k] === which;
 
 function deckWire() {
@@ -10332,14 +10415,38 @@ function deckXfade(x) {
   const t = ctx.currentTime;
   // the DJ crosses lane by lane, so the decks' sums stay at unity: a lane is
   // on one deck or the other and nothing is faded twice
-  if (DJ.on) { DECK.mixA.gain.setTargetAtTime(1, t, 0.02); DECK.mixB.gain.setTargetAtTime(1, t, 0.02); return; }
-  DECK.mixA.gain.setTargetAtTime(Math.cos(x * Math.PI / 2), t, 0.02);
-  DECK.mixB.gain.setTargetAtTime(Math.sin(x * Math.PI / 2), t, 0.02);
+  // (the hand's DECK LEVEL is the one thing that scales a deck's sum, on top of that)
+  if (DJ.on) { DECK.mixA.gain.setTargetAtTime(DECK.trim.A, t, 0.02); DECK.mixB.gain.setTargetAtTime(DECK.trim.B, t, 0.02); return; }
+  // the crossfader runs surface deck -> the other one, whichever label each has
+  const mixMain = DECK["mix" + DECK.main], mixOther = DECK["mix" + otherLabel(DECK.main)];
+  mixMain.gain.setTargetAtTime(Math.cos(x * Math.PI / 2) * DECK.trim[DECK.main], t, 0.02);
+  mixOther.gain.setTargetAtTime(Math.sin(x * Math.PI / 2) * DECK.trim[otherLabel(DECK.main)], t, 0.02);
+}
+function deckTrim(label, v) { DECK.trim[label] = clamp(v, 0, 1); deckXfade(DECK.xf); }
+// every engine that is sounding or about to: the surface deck's, the other one's, the one built and waiting
+function deckEngines() {
+  return [engine, DECK.b && DECK.b.engine, DECK.pending && DECK.pending.engine].filter((e, i, a) => e && a.indexOf(e) === i);
 }
 // Building an engine is main-thread work (two impulse responses, the noise
 // bank), so it happens on the button and not inside the scheduler's tick; the
 // bar line only PROMOTES it. The time it took is shown, not assumed.
-function deckBuild(seed) {
+// The hand's controls that belong to the HAND and not to a piece: what a deck
+// built mid-night must start with, or the swap that makes it the surface deck
+// would be the moment the mix jumped. The controls that follow the piece (pump,
+// echo feedback, room, echo division) are settled by `rebuild` at the swap.
+function replayHandOnly(eng) {
+  if (MIX.solo !== null) eng.set("solo", MIX.solo);
+  eng.set("master", val("vol"));
+  eng.set("stabCut", val("stabcut"));
+  eng.set("bedTrim", val("bed"));
+  eng.set("modDepth", val("moddepth"));
+  eng.set("dlyTrim", val("dlytrim"));
+  eng.set("revTrim", val("revtrim"));
+  for (const k of VOICE_KEYS) eng.set(k, val(VOICE_PARAMS[k].id));
+  for (const r of MOD_ROWS) eng.set(r.key, val(r.id));
+  for (const c of CHANNELS) eng.setLevel(c.ch, parseFloat(ui("fad" + c.ch).value));
+}
+function deckBuild(seed, label) {
   const prev = PIECE;
   let piece;
   try { piece = draw(seed); }
@@ -10350,17 +10457,20 @@ function deckBuild(seed) {
     eng = createEngine(ctx, { seed: seed, movement: MOVEMENT, auto: false,
                               keyRoot: KEY_HAND.root, keyScale: KEY_HAND.scale,
                               transpose: PITCH_HAND.transpose, semi: PITCH_HAND.semi,
-                              gate: gateFor("B") });
+                              // the hand's own objects, by reference, as deck A's engine has them:
+                              // a deck that becomes the surface deck must answer to the same hand
+                              holds: HOLDS, fires: FIRES, mutes: MIX.mutes,
+                              gate: gateFor(label) });
+    replayHandOnly(eng);
   } finally { usePiece(prev); }
-  eng.tail.connect(DECK.mixB);
-  eng.set("master", val("vol"));
-  return { engine: eng, piece: piece, seed: seed };
+  eng.tail.connect(DECK["mix" + label]);
+  return { engine: eng, piece: piece, seed: seed, label: label };
 }
 function deckLoad(seed) {
   if (!ctx) { deckNote("press start first — there is no audio context yet."); return false; }
   deckUnload();
   const t0 = performance.now();
-  DECK.pending = deckBuild(seed);
+  DECK.pending = deckBuild(seed, otherLabel(DECK.main));
   DECK.buildMs = performance.now() - t0;
   deckXfade(0.5);
   ui("deckxf").value = "50";
@@ -10371,7 +10481,7 @@ function deckUnload() {
   const d = DECK.b || DECK.pending;
   if (d) { try { d.engine.tail.disconnect(); } catch (e) {} }
   DECK.b = null; DECK.pending = null;
-  for (const c of DECK_LANES) DECK.owner[c] = "A";
+  for (const c of DECK_LANES) DECK.owner[c] = DECK.main;
   DECK.fading = {}; DECK.fadeEnd = {};
   deckXfade(0); if (ui("deckxf")) ui("deckxf").value = "0";
   deckNote(""); paintDeckLanes();
@@ -10391,14 +10501,15 @@ function deckStep(step, when, stepDur) {
   finally { usePiece(keep); }
 }
 function deckHand(ch) {
-  DECK.owner[ch] = DECK.owner[ch] === "A" ? "B" : "A";
+  DECK.owner[ch] = DECK.owner[ch] === DECK.main ? otherLabel(DECK.main) : DECK.main;
   paintDeckLanes();
 }
 function deckNote(msg) {
   DECK.note = msg;
   const b = DECK.b || DECK.pending;
-  ui("mv_decks").textContent = DECK.b ? "B playing" : DECK.pending ? "B queued" : "B not loaded";
-  ui("deckstatus").textContent = (b ? `deck B — seed ${b.seed}, ${b.piece.profile.name}, built in ${DECK.buildMs.toFixed(0)} ms. ` : "") + msg;
+  const ol = otherLabel(DECK.main);
+  ui("mv_decks").textContent = DECK.b ? ol + " playing" : DECK.pending ? ol + " queued" : ol + " not loaded";
+  ui("deckstatus").textContent = (b ? `deck ${b.label || otherLabel(DECK.main)} — seed ${b.seed}, ${b.piece.profile.name}, built in ${DECK.buildMs.toFixed(0)} ms. ` : "") + msg;
 }
 function paintDeckLanes() {
   const host = ui("decklanes");
@@ -10412,8 +10523,8 @@ function paintDeckLanes() {
     b.addEventListener("click", () => deckHand(ch));
     host.appendChild(b);
   }
-  const n = DECK_LANES.filter(c => DECK.owner[c] === "B").length;
-  ui("decksum").textContent = (DECK.b || DECK.pending) ? `${8 - n} on A, ${n} on B` : "";
+  const n = DECK_LANES.filter(c => DECK.owner[c] !== DECK.main).length;
+  ui("decksum").textContent = (DECK.b || DECK.pending) ? `${8 - n} on ${DECK.main}, ${n} on ${otherLabel(DECK.main)}` : "";
 }
 ui("deckload").addEventListener("click", () => deckLoad(parseInt(ui("deckseed").value, 10) | 0));
 ui("deckunload").addEventListener("click", deckUnload);
@@ -10462,14 +10573,12 @@ function djNote(msg) {
   const el = ui("djstatus");
   if (!el) return;
   const c = DJ.cur, pl = DJ.plan;
-  // THE SURFACE IS DECK A'S. Say which deck is playing, and say so where the
-  // stale part is, rather than let the sheet below pass for the live piece.
+  // Say which deck is playing; the sheet and the faders below follow it.
   const lv = ui("djlive");
   if (lv) {
     lv.hidden = !DJ.on;
-    if (DJ.on) lv.textContent = DJ.live === "A"
-      ? `the night: deck A is live — ${c.profile}, seed ${c.seed}${DJ.closing ? ", closing" : ""}`
-      : `the night: deck B is live — ${c.profile}, seed ${c.seed}${DJ.closing ? ", closing" : ""}. The sheet, faders and seed line below are deck A's, which is silent.`;
+    if (DJ.on) lv.textContent = `the night: deck ${DJ.live} is live — ${c.profile}, seed ${c.seed}${DJ.closing ? ", closing" : ""}`
+      + (DJ.phase === "blend" && pl ? ` · blending into ${pl.profile}` : "");
   }
   el.textContent = !DJ.on ? msg
     : `night ${DJ.night} · track ${DJ.n}, ${c.profile} on ${DJ.live} since bar ${c.start}, ends bar ${c.start + c.bars}`
@@ -10481,8 +10590,8 @@ function djStart() {
   if (!T.running || !DECK.mixA) { djNote("press start first — the night needs a running transport."); return false; }
   if (DJ.on) return true;
   deckUnload();
-  DJ.on = true; DJ.closing = false; DJ.fading = false; DJ.night = SEED | 0; DJ.n = 0; DJ.live = "A"; DJ.plan = null; DJ.built = null;
-  DJ.phase = "play"; DJ.retire = null; DJ.log = [];
+  DJ.on = true; DJ.closing = false; DJ.fading = false; DJ.night = SEED | 0; DJ.n = 0; DJ.live = DECK.main; DJ.plan = null; DJ.built = null;
+  DJ.phase = "play"; DJ.retire = null; DJ.log = []; DJ.trail = [];
   const bar = Math.floor(T.step / 16);
   DJ.cur = { profile: PIECE.profile.id, bpm: T.bpm, start: bar, bars: djTrackBars(DJ.night, 0), seed: PIECE.seed };
   deckXfade(0);
@@ -10510,11 +10619,9 @@ function djCompose(plan, incoming) {
   for (let attempt = 0; attempt < 3; attempt++) {
     const seed = attempt === 0 ? plan.seed : djSeedFor(plan.profile, DJ.night, plan.n, attempt);
     try {
-      if (incoming === "B") {
-        const d = deckBuild(seed);
-        if (!d.piece.drawFailed) { plan.seed = seed; return d; }
-        try { d.engine.tail.disconnect(); } catch (e) {}
-      } else { draw(seed); plan.seed = seed; return { seed: seed }; }
+      const d = deckBuild(seed, incoming);
+      if (!d.piece.drawFailed) { plan.seed = seed; return d; }
+      try { d.engine.tail.disconnect(); } catch (e) {}
     } catch (e) { /* the attempt failed; the next one is the same spec on another seed */ }
     djLog("retry", { n: plan.n, attempt: attempt + 1, seed: seed });
   }
@@ -10552,6 +10659,19 @@ function djCommissionCloser(bar) {
   djLog("commission", { n: plan.n, profile: plan.profile, seed: plan.seed, blend: plan.blend, start: plan.start,
                         bpm: plan.bpm, closer: true });
 }
+// NEXT TRACK NOW: the blend is brought forward to the next phrase line at least
+// `leadBars` away (the incoming deck needs them to be built and on the grid). The
+// track that is live ends where the blend does, exactly as the closer's does.
+function djSkip() {
+  if (!DJ.on || DJ.closing || DJ.phase !== "play") return false;
+  const c = DJ.cur, bar = Math.floor(T.step / 16), ph = DJ_CFG.phrase;
+  if (!DJ.plan) djCommission(bar);
+  if (!DJ.plan || DJ.plan.closer) return false;
+  const start = c.start + Math.ceil((bar + DJ_CFG.leadBars - c.start) / ph) * ph;
+  if (DJ.plan.start > start) { DJ.plan.start = start; c.bars = start + DJ.plan.blend - c.start; }
+  djLog("skip", { n: DJ.plan.n, start: DJ.plan.start });
+  return true;
+}
 function djClose() {
   if (!DJ.on || DJ.closing) return;
   DJ.closing = true;
@@ -10571,25 +10691,48 @@ function djFade(bar) {
   DECK.master.gain.linearRampToValueAtTime(0, t + dur);
   djLog("fade", { seconds: +dur.toFixed(1) });
 }
+// THE SURFACE FOLLOWS THE LIVE DECK. When a blend completes the incoming engine
+// becomes the page's `engine` and its piece the page's PIECE, through the same
+// `rebuild` a seed change goes through, so the sheet, the seed line, the modulator
+// rows and every slider that follows a piece are the new track's. The old surface
+// deck becomes the "other" one and plays out its fading lanes and its tails until
+// it is retired. What the HAND owns (faders, trims, mutes, solo, the pump, the room)
+// is put into the new engine from the controls themselves: the surface's word wins.
+function djSwapMain() {
+  const nb = DECK.b;
+  if (!nb || nb.engine === engine) return;
+  const keepBpm = T.bpm, before = PIECE;
+  DECK.b = { engine: engine, piece: PIECE, seed: PIECE.seed, offset: DECK.aOffset, label: DECK.main };
+  engine = nb.engine; DECK.aOffset = nb.offset; DECK.main = nb.label;
+  usePiece(nb.piece);
+  SEED = nb.seed | 0;
+  resetMorph(); pieceTrimPending = null; preparePieceTrim(SEED); rideReset();
+  rebuild(before);
+  replayHandOnly(engine);
+  engine.set("pump", val("pump")); engine.set("dlyFbk", val("fbk")); engine.set("revSeconds", val("revsize"));
+  engine.set("dlyBeats", parseFloat(ui("dlydiv").value));
+  engine.set("auto", autoOn);
+  T.bpm = keepBpm; engine.cfg.bpm = T.bpm; engine.set("bpm", T.bpm);
+  if (ui("bpm")) ui("bpm").value = String(Math.round(T.bpm));
+  ui("seedline").textContent = "seed " + SEED + " · " + PIECE.profile.name;
+  ui("seedin_v").textContent = String(SEED);
+  writeUrl(); lastPainted = -1; refreshHand();
+  djLog("surface", { deck: DECK.main, seed: SEED });
+}
 function djEnterBlend(bar) {
   const p = DJ.plan, incoming = DJ.live === "A" ? "B" : "A";
-  DJ.bpmFrom = T.bpm;                       // BEFORE the draw below: a new piece moves T.bpm to its own tempo
-  if (incoming === "B") { DECK.pending = DJ.built; }
-  else {
-    applySeed(p.seed);                      // deck A takes the piece: a draw, at a bar line
-    DECK.aOffset = T.step;                  // ...and counts it from its own bar 0
-  }
+  DJ.bpmFrom = T.bpm;
+  DECK.pending = DJ.built;                  // both decks are built engines now: the incoming one is always the other
   DJ.built = null;
   DJ.phase = "blend"; DJ.blendStart = bar;
   DJ.hand = djHandovers(p.blend);
-  T.bpm = DJ.bpmFrom;                       // a piece with another tempo does not get to move the clock
   djLog("blend", { n: p.n, into: incoming, len: p.blend });
 }
 function djBlendBar(bar) {
   const p = DJ.plan, incoming = DJ.live === "A" ? "B" : "A", k = bar - DJ.blendStart;
   for (const h of DJ.hand) if (h.at === k) {
     const out = incoming === "A" ? "B" : "A";
-    const eng = d => d === "A" ? engine : (DECK.b || DECK.pending || {}).engine;
+    const eng = d => d === DECK.main ? engine : (DECK.b || DECK.pending || {}).engine;
     const f = DJ_CFG.fade, when = T.nextT, dur = f.bars * 16 * 60 / T.bpm / 4;
     for (const l of h.lanes) {
       DECK.owner[l] = incoming;
@@ -10608,7 +10751,9 @@ function djBlendBar(bar) {
   T.bpm = DJ.bpmFrom + (p.bpm - DJ.bpmFrom) * Math.min(1, (k + 1) / p.blend);
   if (k >= p.blend) {
     DJ.retire = { deck: DJ.live, at: bar + DJ_CFG.tailBars };
+    DJ.trail.push({ profile: DJ.cur.profile, start: DJ.cur.start, bars: DJ.cur.bars });
     DJ.live = incoming; DJ.n = p.n;
+    djSwapMain();
     DJ.cur = { profile: p.profile, bpm: p.bpm, start: DJ.blendStart, bars: p.bars, seed: p.seed, closer: !!p.closer };
     DJ.plan = null; DJ.phase = "play";
     djLog("live", { n: p.n, deck: incoming, profile: p.profile });
@@ -10624,7 +10769,7 @@ function djBar(bar) {
   if (DJ.phase === "play" && DJ.plan && bar >= DJ.plan.start) djEnterBlend(bar);
   if (DJ.phase === "blend") djBlendBar(bar);
   if (DJ.retire && bar >= DJ.retire.at) {
-    if (DJ.retire.deck === "B" && DECK.b) { try { DECK.b.engine.tail.disconnect(); } catch (e) {} DECK.b = null; }
+    if (DECK.b && DECK.b.label === DJ.retire.deck) { try { DECK.b.engine.tail.disconnect(); } catch (e) {} DECK.b = null; }
     djLog("retire", { deck: DJ.retire.deck });
     DJ.retire = null;
   }
@@ -10638,7 +10783,183 @@ function djBar(bar) {
   if (ui("bpm")) ui("bpm").value = String(Math.round(T.bpm));
   djNote("");
 }
-ui("djgo").addEventListener("click", () => !DJ.on ? djStart() : DJ.closing ? djStop("stopped by hand") : djClose());
+ui("djgo").addEventListener("click", async () => {
+  if (DJ.on) { DJ.closing ? djStop("stopped by hand") : djClose(); return; }
+  if (!T.running) await start();            // one press does both: the transport, then the night
+  djStart();
+});
+
+/* ---------------------------------------------------------------------------
+   7d. TONIGHT — the night view, variant C (owner's pick, 2026-09-25)
+   ---------------------------------------------------------------------------
+   Read-only: it draws what the DJ, the decks and the transport already say and
+   changes nothing. THE ARC IS THE NIGHT'S OWN FUNCTION: the tracks ahead are not
+   a guess, they are `djPlan` chained from the live track (a plan is a function
+   of the night's seed), so what is dotted is what will be played unless a
+   composition fails and is retried. Before the night starts the same chain is
+   drawn from the piece that is loaded, on the seed `start the night` would use.
+   `tonightPaint` runs on a timer and returns at once unless something it draws
+   has changed, so it costs nothing between bars. */
+const TN = { sig: "", ahead: [], aheadKey: "" };
+const TN_LANES = ["kick", "rimshot", "clap", "hats", "lead", "sub", "stab", "pad"];
+const TN_COL = { A: "#5fb7a8", B: "#e6b450" };
+function tonightAhead(night, cur, n0) {
+  const closer = cur.closer, planKey = DJ.plan ? DJ.plan.seed + ":" + DJ.plan.start : "-";
+  const key = [night, n0, cur.profile, cur.start, cur.bars, DJ.closing ? 1 : 0, planKey, DJ.push].join("|");
+  if (key === TN.aheadKey) return TN.ahead;
+  const out = [];
+  if (DJ.closing) {
+    if (!closer) out.push(DJ.plan && DJ.plan.closer ? DJ.plan : djPlanCloser(night, n0 + 1, cur));
+  } else {
+    let c = cur;
+    for (let i = 1; i <= 4; i++) {
+      const p = (i === 1 && DJ.plan && !DJ.plan.closer) ? DJ.plan : djPlan(night, n0 + i, c);
+      out.push(p); c = { profile: p.profile, bpm: p.bpm, start: p.start, bars: p.bars };
+    }
+  }
+  TN.ahead = out; TN.aheadKey = key;
+  // where a close would take the arc, worked out once per track: it draws a piece
+  TN.low = DJ.closing ? (out[0] ? out[0].target : djHome(cur.profile)) : djHome(djPlanCloser(night, n0 + 1, cur).profile);
+  return out;
+}
+function tonightDeck(label, bar) {
+  const owned = DECK_LANES.filter(l => DECK.owner[l] === label).length + DECK_LANES.filter(l => DECK.fading[l] === label).length;
+  if (!DJ.on) return label === DECK.main
+    ? { title: "Deck " + label + " — " + PIECE.profile.id, sub: T.running ? "playing the loaded piece · seed " + PIECE.seed : "the loaded piece · seed " + PIECE.seed }
+    : { title: "Deck " + label, sub: (DECK.b || DECK.pending) ? "loaded by hand" : "idle" };
+  const c = DJ.cur, p = DJ.plan;
+  const incoming = DJ.phase === "blend" && label !== DJ.live;
+  if (label === DJ.live && DJ.phase === "play")
+    return { title: "Deck " + label + " — " + c.profile, sub: `${DJ.closing && c.closer ? "closing" : "live"} · bar ${Math.max(1, bar - c.start + 1)} of ${c.bars}` };
+  if (label === DJ.live) return { title: "Deck " + label + " — " + c.profile, sub: `leaving · bar ${Math.max(1, bar - c.start + 1)} of ${c.bars}` };
+  if (incoming && p) return { title: "Deck " + label + " — " + p.profile, sub: `arriving · bar ${Math.max(1, bar - DJ.blendStart + 1)} of ${p.bars}` };
+  if (DJ.retire && DJ.retire.deck === label) return { title: "Deck " + label, sub: "ringing out" };
+  if (p) return { title: "Deck " + label + " — " + p.profile, sub: `ready · enters at bar ${p.start}` };
+  return { title: "Deck " + label, sub: "waiting for the next track" };
+}
+function tonightPaint() {
+  const el = ui("tn_arc"); if (!el) return;
+  const night = DJ.on ? DJ.night : (SEED | 0);
+  const cur = DJ.on ? DJ.cur : { profile: PIECE.profile.id, bpm: T.bpm, start: 0, bars: djTrackBars(night, 0), closer: false };
+  const n0 = DJ.on ? DJ.n : 0;
+  const bar = DJ.on ? Math.floor(T.step / 16) : 0;
+  const own = DECK_LANES.map(l => DECK.owner[l] + (DECK.fading[l] || "")).join("");
+  const sig = [DJ.on, DJ.closing, DJ.phase, DJ.live, DECK.main, bar, own, DJ.plan ? DJ.plan.seed : 0, DJ.trail.length, T.running, PIECE.seed,
+    DJ.push, val("vol"), DECK.trim.A, DECK.trim.B, Object.keys(MIX.mutes).join(","), MIX.solo, DJ.plan ? DJ.plan.start : 0].join("|");
+  if (sig === TN.sig) return;
+  TN.sig = sig;
+  const ahead = tonightAhead(night, cur, n0);
+
+  // the sequence on the page: up to three played, the live one at slot 3, up to four ahead
+  const past = (DJ.on ? DJ.trail : []).slice(-3);
+  const seq = past.map(t => Object.assign({ kind: "past" }, t))
+    .concat([{ kind: "cur", profile: cur.profile, start: cur.start, bars: cur.bars, closer: cur.closer }])
+    .concat(ahead.map(a => ({ kind: "next", profile: a.profile, start: a.start, bars: a.bars, closer: a.closer, target: a.target })));
+  const slot0 = 3 - past.length, W = 1184, X0 = 56, X1 = W - 72, Y0 = 44, H = 236;
+  const homeOf = id => PROFILE_DEFS.find(q => q.id === id).energy[2];
+  const yOf = e => Y0 + (1 - (clamp(e, 0.15, 0.75) - 0.15) / 0.6) * H;
+  const xOfSlot = i => X0 + (slot0 + i) * (X1 - X0) / 7;
+  const pts = seq.map((t, i) => [xOfSlot(i), yOf(homeOf(t.profile))]);
+  const idxOfBar = b => {                                 // fractional index in seq, piecewise linear over the track starts
+    if (b <= seq[0].start) return 0;
+    for (let i = 0; i < seq.length - 1; i++)
+      if (b < seq[i + 1].start) return i + (b - seq[i].start) / Math.max(1, seq[i + 1].start - seq[i].start);
+    return seq.length - 1;
+  };
+  const xOfBar = b => {
+    const f = idxOfBar(b), i = Math.min(Math.floor(f), seq.length - 2);
+    return seq.length < 2 ? pts[0][0] : pts[i][0] + (f - i) * (pts[i + 1][0] - pts[i][0]);
+  };
+  let d = "M" + pts[0][0] + " " + pts[0][1];
+  for (let i = 1; i < pts.length; i++) { const a = pts[i - 1], b = pts[i], mx = (a[0] + b[0]) / 2; d += ` C${mx} ${a[1]} ${mx} ${b[1]} ${b[0]} ${b[1]}`; }
+  const nowX = xOfBar(DJ.on ? bar : cur.start);
+  TN.pos = (n0 - past.length) + idxOfBar(DJ.on ? bar : cur.start);   // absolute: the page turn at a swap does not move it
+  let g = "";
+  [0.2, 0.4, 0.6].forEach(v => { g += `<line x1="${X0 - 20}" x2="${W - 30}" y1="${yOf(v)}" y2="${yOf(v)}" stroke="#22303a"/><text x="${X0 - 20}" y="${yOf(v) - 7}" fill="#6f8890" font-size="13">energy ${v.toFixed(1)}</text>`; });
+  // the night's own arc target, the function the walk follows
+  let ad = "";
+  const b0 = seq[0].start, b1 = seq[seq.length - 1].start;
+  for (let k = 0; k <= 60; k++) { const b = b0 + (b1 - b0) * k / 60; ad += (k ? "L" : "M") + xOfBar(b).toFixed(1) + " " + yOf(djArc(night, b)).toFixed(1); }
+  g += `<path d="${ad}" fill="none" stroke="#6f8890" stroke-width="1.5" stroke-dasharray="7 6" opacity=".7"/>`;
+  g += `<clipPath id="tn_past"><rect x="0" y="0" width="${nowX}" height="400"/></clipPath><clipPath id="tn_fut"><rect x="${nowX}" y="0" width="2000" height="400"/></clipPath>`;
+  g += `<path d="${d}" fill="none" stroke="#e9e4d4" stroke-width="5" stroke-linecap="round" clip-path="url(#tn_past)"/>`;
+  g += `<path d="${d}" fill="none" stroke="#e9e4d4" stroke-width="3" stroke-dasharray="2 9" stroke-linecap="round" clip-path="url(#tn_fut)" opacity=".75"/>`;
+  seq.forEach((t, i) => {
+    const played = t.kind !== "next", dy = (i % 2) ? 34 : -20;
+    g += `<circle cx="${pts[i][0]}" cy="${pts[i][1]}" r="${played ? 9 : 7}" fill="${played ? "#e9e4d4" : "#101820"}" stroke="#e9e4d4" stroke-width="3"/>`
+       + `<text x="${pts[i][0]}" y="${pts[i][1] + dy}" text-anchor="middle" fill="${played ? "#e9e4d4" : "#9fb0b4"}" font-size="17" font-weight="600">${t.closer ? t.profile + " · last" : t.profile}</text>`;
+  });
+  if (DJ.closing && seq.length) {                         // the end of the night, after the closer
+    const last = pts[pts.length - 1];
+    g += `<text x="${last[0] + 22}" y="${last[1] + 5}" fill="#9fb0b4" font-size="16" font-style="italic">then silence</text>`;
+  }
+  // where the night is now: a line, a brass point on the curve, and what is happening
+  const path = document.createElementNS("http://www.w3.org/2000/svg", "path"); path.setAttribute("d", d);
+  const tl = path.getTotalLength(); let best = 0, bd = 1e9;
+  for (let k = 0; k <= 240; k++) { const q = path.getPointAtLength(tl * k / 240), dd = Math.abs(q.x - nowX); if (dd < bd) { bd = dd; best = k; } }
+  const nowY = path.getPointAtLength(tl * best / 240).y;
+  const what = !DJ.on ? "not started" : DJ.phase === "blend" ? `now · ${cur.profile} → ${DJ.plan.profile}, ${DJ.plan.blend}-bar blend`
+             : DJ.closing && cur.closer ? "now · the last track" : `now · ${cur.profile}`;
+  g += `<g class="tn-now"><line x1="${nowX}" x2="${nowX}" y1="${Y0 - 30}" y2="${Y0 + H + 22}" stroke="#e6b450" stroke-width="2"/><circle cx="${nowX}" cy="${nowY}" r="12" fill="#e6b450"/>`
+     + `<text x="${nowX + 18}" y="${Y0 - 16}" fill="#e6b450" font-size="17" font-weight="600">${what}</text></g>`;
+  el.innerHTML = g;
+
+  // the words
+  const t = ui("tn_title"), sub = ui("tn_sub");
+  const key = KEY_NAMES[((KEY_HAND.root % 12) + 12) % 12] + " " + ui("keyscale").selectedOptions[0].text;
+  if (!DJ.on) {
+    t.textContent = "Tonight";
+    sub.textContent = T.running
+      ? `Nothing is planned yet. Press start the night and the DJ takes it from ${cur.profile}. The dotted line is what it would play.`
+      : `Press start the night. It starts the transport and the DJ takes it from ${cur.profile}. The dotted line is what it would play.`;
+  } else {
+    t.textContent = DJ.closing ? "Closing" : "Tonight";
+    const low = TN.low;
+    sub.textContent = `track ${DJ.n + 1} of an endless set · ${key} · ${Math.round(T.bpm)} bpm · `
+      + (DJ.closing ? `the arc falls to ${low.toFixed(2)} and stops` : `the arc would fall to ${low.toFixed(2)} if you closed now`);
+  }
+  for (const lab of ["A", "B"]) {
+    const dk = tonightDeck(lab, bar);
+    ui("tn_t" + lab).textContent = dk.title; ui("tn_s" + lab).textContent = dk.sub;
+    const host = ui("tn_l" + lab);
+    if (!host.children.length) TN_LANES.forEach((n, i) => {
+      const q = document.createElement("button"); q.type = "button"; q.textContent = n;
+      q.addEventListener("click", e => { if (e.shiftKey) setSolo(i); else setMute(i, !MIX.mutes[i]); tonightPaint(); });
+      host.appendChild(q);
+    });
+    DECK_LANES.forEach(l => {
+      const q = host.children[l], mine = DECK.owner[l] === lab, fad = DECK.fading[l] === lab;
+      const m = !!MIX.mutes[l], so = MIX.solo === l;
+      q.className = (mine ? "own" : fad ? "fade" : "") + (m ? " mute" : "") + (so ? " solo" : "") + (MIX.solo !== null && !so ? " quiet" : "");
+      q.setAttribute("aria-pressed", String(m || so));
+      q.title = `${TN_LANES[l]}: click mutes, shift-click solos` + (m ? " — muted" : so ? " — soloed" : "");
+      q.style.background = mine ? TN_COL[lab] : fad ? TN_COL[lab] : "";
+      q.style.opacity = fad ? ".55" : "";
+    });
+  }
+  const btn = ui("djgo");
+  btn.textContent = !DJ.on ? "start the night" : DJ.closing ? "stop now" : "close the night";
+  ui("tn_skip").disabled = !(DJ.on && !DJ.closing && DJ.phase === "play");
+  // the sliders show the state, and never fight a hand that is on one
+  const sync = (id, v, out, txt) => { const el = ui(id); if (document.activeElement !== el) el.value = String(v); ui(out).textContent = txt; };
+  sync("tn_push", DJ.push, "tn_pv", DJ.push === 0 ? "as the arc says" : (DJ.push > 0 ? "+" : "−") + Math.abs(DJ.push).toFixed(2) + (DJ.push > 0 ? " · lifts the arc" : " · lowers the arc"));
+  sync("tn_master", val("vol"), "tn_mv", val("vol").toFixed(2));
+  sync("tn_fA", DECK.trim.A, "tn_vA", DECK.trim.A.toFixed(2));
+  sync("tn_fB", DECK.trim.B, "tn_vB", DECK.trim.B.toFixed(2));
+}
+ui("tn_skip").addEventListener("click", () => { if (djSkip()) say("the DJ brings the next track forward: it enters at the next phrase."); TN.sig = ""; tonightPaint(); });
+ui("tn_push").addEventListener("input", () => { DJ.push = parseFloat(ui("tn_push").value); tonightPaint(); });
+ui("tn_push").addEventListener("dblclick", () => { DJ.push = 0; tonightPaint(); });
+ui("tn_master").addEventListener("input", () => {
+  const v = val("tn_master"); ui("vol").value = String(v);
+  ui("vol").dispatchEvent(new Event("input", { bubbles: true }));          // the surface deck, through the master's own door
+  for (const e of deckEngines()) e.set("master", v);                       // ...and the deck that is arriving
+  tonightPaint();
+});
+ui("tn_fA").addEventListener("input", () => { deckTrim("A", val("tn_fA")); tonightPaint(); });
+ui("tn_fB").addEventListener("input", () => { deckTrim("B", val("tn_fB")); tonightPaint(); });
+setInterval(tonightPaint, 400);
+tonightPaint();
 
 async function start() {
   if (T.running) { stop(); return; }
@@ -10825,11 +11146,16 @@ function window0(buf, from, len) {
 }
 
 window.p02 = {
-  dj: { start: djStart, stop: djStop, close: djClose, budget: djBudget, planCloser: djPlanCloser,
+  tonight: { paint: () => { TN.sig = ""; tonightPaint(); }, pos: () => TN.pos, ahead: () => TN.ahead.map(a => ({ profile: a.profile, start: a.start })) },
+  dj: { start: djStart, stop: djStop, close: djClose, skip: djSkip, budget: djBudget, planCloser: djPlanCloser,
         state: () => ({ on: DJ.on, closing: DJ.closing, fading: DJ.fading, night: DJ.night, n: DJ.n, live: DJ.live, phase: DJ.phase, cur: DJ.cur, plan: DJ.plan,
           owner: Object.assign({}, DECK.owner), aOffset: DECK.aOffset,
-          ho: { A: engine ? DECK_LANES.map(l => +engine.A.chan[l].ho.gain.value.toFixed(3)) : null,
-                B: (DECK.b || DECK.pending) ? DECK_LANES.map(l => +(DECK.b || DECK.pending).engine.A.chan[l].ho.gain.value.toFixed(3)) : null }, bpm: T.bpm, bar: Math.floor(T.step / 16),
+          trim: Object.assign({}, DECK.trim), mix: DECK.mixA ? { A: DECK.mixA.gain.value, B: DECK.mixB.gain.value } : null, solo: MIX.solo, soloAll: deckEngines().map(e => e.cfg.solo), engineSolo: engine ? engine.cfg.solo : null, push: DJ.push,
+          main: DECK.main, surfaceSeed: SEED, pieceSeed: PIECE.seed, engineSeed: engine ? engine.cfg.seed : null,
+          seedLine: ui("seedline").textContent, fader3: engine ? engine.A.chan[3].fader : null,
+          fader3Slider: parseFloat(ui("fad3").value), mutes: engine ? Object.keys(engine.cfg.mutes) : null,
+          ho: (() => { const o = { A: null, B: null }, oth = DECK.b || DECK.pending, h = e => DECK_LANES.map(l => +e.A.chan[l].ho.gain.value.toFixed(3));
+                       if (engine) o[DECK.main] = h(engine); if (oth) o[oth.label || otherLabel(DECK.main)] = h(oth.engine); return o; })(), bpm: T.bpm, bar: Math.floor(T.step / 16),
           seed: SEED, log: DJ.log.slice() }),
         cfg: DJ_CFG, arc: djArc, walk: djWalk, seedFor: djSeedFor, blendLen: djBlendLen, plan: djPlan,
         handovers: djHandovers, graph: PROFILE_GRAPH,
