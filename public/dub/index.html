@@ -2258,7 +2258,12 @@ const RUMBLE_CAP = 0.09;
 // The case for quiet: the sound as it stands has been judged good, and a layer
 // that changes the character of it is the failure mode here rather than the
 // feature. What that costs is measured and it is beside the block in section 5.
-const BED_LEVEL = 0.07;
+// LOWERED 0.07 -> 0.035 (-6 dB), 2026-09-25, on the owner's ear: "der rauscht
+// kontinuierlich" - the continuous part of the bed was heard as noise rather
+// than as air. Not re-measured: it is the same bed at half the level, so the
+// table above scales by -6 dB (the air about 37 dB under the mix). The slider
+// still reaches every other level; this is only where it starts.
+const BED_LEVEL = 0.035;
 
 /* ---------------------------------------------------------------------------
    3. THE GRID — euclidean placement [G]
