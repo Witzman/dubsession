@@ -1,5 +1,16 @@
 # Changelog
 
+## 2026-09-25 — the night runs itself, on the prototype stage only
+
+- **`/v2/` has a "start the night" button in the decks drawer.** The DJ plans the
+  next track from an energy arc, steps to a neighbouring style (or stays), builds
+  it on the idle deck twenty bars before the end and hands the lanes over on the
+  bar lines: tops first, the low end in one move on the midpoint, the pad last.
+  The tempo glides by at most 3 BPM per track. The decks alternate, indefinitely.
+- **Not there yet:** a close button, personas, themes. The sheet and the seed line
+  follow deck A, so they show the silent deck while B is live.
+- **`https://witzman.de/dub` is unchanged.**
+
 ## 2026-09-25 — the second deck, on the prototype stage only
 
 - **`/v2/` now carries a fork of the instrument with a second deck.** A new
