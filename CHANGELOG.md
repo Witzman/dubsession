@@ -1,5 +1,16 @@
 # Changelog
 
+## 2026-09-25 — a stage for the successor, under /v2/ on Pages
+
+- **GitHub Pages now carries two things: the instrument at the site root, and a
+  prototype stage at `/v2/`.** The workflow assembles the site instead of
+  uploading one folder. `v2/` sits deliberately outside `public/`, because the
+  Dockerfile copies `public/` wholesale and the container must carry exactly one
+  thing.
+- **Nothing about the deployed instrument changes.** `https://witzman.de/dub`
+  is still the one deploy, still served from the container, still built from
+  `public/dub`. Pages is not that deploy.
+
 ## 2026-09-22 — performance scheduler follows the hand
 
 - **Auto is now the clock, not a fixed arrangement.** The current seed,
