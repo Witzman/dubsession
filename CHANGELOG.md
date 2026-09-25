@@ -1,5 +1,17 @@
 # Changelog
 
+## 2026-09-25 — the second deck, on the prototype stage only
+
+- **`/v2/` now carries a fork of the instrument with a second deck.** A new
+  `decks` drawer loads deck B from a seed, hands lanes between the decks one at
+  a time and crossfades them with equal power. B is scheduled on A's grid, so the
+  two are beatmatched, and it enters on a bar line. Two full decks do not keep
+  real time (measured); the lanes are handed over rather than added, and with
+  the lanes split the pair does.
+- **Two more profiles and a neighbourhood, on `/v2/` only:** `hypnotic` and
+  `hypnagogic`, with hand-set neighbours and an energy home for all seven.
+- **`https://witzman.de/dub` is unchanged** apart from the bed level above.
+
 ## 2026-09-25 — a stage for the successor, under /v2/ on Pages
 
 - **GitHub Pages now carries two things: the instrument at the site root, and a

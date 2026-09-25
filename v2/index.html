@@ -300,6 +300,12 @@
   button.sm { padding: 6px 12px; font-size: 12px; }
   .morphbar { display: flex; align-items: center; gap: 10px; flex-wrap: wrap;
               margin-top: 10px; color: var(--dim); font-size: 12px; }
+  /* the decks drawer (v2): the seedbar's field, the morph bar's slider colour */
+  .deckinput { font: inherit; background: var(--panel); color: var(--hot); border: 1px solid var(--line);
+               padding: 6px 9px; width: 9em; }
+  .deckinput:focus { outline: none; border-color: var(--hot); }
+  .deckxf { width: 100%; accent-color: var(--hot); }
+  #decklanes button[aria-pressed="true"] { border-color: var(--time); color: var(--time); }
   .morphbar input[type=range] { accent-color: var(--hot); min-width: 180px; }
   .morphbar output { color: var(--hot); min-width: 190px; }
 
@@ -1010,6 +1016,36 @@
         <table id="sections"><thead><tr>
           <th style="width:52px">bar</th><th>event</th>
         </tr></thead><tbody></tbody></table>
+      </div>
+    </details>
+
+    <!-- THE DECKS — v2 only (workshop #84). A second engine over the same
+         AudioContext, on the first one's grid; the lanes are HANDED OVER, not
+         added, because the cost is voices (workshop #86). -->
+    <details class="drawer" id="decks">
+      <summary class="spine" id="sp_decks">
+        <span class="nmx">decks</span><span class="rule"></span>
+        <span class="moved" id="mv_decks">B not loaded</span>
+        <span class="digest" id="decksum"></span>
+        <span class="refuse" id="rf_decks" hidden></span>
+        <span class="plus">+</span>
+      </summary>
+      <div class="body">
+        <div class="seekrow">
+          <div class="unit">
+            <div class="t">deck B seed</div>
+            <input id="deckseed" type="text" inputmode="numeric" value="4242" aria-label="deck B seed" class="deckinput">
+          </div>
+          <button id="deckload" class="sm">load B</button>
+          <button id="deckunload" class="sm">unload B</button>
+        </div>
+        <div class="unit" style="margin-top:14px">
+          <div class="t">crossfader — A ◂ ▸ B (equal power)</div>
+          <input id="deckxf" type="range" min="0" max="100" step="1" value="0" aria-label="crossfader" class="deckxf">
+        </div>
+        <div class="t" style="margin-top:14px">lanes — a lane belongs to one deck; click hands it to the other</div>
+        <div id="decklanes" style="display:flex;flex-wrap:wrap;gap:6px;margin-top:6px"></div>
+        <div id="deckstatus" class="t" style="margin-top:12px"></div>
       </div>
     </details>
 
@@ -6332,7 +6368,7 @@ function createEngine(ctx, opts) {
   // "N" the way the rumble answers to "R" — which is the only way to measure
   // a continuous layer in isolation, and the only way a soloed voice is still
   // that voice alone.
-  const bedAudible = () => (cfg.mutes.N || !(cfg.solo === null || cfg.solo === "N")) ? 0 : 1;
+  const bedAudible = () => ((opts.gate && !opts.gate("N")) || cfg.mutes.N || !(cfg.solo === null || cfg.solo === "N")) ? 0 : 1;
   function applyBed(t) {
     A.bedGain.gain.setTargetAtTime(BED_LEVEL * cfg.bedTrim * bedAudible(), t, 0.05);
   }
@@ -7097,13 +7133,17 @@ function createEngine(ctx, opts) {
      stays silent even when it is the soloed one. That is the honest order: the
      hand's mute is more recent than the hand's solo and nothing here is
      entitled to overrule it silently. */
+  // `opts.gate(key)` is the deck's own answer to "is this lane mine": the
+  // keys are 0..7, "R" and "N". It is checked BEFORE the hand's mute and solo,
+  // and a lane the gate refuses is not scheduled, which is why it costs nothing.
   function audible(ch) {
+    if (opts.gate && !opts.gate(ch)) return false;
     if (cfg.mutes[ch]) return false;
     return cfg.solo === null || cfg.solo === ch;
   }
   // The rumble is not a channel with a pattern: it is a dark tail on the
   // kick's trigger, so it needs its own answer to both questions.
-  const rumbleAudible = () => !cfg.mutes.R && (cfg.solo === null || cfg.solo === "R");
+  const rumbleAudible = () => (!opts.gate || opts.gate("R")) && !cfg.mutes.R && (cfg.solo === null || cfg.solo === "R");
 
   // The per-voice seed. A fact about (seed, absolute step, channel, slot) and
   // nothing else — which is what lets bar 200 be rendered from a standing
@@ -8054,6 +8094,8 @@ function tick() {
     if (T.step % 16 === 0) promoteRides(Math.floor(T.step / 16));
     if (T.step % 16 === 0) promoteVoiceRecipes();
     engine.scheduleStep(T.step, T.nextT, stepDur);
+    if (T.step % 16 === 0) deckBar();
+    if (DECK.b) deckStep(T.step, T.nextT, stepDur);
     uiQueue.push({ step: T.step, at: T.nextT });
     T.nextT += stepDur;
     T.step++;
@@ -10070,11 +10112,133 @@ function applyMute() {
   ui("mute").setAttribute("aria-pressed", String(muted));
   ui("mute").textContent = muted ? "muted" : "mute";
   if (engine) engine.A.out.gain.setTargetAtTime(muted ? 0 : 0.97, ctx.currentTime, 0.01);
+  if (DECK.master) DECK.master.gain.setTargetAtTime(muted ? 0 : 1, ctx.currentTime, 0.01);
   if (muted) say("muted — the transport runs, nothing reaches the output.", true);
   else if (sayUntil === Infinity) { ui("status").textContent = ""; sayUntil = 0; }
 }
 
 /* --- START. No context before a gesture: browsers block it and it is rude. --- */
+/* ---------------------------------------------------------------------------
+   7b. THE DECKS — v2 only (workshop #84, sprint 19)
+   ---------------------------------------------------------------------------
+   Deck A is the engine this page has always had. Deck B is a second
+   `createEngine` over the same AudioContext, scheduled on A's grid: same step,
+   same step length, so the two are beatmatched by construction and B's own
+   tempo is ignored (the DJ will pick a tempo window; that is not this sprint).
+   B enters on a bar line and counts from its own bar 0. Both decks end in the
+   equal-power crossfader and a shared master.
+
+   THE LANES ARE HANDED OVER, NOT ADDED. Two full decks do not keep up
+   (workshop #86, measured live, dev box: 2.4-3.1 s of drift in 25 s), and the
+   cost is voices. A lane a deck does not own is not scheduled at all, so with
+   the lanes split between the decks the pair costs about one deck (drift 0.14
+   and 0.39 s). `gateFor` is how a deck asks; a lane handed over rings its tail
+   out on the deck that played it.
+
+   THE PIECE IS GLOBAL MODULE STATE, so B's piece is bound around B's
+   scheduling call and A's is put back straight after — one thread, nothing can
+   observe the gap. That is `deckStep`, and it is the whole of the seam.
+   Pins and the hand's holds are A's and reach B too; that is a bench
+   simplification and not a design. */
+const DECK_LANES = [0, 1, 2, 3, 4, 5, 6, 7];
+const DECK = { b: null, pending: null, owner: { 0:"A", 1:"A", 2:"A", 3:"A", 4:"A", 5:"A", 6:"A", 7:"A" },
+               xf: 0, master: null, mixA: null, mixB: null, buildMs: null, note: "" };
+// the rumble follows the kick, the bed is deck A's
+const laneOwnerOf = k => k === "R" ? DECK.owner[0] : k === "N" ? "A" : DECK.owner[k];
+const gateFor = which => k => laneOwnerOf(k) === which;
+
+function deckWire() {
+  DECK.master = ctx.createGain(); DECK.master.gain.value = muted ? 0 : 1; DECK.master.connect(ctx.destination);
+  DECK.mixA = ctx.createGain(); engine.tail.connect(DECK.mixA); DECK.mixA.connect(DECK.master);
+  DECK.mixB = ctx.createGain(); DECK.mixB.connect(DECK.master);
+  deckXfade(DECK.xf);
+}
+function deckXfade(x) {
+  DECK.xf = x;
+  if (!DECK.mixA) return;
+  const t = ctx.currentTime;
+  DECK.mixA.gain.setTargetAtTime(Math.cos(x * Math.PI / 2), t, 0.02);
+  DECK.mixB.gain.setTargetAtTime(Math.sin(x * Math.PI / 2), t, 0.02);
+}
+// Building an engine is main-thread work (two impulse responses, the noise
+// bank), so it happens on the button and not inside the scheduler's tick; the
+// bar line only PROMOTES it. The time it took is shown, not assumed.
+function deckLoad(seed) {
+  if (!ctx) { deckNote("press start first — there is no audio context yet."); return false; }
+  deckUnload();
+  const t0 = performance.now(), prev = PIECE;
+  let piece;
+  try { piece = draw(seed); }
+  catch (e) { piece = draw(DEFAULT_SEED); piece.drawFailed = { seed: seed, why: e.message }; }
+  usePiece(piece);
+  let eng;
+  try {
+    eng = createEngine(ctx, { seed: seed, movement: MOVEMENT, auto: false,
+                              keyRoot: KEY_HAND.root, keyScale: KEY_HAND.scale,
+                              transpose: PITCH_HAND.transpose, semi: PITCH_HAND.semi,
+                              gate: gateFor("B") });
+  } finally { usePiece(prev); }
+  eng.tail.connect(DECK.mixB);
+  eng.set("master", val("vol"));
+  DECK.pending = { engine: eng, piece: piece, seed: seed };
+  DECK.buildMs = performance.now() - t0;
+  deckXfade(0.5);
+  ui("deckxf").value = "50";
+  deckNote(T.running ? "queued: B enters on the next bar line." : "loaded: B enters on the first bar line after start.");
+  return true;
+}
+function deckUnload() {
+  const d = DECK.b || DECK.pending;
+  if (d) { try { d.engine.tail.disconnect(); } catch (e) {} }
+  DECK.b = null; DECK.pending = null;
+  for (const c of DECK_LANES) DECK.owner[c] = "A";
+  deckXfade(0); if (ui("deckxf")) ui("deckxf").value = "0";
+  deckNote(""); paintDeckLanes();
+}
+function deckBar() {
+  if (DECK.pending) {
+    DECK.b = Object.assign(DECK.pending, { offset: T.step });
+    DECK.pending = null;
+    deckNote(`B playing from bar ${Math.floor(T.step / 16) + 1}.`);
+  }
+  if (DECK.b) { DECK.b.engine.cfg.bpm = T.bpm; DECK.b.engine.set("bpm", T.bpm); }
+}
+function deckStep(step, when, stepDur) {
+  const d = DECK.b, keep = PIECE;
+  usePiece(d.piece);
+  try { d.engine.scheduleStep(step - d.offset, when, stepDur); }
+  finally { usePiece(keep); }
+}
+function deckHand(ch) {
+  DECK.owner[ch] = DECK.owner[ch] === "A" ? "B" : "A";
+  paintDeckLanes();
+}
+function deckNote(msg) {
+  DECK.note = msg;
+  const b = DECK.b || DECK.pending;
+  ui("mv_decks").textContent = DECK.b ? "B playing" : DECK.pending ? "B queued" : "B not loaded";
+  ui("deckstatus").textContent = (b ? `deck B — seed ${b.seed}, ${b.piece.profile.name}, built in ${DECK.buildMs.toFixed(0)} ms. ` : "") + msg;
+}
+function paintDeckLanes() {
+  const host = ui("decklanes");
+  host.textContent = "";
+  for (const ch of DECK_LANES) {
+    const b = document.createElement("button");
+    b.className = "sm"; b.type = "button";
+    b.textContent = `${CHANNELS[ch].voice} ${DECK.owner[ch]}`;
+    b.setAttribute("aria-pressed", String(DECK.owner[ch] === "B"));
+    b.disabled = !(DECK.b || DECK.pending);
+    b.addEventListener("click", () => deckHand(ch));
+    host.appendChild(b);
+  }
+  const n = DECK_LANES.filter(c => DECK.owner[c] === "B").length;
+  ui("decksum").textContent = (DECK.b || DECK.pending) ? `${8 - n} on A, ${n} on B` : "";
+}
+ui("deckload").addEventListener("click", () => deckLoad(parseInt(ui("deckseed").value, 10) | 0));
+ui("deckunload").addEventListener("click", deckUnload);
+ui("deckxf").addEventListener("input", () => deckXfade(parseInt(ui("deckxf").value, 10) / 100));
+paintDeckLanes();
+
 async function start() {
   if (T.running) { stop(); return; }
   if (!ctx) {
@@ -10085,11 +10249,12 @@ async function start() {
                                 transpose: PITCH_HAND.transpose, semi: PITCH_HAND.semi,
                                 keyRoot: KEY_HAND.root, keyScale: KEY_HAND.scale,
                                 holds: HOLDS, fires: FIRES,
+                                gate: gateFor("A"),
                                 // handed over, not copied: what the hand muted
                                 // before there was an engine is muted now
                                 mutes: MIX.mutes });
     if (MIX.solo !== null) engine.set("solo", MIX.solo);
-    engine.tail.connect(ctx.destination);
+    deckWire();
     engine.set("master", val("vol"));
     engine.set("pump", val("pump"));
     engine.set("dlyFbk", val("fbk"));
@@ -10257,6 +10422,11 @@ function window0(buf, from, len) {
 }
 
 window.p02 = {
+  deck: {
+    load: deckLoad, unload: deckUnload, hand: deckHand, xfade: deckXfade,
+    state: () => ({ b: !!DECK.b, pending: !!DECK.pending, owner: Object.assign({}, DECK.owner), xf: DECK.xf,
+      seed: (DECK.b || DECK.pending || {}).seed, buildMs: DECK.buildMs, offset: DECK.b ? DECK.b.offset : null, note: DECK.note })
+  },
   state: () => ({
     contextCreated: !!ctx, running: T.running, muted, auto: autoOn,
     holds: HOLDS,
