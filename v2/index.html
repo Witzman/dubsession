@@ -1134,7 +1134,10 @@ const D = { PROFILE:0x5052, FRAME:0x4652, DRUM:0x4452, NOTE:0x4E54, VOX:0x5658,
             // from the same ranges as the piece, but they are not the piece
             // and #28 has not spent its coordinates yet. Two dimensions
             // sharing a domain would draw the same path from one seed.
-            RIDE:0x5244 };
+            RIDE:0x5244,
+            // the DJ's own domain (#84): the night's arc, the walk, the seed search.
+            // None of it is the piece, so none of it may share a coordinate with one.
+            DJ:0x444A };
 
 // Reserved coordinates: allocated, not yet spent. They are in check 5's
 // uniqueness set so a later commit cannot quietly take one.
@@ -2261,6 +2264,113 @@ function profileForSeed(seed) {
   const def = PROFILE_DEFS[i];
   return { def: def, style: mergeStyle(STYLE, def.patch), contract: clone(def.contract) };
 }
+
+/* ---------------------------------------------------------------------------
+   3b. THE DJ'S DECISIONS — v2 only (workshop #84, sprint 20). PURE.
+   ---------------------------------------------------------------------------
+   Nothing here touches audio, the transport or the page: a night is a function
+   of its seed, and a plan is a function that RETURNS A SPEC. A composition that
+   fails is retried against the same spec (`djSeedFor`'s `attempt`), never
+   re-planned — the reference re-ran its whole planner on the way back in, and
+   the commission changed under its own feet (dj-machinery, "commissioning").
+
+   EVERY NUMBER THE DJ DECIDES WITH IS IN `DJ_CFG` and nowhere else. That is the
+   provision for producer signatures, personas and night themes (owner decision
+   2026-09-25): a persona is a set of multipliers on these, so they must come
+   from a structure and not sit as constants in the code. Only `patience` is
+   wired so far, and it is 1. */
+const DJ_CFG = {
+  commissionBars: 20,   // the brief is written this many bars before the outgoing track ends
+  leadBars: 4,          // the incoming deck needs this many to be built and on the grid
+  trackBars: [64, 96],  // a track's length, drawn in whole phrases
+  phrase: 8,            // both decks are phrase-locked; a blend is a multiple of this
+  tailBars: 4,          // a deck that has handed over its last lane rings out this long
+  laneBudget: 8,        // lanes scheduled across BOTH decks at any bar (workshop #86)
+  blend: { base: 20, floor: 12, perBpm: 2.5, patience: 1 },
+  tempoStep: 3,         // the most the transport moves per track, in BPM
+  stay: 0.30,           // odds of playing on in the profile while it suits the arc
+  pull: 0.15,           // ...and it stops suiting once the arc is this far from its home
+  arc: { mid: 0.45, wide: 0.20, fast: 0.08, slowBars: 480, fastBars: 170, lo: 0.15, hi: 0.75 },
+  // WHO CROSSES WHEN, as a share of the blend. The tops go first, the low end
+  // swaps in ONE move on the midpoint (kick and sub together, with the rumble,
+  // so the two never overlap), the pad goes last because its tail is the seam.
+  handover: [ { lanes:[3], at:0 }, { lanes:[1], at:0.125 }, { lanes:[2], at:0.25 },
+              { lanes:[0, 5], at:0.5 }, { lanes:[6], at:0.625 }, { lanes:[4], at:0.75 },
+              { lanes:[7], at:0.875 } ]
+};
+const djHome = id => PROFILE_DEFS.find(p => p.id === id).energy[2];
+
+// The night's energy target at a bar: a bounded meandering walk, the reference's
+// two-sines shape (dj-machinery, "The night") on this project's 0..1 scale.
+function djArc(night, bar) {
+  const a = DJ_CFG.arc, tau = 2 * Math.PI;
+  const p1 = rand01(night, D.DJ, 0, 0) * tau, p2 = rand01(night, D.DJ, 0, 1) * tau;
+  return clamp(a.mid + a.wide * Math.sin(tau * bar / a.slowBars + p1)
+                     + a.fast * Math.sin(tau * bar / a.fastBars + p2), a.lo, a.hi);
+}
+
+// Stay, or step ONE hop to a neighbour; never a jump. A profile that suits the
+// arc mostly stays; one that has drifted from it moves, to the neighbour whose
+// home is nearest, with some chance for the others so that a night has form and
+// not a rule.
+function djWalk(night, n, cur, target) {
+  if (Math.abs(djHome(cur) - target) <= DJ_CFG.pull && rand01(night, D.DJ, n, 1) < DJ_CFG.stay) return cur;
+  const near = PROFILE_GRAPH[cur];
+  const w = near.map(q => Math.exp(-Math.abs(djHome(q) - target) / 0.08));
+  let r = rand01(night, D.DJ, n, 2) * w.reduce((a, b) => a + b, 0);
+  for (let i = 0; i < near.length; i++) { r -= w[i]; if (r <= 0) return near[i]; }
+  return near[near.length - 1];
+}
+
+// The `attempt`-th seed that draws `profile` on this night's track n. A seed
+// picks its profile by hash (`profileForSeed`), so this is a search over cheap
+// hashes and not over draws.
+function djSeedFor(profile, night, n, attempt) {
+  let hit = -1;
+  for (let k = 0; k < 4000; k++) {
+    const seed = (rand01(night, D.DJ, n, 100 + k) * 2147483647) | 0;
+    if (profileForSeed(seed).def.id === profile && ++hit === attempt) return seed;
+  }
+  throw new Error("no seed draws " + profile);
+}
+
+// The tempo the transport goes to: toward the incoming piece's, by at most
+// `tempoStep` — a set that lurches 6 BPM between two records is two recordings.
+const djTempoNext = (cur, into) => cur + clamp(into - cur, -DJ_CFG.tempoStep, DJ_CFG.tempoStep);
+
+// THE BLEND, in bars. Widest for a small tempo gap, then bounded, and the ORDER
+// is the lesson: the phrase floor runs FIRST and the remaining-bars clamp LAST.
+// The other way round, an outgoing track with 4 bars left was handed an 8-bar
+// blend (dj-machinery, "How long the blend is"). `rem` is what the outgoing
+// track still has when the incoming one enters.
+function djBlendLen(gapBpm, rem, patience) {
+  const b = DJ_CFG.blend, ph = DJ_CFG.phrase;
+  let len = Math.max(b.floor, b.base - Math.round(gapBpm * b.perBpm)) * (patience || b.patience);
+  len = Math.max(ph, Math.floor(len / ph) * ph);
+  return Math.min(len, rem);
+}
+
+// The spec for the track AFTER `cur` ({profile, bpm, start, bars}). Returns a
+// plain object; composing it may fail and be retried, planning it is done.
+function djPlan(night, n, cur) {
+  const at = cur.start + cur.bars;                    // the bar the outgoing track ends
+  const target = djArc(night, at);
+  const profile = djWalk(night, n, cur.profile, target);
+  const seed = djSeedFor(profile, night, n, 0);
+  const bpm = djTempoNext(cur.bpm, draw(seed).tempo);
+  const rem = DJ_CFG.commissionBars - DJ_CFG.leadBars;
+  const blend = djBlendLen(Math.abs(bpm - cur.bpm), rem, DJ_CFG.blend.patience);
+  const bars = DJ_CFG.phrase * (DJ_CFG.trackBars[0] / DJ_CFG.phrase
+    + Math.floor(rand01(night, D.DJ, n, 3) * ((DJ_CFG.trackBars[1] - DJ_CFG.trackBars[0]) / DJ_CFG.phrase + 1)));
+  return { n: n, profile: profile, seed: seed, target: target, bpm: bpm, blend: blend, bars: bars,
+           start: at - blend };
+}
+
+// Which lane changes hands at which bar of the blend: [{at: bar offset, lanes}].
+function djHandovers(blend) {
+  return DJ_CFG.handover.map(h => ({ at: Math.round(h.at * blend), lanes: h.lanes }));
+}
+
 
 // [M] globals.dlytime is an index into the parent's delay divisions [D]:
 // `1/16 · 1/8 · 3/16 · 1/4 · 3/8 · 1/2`. Index 1 is 1/8 — half a beat.
@@ -10422,6 +10532,9 @@ function window0(buf, from, len) {
 }
 
 window.p02 = {
+  dj: { cfg: DJ_CFG, arc: djArc, walk: djWalk, seedFor: djSeedFor, blendLen: djBlendLen, plan: djPlan,
+        handovers: djHandovers, graph: PROFILE_GRAPH,
+        homes: () => PROFILE_DEFS.map(p => [p.id, p.energy[2]]) },
   deck: {
     load: deckLoad, unload: deckUnload, hand: deckHand, xfade: deckXfade,
     state: () => ({ b: !!DECK.b, pending: !!DECK.pending, owner: Object.assign({}, DECK.owner), xf: DECK.xf,
