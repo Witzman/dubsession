@@ -3565,8 +3565,8 @@ function countHits(ch) {
   // one hit, not two. Adding the cell's value would make one pin read as two
   // hits in the sentence that explains a silence.
   if (DRUM_PAT[ch]) return DRUM_PAT[ch].reduce((a, b) => a + (b ? 1 : 0), 0);
-  const take = PIECE.chords[ch];
-  return take ? take.reduce((a, e) => a + e.notes.length, 0) : 0;
+  const take = takeOf(ch);
+  return take ? take.reduce((a, e) => a + (e.off ? 0 : e.notes.length), 0) : 0;
 }
 function countFirings(seed, ch, key, p) {
   let n = 0;
@@ -3580,11 +3580,11 @@ function countFirings(seed, ch, key, p) {
       if (pat[st] && (pat[st] === PIN_ON || stepFires(seed, ch, key, st, p))) n++;
     return n;
   }
-  const take = PIECE.chords[ch];
+  const take = takeOf(ch);
   if (!take) return 1;                        // nothing to be silent about
   for (let e = 0; e < take.length; e++)
-    for (let k = 0; k < take[e].notes.length; k++)
-      if (stepFires(seed, ch, key, e * 4 + k, p)) n++;
+    if (!take[e].off) for (let k = 0; k < take[e].notes.length; k++)
+      if (take[e].pinned || stepFires(seed, ch, key, e * 4 + k, p)) n++;
   return n;
 }
 
@@ -4942,6 +4942,48 @@ function applyPins(ch, pat) {
   return out;
 }
 
+/* A TAKE'S PINS [#61]. A take is notes with a length, so a pin on one is about the STEP of the bar, and it means what it means on a drum
+   lane: pinned ON there is a note, pinned OFF there is none. The three cases of the cell are the three things a finger can mean:
+     an empty step, pinned ON  - a note starts there: the row's first drawn note (the machine's degrees, not the hand's), one step long,
+                                 played every bar without asking the odds;
+     a drawn onset, pinned OFF - the note is not played;
+     a held step, pinned OFF   - the note is CUT: it ends before this step.
+   The hand chooses where and when, never which degree - that stays the draw's. The drawn events keep their places in the list (the odds
+   are rolled per note by its index, and a pin must not re-roll the notes after it), so a removed one is flagged \`off\`, and the pinned notes
+   go on the end. Applied where a take is READ, on a copy: a row with no pins gets the drawn array back, the same one. */
+const TAKE_PINNED = new Set([5, 6, 7]);
+const TAKE_CACHE = {};
+function applyTakePins(ch, take) {
+  const row = PINS[ch];
+  if (!row || !take || !take.length) return take;
+  const key = row.join();
+  const hit = TAKE_CACHE[ch];
+  if (hit && hit.take === take && hit.key === key) return hit.out;
+  const out = take.map(e => Object.assign({}, e));
+  for (const e of out) {
+    if (row[e.step] === 0) { e.off = true; continue; }
+    const len = Math.max(1, Math.round(e.duration || 1));
+    for (let k = 1; k < len && e.step + k < 16; k++) if (row[e.step + k] === 0) { e.duration = k; break; }
+  }
+  const at = new Set(take.map(e => e.step)), home = take[0];
+  for (let i = 0; i < 16; i++) {
+    if (row[i] !== 1 || at.has(i)) continue;
+    out.push(Object.assign({}, home, { step: i, notes: home.notes.slice(), duration: 1, pinned: true }));
+  }
+  TAKE_CACHE[ch] = { take, key, out };
+  return out;
+}
+const takeOf = ch => TAKE_PINNED.has(+ch) ? applyTakePins(+ch, PIECE.chords[ch]) : PIECE.chords[ch];
+// does the take sound at this step of the bar: an onset, or the tail of a note held over it
+function takeSounds(take, i) {
+  for (const e of take || []) {
+    if (e.off) continue;
+    const len = Math.max(1, Math.round(e.duration || 1));
+    if (i >= e.step && i < e.step + len) return true;
+  }
+  return false;
+}
+
 /* PINS RIDE IN THE URL, AND THEY ARE READABLE:
 
        ?seed=9e3779&pins=0:x...x...x...x...,3:--x-------------
@@ -5065,13 +5107,14 @@ function fingerprint(C, seed) {
   }
   for (const ch of TONAL) {
     if (C.present[ch] <= 0) { parts.push(ch + ":-"); continue; }
-    const take = PIECE.chords[ch];
+    const take = takeOf(ch);
     if (!take) { parts.push(ch + ":-"); continue; }
     const ev = [];
     for (let e = 0; e < take.length; e++) {
       const n = [];
+      if (take[e].off) continue;
       for (let k = 0; k < take[e].notes.length; k++) {
-        if (!stepFires(seed, ch, C.key[ch], e * 4 + k, C.chance[ch])) continue;
+        if (!take[e].pinned && !stepFires(seed, ch, C.key[ch], e * 4 + k, C.chance[ch])) continue;
         n.push(transposeDegrees(take[e].notes[k], C.walk, C.root, C.scale));
       }
       if (n.length) ev.push(take[e].step + "@" + n.join("."));
@@ -7980,11 +8023,11 @@ function createEngine(ctx, opts) {
     for (const ch of [4, 5, 6, 7]) {
       if (!audible(ch)) continue;
       if (C.present[ch] <= 0) continue;
-      const take = ch === 4 ? (C.lead && C.lead.take) : PIECE.chords[ch];
+      const take = ch === 4 ? (C.lead && C.lead.take) : takeOf(ch);
       if (!take) continue;
       for (let e = 0; e < take.length; e++) {
         const ev = take[e];
-        if (ev.step !== s) continue;
+        if (ev.step !== s || ev.off) continue;
         // ON A TONAL CHANNEL THE ODDS ARE ROLLED ONCE PER NOTE [G]: "CHANCE
         // below 100 breaks a chord into pieces, because every tone is its own
         // note. A triad at 70 becomes a different subset of itself bar by
@@ -8001,7 +8044,7 @@ function createEngine(ctx, opts) {
         const oct = (ch === 5 && mu.bassOctave && mu.bassOctave.index === e) ? mu.bassOctave.degrees : 0;
         const notes = [];
         for (let k = 0; k < ev.notes.length; k++) {
-          if (!stepFires(cfg.seed, ch, C.key[ch], e * 4 + k, C.chance[ch])) continue;
+          if (!ev.pinned && !stepFires(cfg.seed, ch, C.key[ch], e * 4 + k, C.chance[ch])) continue;
           // THE CHORD WALKER — scale degrees, never semitones, so the walk
           // stays diatonic and a return to zero returns to exactly the key
           // [M] dialled and not near it.
@@ -8734,7 +8777,7 @@ const repaintSheet = () => paintBarSheet(sheetBar(), shownComposition());
    the row's tail says so. */
 function togglePin(ch, i) {
   const pat = DRUM_PAT[ch];
-  if (!pat) return null;
+  if (!pat) return toggleTakePin(ch, i);
   const ls = laneStep(pat, sheetBar() * 16 + i);
   const was = pinAt(ch, ls);
   setPin(ch, ls, was === null ? (pat[ls] ? 0 : 1) : null);
@@ -8754,6 +8797,29 @@ function togglePin(ch, i) {
       : now === 1
         ? `${name} step ${i + 1} pinned ON — it fires every bar, whatever chance says.`
         : `${name} step ${i + 1} pinned OFF — nothing fires there until you release it.`);
+  return now;
+}
+
+// A TAP ON A TAKE [#61]: the step is empty -> a note is pinned there; a note sounds there (its onset or the held tail) -> it is pinned
+// away, which on a held step is a cut; pinned already -> released. Three taps put it back, as on a drum lane.
+function toggleTakePin(ch, i) {
+  const take = PIECE.chords[ch];
+  if (!take || !take.length) return null;
+  const was = pinAt(ch, i);
+  const drawnOnset = take.some(e => e.step === i);
+  setPin(ch, i, was === null ? (takeSounds(applyTakePins(ch, take), i) ? 0 : 1) : null);
+  if (engine) engine.recompose();
+  writeUrl(); paintPins(); repaintSheet();
+  const now = pinAt(ch, i);
+  const c = CHANNELS.find(x => x.ch === ch);
+  const name = c ? c.voice : "channel " + ch;
+  say(now === null
+      ? `${name} step ${i + 1} released — the generator has it back.`
+      : now === 1
+        ? `${name} step ${i + 1} pinned ON — a note plays there every bar, the machine's own degree, whatever chance says.`
+        : drawnOnset
+          ? `${name} step ${i + 1} pinned OFF — that note is not played until you release it.`
+          : `${name} step ${i + 1} pinned OFF — the note ends before this step.`);
   return now;
 }
 
@@ -8990,10 +9056,10 @@ function patternText(ch) {
     for (let s = 0; s < 16; s++) out += pat[laneStep(pat, base + s)] ? "x" : ".";
     return out;
   }
-  const take = PIECE.chords[ch];
+  const take = takeOf(ch);
   if (take) {
     const line = new Array(16).fill(".");
-    take.forEach(e => { line[e.step] = "x"; });
+    take.forEach(e => { if (!e.off) line[e.step] = "x"; });
     return line.join("");
   }
   return "—";
@@ -9227,12 +9293,10 @@ function buildBarSheet() {
 // What channel `ch` fires on each of this bar's sixteen steps, as an array of
 // null | {kind, text, sustain}. ONE PLACE ANSWERS IT, so the pane and any
 // future editor cannot disagree about what the bar contains.
-// WHICH ROWS TAKE A PIN. The four drum lanes, and only if this piece gave the
-// channel material. The rumble has no pattern of its own — it sounds where the
-// kick does — and a take is notes with a length rather than a lane, which is a
-// different cell and a different question (§4.4b). Both say so when touched
-// rather than swallowing the tap.
-const pinnable = ch => ch !== "R" && !!DRUM_PAT[ch] && !PIECE.empty[ch];
+// WHICH ROWS TAKE A PIN. The four drum lanes and the three chord takes (sub, stab, pad), and only if this piece gave the channel
+// material. The rumble has no pattern of its own — it sounds where the kick does — and the lead is written bar by bar, so it has no
+// step to pin to. Both say so when touched rather than swallowing the tap.
+const pinnable = ch => ch !== "R" && !PIECE.empty[ch] && (!!DRUM_PAT[ch] || (TAKE_PINNED.has(+ch) && !!(PIECE.chords[ch] && PIECE.chords[ch].length)));
 // THE ROVING TAB STOP: the one pinnable cell that carries tabindex 0. Moving it moves focus when the keyboard asked.
 const ROVE = { ch: null, i: 0 };
 function sheetRove(ch, i, focus) {
@@ -9276,11 +9340,12 @@ function barRow(ch, bar, C) {
   // is a cell with the scale degree in it and the steps it sustains over are
   // drawn as a rule through the middle — a chord that lasts six steps and one
   // that lasts one are different things a player has to be able to see apart.
-  const take = ch === 4 ? (C && C.lead && C.lead.take) : PIECE.chords[ch];
+  const take = ch === 4 ? (C && C.lead && C.lead.take) : takeOf(ch);
   if (!take) return out;
   const sc = SCALE_STEPS[C ? C.scale : PIECE.globals.scale] || SCALE_STEPS[0];
   const root = C ? C.root : PIECE.globals.root;
   for (const e of take) {
+    if (e.off) continue;
     const st = ((e.step % BAR_COLS) + BAR_COLS) % BAR_COLS;
     const d = degreeOf(e.notes[0], root, sc);
     out[st] = { kind: "take", text: d === null ? "\u00b7" : String(((d % sc.length) + sc.length) % sc.length + 1) };
@@ -9288,6 +9353,9 @@ function barRow(ch, bar, C) {
     for (let k = 1; k < len && st + k < BAR_COLS; k++)
       if (!out[st + k]) out[st + k] = { kind: "sus" };
   }
+  // THE HAND'S MARKS ON A TAKE, the other half of each cell as on a drum lane: a cell pinned OFF has no fill and is still an object
+  if (TAKE_PINNED.has(+ch) && PINS[ch])
+    for (let i = 0; i < BAR_COLS; i++) if (PINS[ch][i] !== null && PINS[ch][i] !== undefined) (out[i] = out[i] || {}).pin = PINS[ch][i] === 1 ? "on" : "off";
   return out;
 }
 
@@ -10859,7 +10927,8 @@ function wire() {
   const tapCell = (raw, i) => {
     if (raw === "R") return say("the rumble has no pattern of its own \u2014 it sounds where the kick does. pin the kick.");
     const ch = parseInt(raw, 10);
-    if (!DRUM_PAT[ch]) return say("a take is notes with a length, not a lane \u2014 for now the pins are the four drum channels.");
+    if (ch === 4) return say("the lead is written bar by bar and has no step of its own to pin \u2014 the sub, stab and pad do.");
+    if (!DRUM_PAT[ch] && !(TAKE_PINNED.has(ch) && PIECE.chords[ch])) return say("nothing to pin on this row.");
     if (PIECE.empty[ch]) return say("this piece gave channel " + ch + " no material, so there is nothing to pin to.");
     togglePin(ch, i);
   };
@@ -12503,6 +12572,7 @@ window.p02 = {
   pins: () => ({
     text: pinsToText(), count: pinCount(),
     table: JSON.parse(JSON.stringify(PINS)),
+    take: [5, 6, 7].reduce((o, k) => (o[k] = (takeOf(k) || []).map(e => ({ step: e.step, duration: e.duration, off: !!e.off, pinned: !!e.pinned, notes: e.notes.length })), o), {}),
     drum: Object.keys(DRUM_PAT).reduce((o, k) => (o[k] = DRUM_PAT[k].join(""), o), {}),
     url: location.search
   }),
