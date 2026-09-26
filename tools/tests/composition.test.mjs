@@ -119,6 +119,8 @@ const exported = [
   // #87 — the profile set and its neighbourhood (v2 only carries all seven)
   'PROFILE_DEFS', 'profileForSeed',
   ...(region.includes('const PROFILE_GRAPH') ? ['PROFILE_GRAPH'] : []),
+  // #19 — the energy macro (v2 only): a hand level over the tops, 0 is the identity.
+  ...(region.includes('function energyAt') ? ['ENERGY_NOTCHES', 'ENERGY_RAMP', 'ENERGY_CHAN', 'energyAt', 'energyChance', 'energySend'] : []),
 ];
 const L = new Function(`${region}\n; return { ${exported.join(', ')} };`)();
 ok(typeof L.compositionAt === 'function', 'the region evaluates and exports the layer');
@@ -1808,6 +1810,33 @@ group('the profile set');
     const spread = Math.max(...ids.map(home)) - Math.min(...ids.map(home));
     ok(gaps.every(e => e < spread), 'no edge spans the whole energy range', `largest ${Math.max(...gaps).toFixed(2)} of ${spread.toFixed(2)}`);
   }
+}
+
+if (typeof L.energyAt === 'function') {
+  group('the energy macro — an axis over the tops, identity at 0, the floor and the hand outrank it');
+  const en = (bar, last, extra = {}) => L.compositionAt(SEED, P, M, bar, { mutate: false, fires: { events: [], energy: { last, pending: 0 } }, ...extra });
+  const base = L.compositionAt(SEED, P, M, 40, { mutate: false, fires: { events: [] } });
+  const same = (a, b) => JSON.stringify([a.chance, a.wet, a.move, a.present]) === JSON.stringify([b.chance, b.wet, b.move, b.present]);
+  ok(same(en(40, null), base), 'no energy step: the composition is exactly the schedule\'s');
+  ok(same(en(40, { at: 10, from: 0, to: 0 }), base), 'a step to 0 is the identity');
+  ok(L.energyAt({ energy: { last: null } }, 5) === 0 && L.energyAt({}, 5) === 0 && L.energyAt(null, 5) === 0, 'no step reads as 0');
+  const s = { at: 10, from: 0, to: 1 };
+  ok(L.energyAt({ energy: { last: s } }, 9) === 1, 'a deck whose own bar is behind the step takes the level it landed on');
+  ok(L.energyAt({ energy: { last: s } }, 10) > 0 && L.energyAt({ energy: { last: s } }, 10) < 1 && L.energyAt({ energy: { last: s } }, 10 + L.ENERGY_RAMP) === 1, 'the level ramps in over ENERGY_RAMP bars and then holds');
+  const up = en(40, { at: 10, from: 0, to: 1 }), dn = en(40, { at: 10, from: 0, to: -1 });
+  ok([0, 5].every(c => up.chance[c] === base.chance[c] && dn.chance[c] === base.chance[c] && up.wet[c].delay === base.wet[c].delay && dn.wet[c].delay === base.wet[c].delay
+    && up.wet[c].reverb === base.wet[c].reverb && dn.wet[c].reverb === base.wet[c].reverb), 'the kick and the sub are never moved');
+  ok(up.wet[3].delay < base.wet[3].delay && dn.wet[3].delay > base.wet[3].delay && dn.chance[3] < base.chance[3], 'up dries the hats, down washes and thins them');
+  ok(dn.chance[4] === base.chance[4] && dn.chance[7] === base.chance[7], 'the lead and the pad have no chance cut');
+  ok(L.energyChance(3, 0.2, -1) === 0.2 && L.energyChance(3, 0.25, -1) === 0.25, 'a channel at or under its cut is left alone going down');
+  ok(L.energyChance(3, 1, -0.5) === 0.625 && L.energyChance(3, 0.5, 1) === 1 && L.energyChance(3, 0.5, 0) === 0.5, 'the chance law: toward the cut going down, toward 1 going up, exact at 0');
+  ok(L.energySend(0.4, -1, 0.3) === 0.4 && L.energySend(0.1, -1, 0.3) === 0.3 && L.energySend(0.4, 1, 0.3) === 0.4 * 0.25, 'the sends never fall going down and are scaled going up');
+  ok(en(40, { at: 10, from: 0, to: -1 }, { holds: { chance: { 3: 0.9 }, delay: { 3: 0.7 } } }).chance[3] === 0.9
+     && en(40, { at: 10, from: 0, to: -1 }, { holds: { chance: { 3: 0.9 }, delay: { 3: 0.7 } } }).wet[3].delay === 0.7, 'a value the hand holds is not overwritten');
+  const locked = L.compositionAt(SEED, P, M, 4, { mutate: false, auto: true, fires: { events: [], energy: { last: { at: 10, from: 0, to: -1 }, pending: 0 } } });
+  const lockedBase = L.compositionAt(SEED, P, M, 4, { mutate: false, auto: true, fires: { events: [] } });
+  const lk = L.ALL_CHANNELS.filter(c => lockedBase.move[c] === L.LOCK);
+  ok(lk.length > 0 && lk.every(c => locked.chance[c] === lockedBase.chance[c] && locked.wet[c].delay === lockedBase.wet[c].delay), 'a channel at LOCK is exempt', 'locked: ' + lk.join(','));
 }
 
 console.log(`\n${checks - failures}/${checks} checks passed`);

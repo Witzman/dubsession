@@ -3199,6 +3199,37 @@ const FIRE_MACROS = {
   phaseout:   { label: "phase-out",  bars: 12, end: "land" },
   reverbout:  { label: "reverb-out", bars: 8,  end: "return" }
 };
+/* THE ENERGY MACRO, ONE AXIS OVER MANY CHANNELS [#19]. The hand presses up or down; the press lands on the next bar as a step of one
+   notch (of ENERGY_NOTCHES each way) and the level arrives over ENERGY_RAMP bars. `e` runs -1..+1 and 0 is the IDENTITY: every value
+   below is a function of the value the schedule left and `e`, never accumulated, so coming back lands exactly on what the schedule
+   and the hand had — a channel that was quiet does not come back loud. What it moves, on the tops only (rimshot, clap, hats, lead,
+   stab, pad):
+     up    chance -> 1 on the rhythm tops and the stab (denser), sends x (1 - .75 e) (tighter, drier)
+     down  chance -> the channel's own cut, and never above what it already was, so a channel at or under the cut is LEFT ALONE;
+           sends -> a wash target, and never below what they already were (the room takes over what the pattern gives up)
+   Never touched: the kick, the sub and the rumble (the floor holds), any channel at LOCK, and any value the hand holds — the last
+   hand outranks the macro exactly as it outranks a fire. The table is the session's, from the earlier pilot (#19); it is unheard. */
+const ENERGY_NOTCHES = 3, ENERGY_RAMP = 2;
+const ENERGY_CHAN = {
+  1: { cut: 0.25, up: true,  delay: 0.45, room: 0.40 }, 2: { cut: 0.25, up: true,  delay: 0.55, room: 0.45 },
+  3: { cut: 0.25, up: true,  delay: 0.45, room: 0.40 }, 4: { cut: null, up: false, delay: 0.50, room: 0.45 },
+  6: { cut: null, up: true,  delay: 0.50, room: 0.45 }, 7: { cut: null, up: false, delay: 0.60, room: 0.50 }
+};
+// the level at a bar. Only the LAST step matters: energy is a hand value and not a history, and a deck whose own bar count is behind the
+// step (the incoming track of a blend) takes the level it landed on, not a replay of the ramp.
+function energyAt(fires, bar) {
+  const st = fires && fires.energy && fires.energy.last;
+  if (!st) return 0;
+  if (bar < st.at) return st.to;
+  return st.from + (st.to - st.from) * fireSmooth((bar - st.at + 1) / ENERGY_RAMP);
+}
+function energyChance(ch, p, e) {
+  const t = ENERGY_CHAN[ch];
+  if (!t || e === 0) return p;
+  if (e > 0) return t.up ? p + e * (1 - p) : p;
+  return t.cut === null ? p : p + (-e) * (Math.min(p, t.cut) - p);
+}
+function energySend(s, e, wash) { return e > 0 ? s * (1 - 0.75 * e) : s + (-e) * (Math.max(s, wash) - s); }
 const FIRE_MICROS = ["ghost-hat", "hats-out", "bass-octave", "stab-lean", "turnaround", "kick-ghost"];
 const fireTimeline = fires => Array.isArray(fires) ? fires : ((fires && fires.events) || []);
 const fireSmooth = x => { x = clamp(x, 0, 1); return x * x * (3 - 2 * x); };
@@ -3326,6 +3357,7 @@ function compositionAt(seed, piece, movement, bar, opts) {
     out.wet[ch].delay = clamp(v, 0, 2);
     out.gesture = { at: gs.at, ch, wet: v, bars: len, why: gs.why };
   }
+  const energy = energyAt(opts.fires, bar);
   for (const ch of ALL_CHANNELS) {
     /* THE HAND LANDS ON THE NEXT BAR; THE SCHEDULE LANDS ON THE CHANNEL'S OWN
        WRAP. Those are two different rules on purpose. The wrap rule exists so
@@ -3342,12 +3374,18 @@ function compositionAt(seed, piece, movement, bar, opts) {
     const hMove = heldValue(holds, "move", ch);
     const hChance = heldValue(holds, "chance", ch);
     const m = hMove === undefined ? atWrap.move[ch] : holdClamp("move", hMove);
-    const p = hChance === undefined ? atWrap.chance[ch] : holdClamp("chance", hChance);
+    const p0 = hChance === undefined ? atWrap.chance[ch] : holdClamp("chance", hChance);
+    const p = (hChance === undefined && m !== LOCK) ? energyChance(ch, p0, energy) : p0;
     // the two sends, held over whatever the schedule and the gestures left
     const hDelay = heldValue(holds, "delay", ch);
     const hReverb = heldValue(holds, "reverb", ch);
     if (hDelay !== undefined) out.wet[ch].delay = holdClamp("delay", hDelay);
     if (hReverb !== undefined) out.wet[ch].reverb = holdClamp("reverb", hReverb);
+    const et = ENERGY_CHAN[ch];
+    if (energy !== 0 && et && m !== LOCK && !(out.gesture && out.gesture.ch === ch)) {
+      if (hDelay === undefined) out.wet[ch].delay = energySend(out.wet[ch].delay, energy, et.delay);
+      if (hReverb === undefined) out.wet[ch].reverb = energySend(out.wet[ch].reverb, energy, et.room);
+    }
     out.held.phrase[ch] = hPhrase !== undefined;
     out.held.move[ch] = hMove !== undefined;
     out.held.chance[ch] = hChance !== undefined;
@@ -5438,7 +5476,7 @@ const HOLDS = emptyHolds();
 // THE OTHER INPUT OBJECT. `pending` is what the hand has asked for; only
 // `events` crosses into the pure composition layer. Promotion happens at the
 // scheduler's bar boundary, so an event can never redraw a bar in flight.
-function emptyFires() { return { seq: 0, pending: { macro: null, micros: [], release: false }, events: [] }; }
+function emptyFires() { return { seq: 0, pending: { macro: null, micros: [], release: false }, events: [], energy: { last: null, pending: 0 } }; }
 const FIRES = emptyFires();
 
 /* ---------------------------------------------------------------------------
@@ -8002,6 +8040,15 @@ function fireCapture(C) {
     reverb: { 6: C.wet[6].reverb }
   };
 }
+// ENERGY: the level the hand has asked for, in notches, and the press that has not landed yet. A press lands on the next bar (promoteFires).
+const energyNotch = () => { const l = FIRES.energy.last; return l ? Math.round(l.to * ENERGY_NOTCHES) : 0; };
+function requestEnergy(dir) {
+  const E = FIRES.energy, now = energyNotch();
+  E.pending = clamp(now + E.pending + dir, -ENERGY_NOTCHES, ENERGY_NOTCHES) - now;
+  paintFires();
+  say(E.pending === 0 ? "energy: nothing waiting." : `energy ${E.pending > 0 ? "up" : "down"} waiting — lands on the next bar, to ${(now + E.pending > 0 ? "+" : "") + (now + E.pending)} of ${ENERGY_NOTCHES}.`);
+  return E.pending;
+}
 function fireEvent(id) { return FIRES.events.find(e => e.id === id); }
 function requestFire(kind, bars) {
   FIRES.pending.release = false;
@@ -8032,9 +8079,17 @@ function requestFire(kind, bars) {
 }
 function promoteFires(bar) {
   let changed = false;
+  const E = FIRES.energy;
   if (FIRES.pending.release) {
     FIRES.events.length = 0;
     FIRES.pending.release = false;
+    // release all takes the energy back to the schedule too, over the same ramp
+    if (energyNotch() !== 0 || E.pending) { E.last = { at: bar, from: energyAt(FIRES, bar), to: 0 }; E.pending = 0; }
+    changed = true;
+  }
+  if (E.pending) {
+    E.last = { at: bar, from: energyAt(FIRES, bar), to: clamp(energyNotch() + E.pending, -ENERGY_NOTCHES, ENERGY_NOTCHES) / ENERGY_NOTCHES };
+    E.pending = 0;
     changed = true;
   }
   const q = FIRES.pending.macro;
@@ -8076,6 +8131,7 @@ function releaseFires() {
   else {
     FIRES.events.length = 0;
     FIRES.pending.release = false;
+    FIRES.energy.last = null; FIRES.energy.pending = 0;
     if (engine) engine.recompose();
   }
   paintFires();
@@ -9670,7 +9726,8 @@ function paintWhy(ch, C) {
 
 function fireCount() {
   return FIRES.events.length + (FIRES.pending.macro ? 1 : 0)
-    + FIRES.pending.micros.length + (FIRES.pending.release ? 1 : 0);
+    + FIRES.pending.micros.length + (FIRES.pending.release ? 1 : 0)
+    + (energyNotch() !== 0 || FIRES.energy.pending !== 0 ? 1 : 0);
 }
 function paintFires(C) {
   const box = ui("fires");
@@ -11604,9 +11661,14 @@ function buildFireBank() {
     note: () => (ui("fire_" + kind).classList.contains("is-wait") ? (kind === "turnaround" ? "phrase end" : "next bar") : ""),
     fire: () => ui("fire_" + kind).click(), title: kind + " — one bar, on the next bar line" }).el);
   const grp = (name, nodes) => { const g = kitEl("div", "kx-group"); g.append(kitEl("div", "kx-gname", name)); const r = kitEl("div", "kx-grow kx-wrap"); r.append(...nodes); g.append(r); return g; };
+  const eState = dir => () => (FIRES.energy.pending * dir > 0 ? "wait" : "");
+  const eNote = () => { const n = energyNotch(), w = FIRES.energy.pending; return (n > 0 ? "+" : "") + n + (w ? " \u2192 " + (n + w > 0 ? "+" : "") + (n + w) : ""); };
+  const energy = [-1, 1].map(dir => kitButton({ kind: "fired", label: dir < 0 ? "energy down" : "energy up", key: dir < 0 ? "[" : "]", tone: dir < 0 ? "ret" : "land",
+    state: eState(dir), note: eNote, prog: barFrac, fire: () => requestEnergy(dir),
+    title: (dir < 0 ? "thinner tops, more wash" : "denser tops, drier") + " — one notch, lands on the next bar, ramps in over " + ENERGY_RAMP + " bars; the kick, the sub and anything at LOCK or in your hand stay put" }).el);
   const rel = kitButton({ kind: "fired", label: "release all", key: "0", tone: "rel", disabled: () => ui("releaseall").disabled, fire: () => ui("releaseall").click(),
     title: "everything the hand holds and every gesture goes back under the schedule" });
-  kitBank("fire", "FIRE", [grp("BIG GESTURES", macros), grp("ONE BAR", micros), grp("BACK", [rel.el])]);
+  kitBank("fire", "FIRE", [grp("BIG GESTURES", macros), grp("ONE BAR", micros), grp("ENERGY", energy), grp("BACK", [rel.el])]);
 }
 
 // THE KEY BANK: root and scale (named steps over the two selects, which still raise `change` into requestKey, so a key lands on
@@ -11973,6 +12035,7 @@ window.p02 = {
          lane: ch => deckEngines().map(e => (e.A.chan[ch] ? e.A.chan[ch].fader : null)),
          mutesAll: () => deckEngines().map(e => Object.keys(e.cfg.mutes || {}).join(",")),
          fireAll: () => deckEngines().map(e => { const f = e.composition().fire; return f && f.active ? f.active.kind : null; }),
+         energy: () => ({ notch: energyNotch(), pending: FIRES.energy.pending, last: FIRES.energy.last && { ...FIRES.energy.last } }),
          fires: () => ({ pending: FIRES.pending.macro && FIRES.pending.macro.kind, events: FIRES.events.map(e => ({ kind: e.kind, at: e.at, bars: e.bars, micro: e.micro })) }),
          bar: () => Math.floor(T.step / 16),
          deck: () => ({ xf: DECK.xf, a: DECK.mixA ? DECK.mixA.gain.value : null, b: DECK.mixB ? DECK.mixB.gain.value : null, pending: !!DECK.pending, loaded: !!DECK.b, muted, master: DECK.master ? DECK.master.gain.value : null, auto: autoOn }),
