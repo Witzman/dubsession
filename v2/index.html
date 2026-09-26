@@ -8087,9 +8087,12 @@ function releaseFires() {
    its own step counter. The delay feedback and the reverb tail are stateful
    and exempt — they settle in seconds, which is why the determinism proof
    allows a warm-up and then demands sample identity. --- */
+let seekSync = null;   // the surface's fader repaint, set when the bank is built; the paint loop calls it so the span follows the track
+function seekSpan() { return Math.max(1, Math.min(MOVEMENT.bars, (DJ.on && DJ.cur) ? DJ.cur.bars : MOVEMENT.bars)); }
 function seek(bar) {
   bar = Math.max(0, Math.floor(bar));
-  T.step = bar * 16;
+  // `bar` is a bar OF THE LIVE PIECE, the coordinate the fader is in [#55]: in a night the piece began at `aOffset` on the shared step count.
+  T.step = bar * 16 + (DECK.aOffset || 0);
   uiQueue.length = 0;
   if (ctx && T.running) T.nextT = ctx.currentTime + 0.1;
   if (engine) engine.recompose();
@@ -9479,6 +9482,7 @@ function buildSteps() {
 
 function paint() {
   requestAnimationFrame(paint);
+  if (seekSync) seekSync();
   if (sayUntil !== Infinity && performance.now() > sayUntil && ui("status").textContent) {
     ui("status").textContent = ""; sayUntil = 0;
   }
@@ -10448,12 +10452,17 @@ function wire() {
     say("the voices are back at the recipe.");
   });
   const sk = ui("seek"), sko = ui("seek_v");
-  sk.max = String(MOVEMENT.bars - 1);
   const updSeek = () => {
+    // THE FADER SPANS THE PIECE THAT IS PLAYING, not a fixed 256 [#55]: in a night that is the live track's own length, which is a
+    // phrase-multiple between DJ_CFG.trackBars and grows when the next track is commissioned; alone it is the whole schedule.
+    const span = seekSpan();
+    if (sk.max !== String(span - 1)) sk.max = String(span - 1);
+    if (parseInt(sk.value, 10) > span - 1) sk.value = String(span - 1);
     const b = parseInt(sk.value, 10);
-    sko.textContent = `${b + 1} / ${MOVEMENT.bars}`;
+    sko.textContent = `${b + 1} / ${span}`;
     setFill(sk);
   };
+  seekSync = updSeek;
   // THE SHEET FOLLOWS THE SEEK WHILE THE TRANSPORT IS STOPPED. A bar the hand
   // is pointing at is a bar it should be able to see: the lead's countdown,
   // the lane seams and which channels the arrangement has rested are all
@@ -11280,9 +11289,10 @@ const kitClamp01 = x => Math.max(0, Math.min(1, x));
 function kitModel(c) {
   if (c.id) {
     const el0 = ui(c.id), el = () => ui(c.id);       // looked up on every use: the input is the model, not a reference to it
-    const min = c.min !== undefined ? c.min : parseFloat(el0.min), max = c.max !== undefined ? c.max : parseFloat(el0.max);
-    const step = c.step !== undefined ? c.step : (parseFloat(el0.step) || (max - min) / 100);
-    return { min, max, step, reset: c.reset,
+    const min = c.min !== undefined ? c.min : parseFloat(el0.min), max0 = c.max !== undefined ? c.max : parseFloat(el0.max);
+    const step = c.step !== undefined ? c.step : (parseFloat(el0.step) || (max0 - min) / 100);
+    // `max` is read from the input each time, like the value: the seek's span follows the live track [#55]
+    return { min, get max() { return c.max !== undefined ? c.max : (parseFloat(el().max) || max0); }, step, reset: c.reset,
       get: () => parseFloat(el().value),
       set: v => { const e = el(); e.value = String(v); e.dispatchEvent(new Event("input", { bubbles: true }));
         // a native slider raises `change` on release, not on every pixel; an input whose engine door listens for it
@@ -11342,8 +11352,9 @@ function kitFader(c) {
   if (c.horizontal) { el.dataset.axis = "x"; el.classList.add("kx-h"); }
   kitDrag(el, m, c.horizontal ? 220 : 150, v => { m.set(v); w.draw(); });
   const w = kitReg({ el, model: m, last: NaN, draw() {
-    const v = m.get(); if (v === this.last && !c.dead && !c.held && !c.off) return; this.last = v;
+    const v = m.get(), key = v + "|" + m.max; if (key === this.last && !c.dead && !c.held && !c.off) return; this.last = key;
     const n = kitClamp01((v - m.min) / (m.max - m.min));
+    el.setAttribute("aria-valuemax", m.max);
     if (c.horizontal) { fill.style.width = (n * 100) + "%"; cap.style.left = `calc(${n * 100}% - 20px)`; }
     else { fill.style.height = (n * 100) + "%"; cap.style.bottom = `calc(${n * 100}% - 9px)`; }
     val_.textContent = c.fmt ? c.fmt(v) : v.toFixed(2); el.setAttribute("aria-valuenow", v);
@@ -11711,7 +11722,7 @@ function buildDeckBank() {
 // paintHeader, which finds the rows by id). The seek input and its button stay in the page, out of sight, as the models.
 function buildScheduleBank() {
   const seek = kitFader({ id: "seek", horizontal: true, label: "seek", tone: "arc", step: 1, def: () => 0,
-    fmt: v => (Math.round(v) + 1) + " / " + MOVEMENT.bars, title: "the bar to go to; nothing moves until GO" });
+    fmt: v => (Math.round(v) + 1) + " / " + (seekSpan()), title: "a bar of the piece playing; nothing moves until GO" });
   const go = kitButton({ kind: "fired", label: "GO", tone: "arc", fire: () => ui("seekgo").click(),
     title: "jump the transport to the seek bar; the composition is that bar's, with no history" });
   const g = kitEl("div", "kx-group"); g.append(kitEl("div", "kx-gname", "SEEK"));
@@ -11719,7 +11730,7 @@ function buildScheduleBank() {
   kitBank("schedule", "SCHEDULE", [g], panel => {
     const line = kitEl("div", "kx-line"); line.setAttribute("aria-live", "polite"); panel.appendChild(line);
     KIT.list.push({ id: "schedstate", el: line, draw() {
-      const t = (T.running ? "playing bar " + (Math.floor(T.step / 16) + 1) : "stopped") + " \u00b7 " + ui("schedsum").textContent;
+      const t = (T.running ? "playing bar " + (Math.floor((T.step - (DECK.aOffset || 0)) / 16) + 1) : "stopped") + " \u00b7 " + ui("schedsum").textContent;
       if (line.textContent !== t) line.textContent = t;
     } });
     panel.appendChild(ui("sections"));
