@@ -10615,12 +10615,46 @@ function isoBuild(c) {
     } };
   return iso;
 }
+/* THE DECK FILTER: ONE GESTURE PER DECK, the DJ's. Left of centre a highpass rises from the floor, right of centre a lowpass falls from
+   the ceiling, and the centre is dry — the same rule as the isolator, a mix nobody has touched does not pass through a filter. Each
+   side is ONE two-pole section (12 dB per octave). THE RESONANCE IS CAPPED, and it is in DECIBELS because a lowpass / highpass Q is:
+   -3.01 dB is Butterworth (flat, -3 dB at the corner). What is capped is the PEAK of the response, not the Q: the gain at the corner is
+   the Q, but a resonant section crests a little above it, at Q / sqrt(1 - 1/(4 Q^2)) — the corner Q at the top of the travel is solved
+   from FILT_PEAK_DB, and the harness measures the crest through the biquad's own frequency response. The position is a hand value that
+   springs back to the centre on release. */
+const FILT_HP_TOP = 1800, FILT_LP_BOTTOM = 180, FILT_FLOOR = 20, FILT_CEIL = 20000, FILT_PEAK_DB = 4, FILT_TC = 0.03, FILT_SETTLE = 0.2;
+const FILT_Q_TOP_DB = (() => { const p2 = Math.pow(10, FILT_PEAK_DB / 10); return 10 * Math.log10((p2 + Math.sqrt(p2 * p2 - p2)) / 2); })();   // dB
+function filtQ(x) { return 20 * Math.log10(Math.SQRT1_2) + (FILT_Q_TOP_DB - 20 * Math.log10(Math.SQRT1_2)) * x * x; }
+function filtHp(x) { return x < 0 ? FILT_FLOOR * Math.pow(FILT_HP_TOP / FILT_FLOOR, -x) : FILT_FLOOR; }
+function filtLp(x) { return x > 0 ? FILT_CEIL * Math.pow(FILT_LP_BOTTOM / FILT_CEIL, x) : FILT_CEIL; }
+function filterBuild(c) {
+  const hp = c.createBiquadFilter(), lp = c.createBiquadFilter(), inp = c.createGain(), out = c.createGain(), dry = c.createGain(), wet = c.createGain();
+  hp.type = "highpass"; lp.type = "lowpass";
+  hp.frequency.value = FILT_FLOOR; lp.frequency.value = FILT_CEIL; hp.Q.value = lp.Q.value = filtQ(0);
+  inp.connect(dry); dry.connect(out); inp.connect(wet); wet.connect(hp); hp.connect(lp); lp.connect(out); wet.gain.value = 0;
+  const f = { in: inp, out, hp, lp, x: 0, timer: 0,
+    set(x) {
+      x = Math.max(-1, Math.min(1, +x || 0)); f.x = x;
+      const t = c.currentTime, q = filtQ(x);
+      clearTimeout(f.timer);
+      if (x !== 0) { dry.gain.setTargetAtTime(0, t, ISO_RAMP / 3); wet.gain.setTargetAtTime(1, t, ISO_RAMP / 3); }
+      hp.frequency.setTargetAtTime(filtHp(x), t, FILT_TC); lp.frequency.setTargetAtTime(filtLp(x), t, FILT_TC);
+      hp.Q.setTargetAtTime(x < 0 ? q : filtQ(0), t, FILT_TC); lp.Q.setTargetAtTime(x > 0 ? q : filtQ(0), t, FILT_TC);   // only the section being swept resonates
+      // back at the centre the corners first travel OUT to the floor and the ceiling, and only then does the dry path take over
+      if (x === 0) f.timer = setTimeout(() => { if (f.x === 0) { const u = c.currentTime; dry.gain.setTargetAtTime(1, u, ISO_RAMP / 3); wet.gain.setTargetAtTime(0, u, ISO_RAMP / 3); } }, FILT_SETTLE * 1000);
+    } };
+  return f;
+}
 // what the hand is holding right now: the held gestures. Not a piece's, so a deck built mid-hold takes them at build.
-const HELD = { freeze: false, throw: {}, iso: { A: { low: false, mid: false, high: false }, B: { low: false, mid: false, high: false } } };
+const HELD = { freeze: false, throw: {}, iso: { A: { low: false, mid: false, high: false }, B: { low: false, mid: false, high: false } }, filt: { A: 0, B: 0 } };
 const THROW_LEVEL = 0.9;
 function holdThrow(ch, on) {
   if (on) HELD.throw[ch] = THROW_LEVEL; else delete HELD.throw[ch];
   for (const e of deckEngines()) e.set("throw", HELD.throw);
+}
+function holdFilter(deck, x) {
+  HELD.filt[deck] = Math.max(-1, Math.min(1, +x || 0));
+  if (DECK.filt && DECK.filt[deck]) DECK.filt[deck].set(HELD.filt[deck]);
 }
 function holdFreeze(on) { HELD.freeze = !!on; for (const e of deckEngines()) e.set("freeze", HELD.freeze); }
 function holdIso(deck, band, on) {
@@ -10632,9 +10666,10 @@ function deckWire() {
   DECK.mixA = ctx.createGain(); engine.tail.connect(DECK.mixA);
   DECK.mixB = ctx.createGain();
   DECK.iso = { A: isoBuild(ctx), B: isoBuild(ctx) };
-  DECK.mixA.connect(DECK.iso.A.in); DECK.iso.A.out.connect(DECK.master);
-  DECK.mixB.connect(DECK.iso.B.in); DECK.iso.B.out.connect(DECK.master);
-  for (const d of ["A", "B"]) DECK.iso[d].set(HELD.iso[d]);
+  DECK.filt = { A: filterBuild(ctx), B: filterBuild(ctx) };
+  DECK.mixA.connect(DECK.iso.A.in); DECK.iso.A.out.connect(DECK.filt.A.in); DECK.filt.A.out.connect(DECK.master);
+  DECK.mixB.connect(DECK.iso.B.in); DECK.iso.B.out.connect(DECK.filt.B.in); DECK.filt.B.out.connect(DECK.master);
+  for (const d of ["A", "B"]) { DECK.iso[d].set(HELD.iso[d]); DECK.filt[d].set(HELD.filt[d]); }
   deckXfade(DECK.xf);
 }
 function deckXfade(x) {
@@ -11300,7 +11335,7 @@ function kitModel(c) {
         if (c.change) { clearTimeout(e._kxc); e._kxc = setTimeout(() => e.dispatchEvent(new Event("change", { bubbles: true })), 160); } },
       def: c.def || (() => { const b = parseFloat(el().defaultValue); return isNaN(b) ? min : b; }) };
   }
-  return { min: c.min, max: c.max, step: c.step || (c.max - c.min) / 100, get: c.get, set: c.set, reset: c.reset, def: c.def || (() => c.min) };
+  return { min: c.min, max: c.max, step: c.step || (c.max - c.min) / 100, get: c.get, set: c.set, reset: c.reset, def: c.def || (() => c.min), spring: !!c.spring };
 }
 const kitSnap = (m, v) => { const s = Math.round((v - m.min) / m.step) * m.step + m.min; return +Math.max(m.min, Math.min(m.max, s)).toFixed(6); };
 
@@ -11324,10 +11359,14 @@ function kitDrag(host, m, span, onchange) {
     if (host._fine !== fine(e)) { host._fine = fine(e); base = (m.get() - m.min) / (m.max - m.min); y0 = at(e); return; }
     onchange(kitSnap(m, m.min + n * (m.max - m.min)));
   });
-  const up = e => { pts.delete(e.pointerId); if (!pts.size) host.classList.remove("kx-on"); };
+  // A SPRING (`spring: true` on a hand gesture like the deck filter) goes back to its own default when the hand lets go: the last pointer
+  // up, the key up, and 400 ms after the last wheel tick. A spring is a hold, so the way back is `back`, the same door double-click uses.
+  const up = e => { pts.delete(e.pointerId); if (!pts.size) { host.classList.remove("kx-on"); if (m.spring) back(); } };
   host.addEventListener("pointerup", up); host.addEventListener("pointercancel", up);
   host.addEventListener("wheel", e => { e.preventDefault(); if (off()) return; const st = Math.max(m.step, (m.max - m.min) / 50) * (e.shiftKey ? 0.2 : 1);
-    onchange(kitSnap(m, m.get() + (e.deltaY < 0 ? st : -st))); }, { passive: false });
+    onchange(kitSnap(m, m.get() + (e.deltaY < 0 ? st : -st)));
+    if (m.spring) { clearTimeout(host._sp); host._sp = setTimeout(back, 400); } }, { passive: false });
+  if (m.spring) host.addEventListener("keyup", e => { if (/^(Arrow|Page|Home$|End$)/.test(e.key)) back(); });
   host.addEventListener("dblclick", () => { if (!off()) back(); });
   host.addEventListener("keydown", e => {
     if (off()) return;
@@ -11785,7 +11824,12 @@ function buildHoldBank() {
   const iso = (deck, keys) => ["low", "mid", "high"].map((band, i) => kitButton({ kind: "momentary", label: band, key: keys[i], tone: deck === "A" ? "a" : "b",
     down: () => holdIso(deck, band, true), up: () => holdIso(deck, band, false),
     title: "hold: kill the " + band + " of deck " + deck + "; let go and it returns" }).el);
-  kitBank("hold", "HOLD", [grp("ECHO THROW", throws), grp("FREEZE", [freeze.el]), grp("ISOLATOR A", iso("A", ["z", "x", "c"])), grp("ISOLATOR B", iso("B", ["v", "b", "n"]))]);
+  const filt = deck => kitFader({ key: "filt" + deck, label: "filter", horizontal: true, tone: deck === "A" ? "a" : "b", min: -1, max: 1, step: 0.01, spring: true,
+    get: () => HELD.filt[deck], set: v => holdFilter(deck, v), def: () => 0,
+    fmt: v => v === 0 ? "off" : v < 0 ? "highpass " + Math.round(filtHp(v)) + " Hz" : "lowpass " + Math.round(filtLp(v)) + " Hz",
+    title: "hold and drag: left is a highpass rising, right a lowpass falling, resonance capped; let go and it springs back to dry" }).el;
+  kitBank("hold", "HOLD", [grp("ECHO THROW", throws), grp("FREEZE", [freeze.el]), grp("ISOLATOR A", iso("A", ["z", "x", "c"])), grp("ISOLATOR B", iso("B", ["v", "b", "n"])),
+    grp("FILTER A", [filt("A")]), grp("FILTER B", [filt("B")])]);
 }
 
 // the first faces: what Tonight already had as plain sliders, now as widgets over the same inputs
@@ -11938,7 +11982,7 @@ window.p02 = {
          echoTap: () => { const e = engine; if (!e.A.tapEcho) { e.A.tapEcho = ctx.createAnalyser(); e.A.tapEcho.fftSize = 2048; e.A.pp.out.connect(e.A.tapEcho); } return true; },
          echoRms: () => { const a = engine.A.tapEcho, b = new Float32Array(a.fftSize); a.getFloatTimeDomainData(b); let r = 0, m = 0; for (const x of b) { r += x * x; m = Math.max(m, Math.abs(x)); } return { rms: Math.sqrt(r / b.length), peak: m }; },
          held: () => JSON.parse(JSON.stringify(HELD)), isoKills: () => (DECK.iso ? { A: DECK.iso.A.kills, B: DECK.iso.B.kills } : null),
-         isoBuild: c => isoBuild(c), tap: () => { if (!DECK.tap) { DECK.tap = ctx.createAnalyser(); DECK.tap.fftSize = 2048; DECK.master.connect(DECK.tap); } return true; },
+         isoBuild: c => isoBuild(c), filterBuild: c => filterBuild(c), filt: () => (DECK.filt ? { A: DECK.filt.A.x, B: DECK.filt.B.x, hp: { A: DECK.filt.A.hp.frequency.value, B: DECK.filt.B.hp.frequency.value }, lp: { A: DECK.filt.A.lp.frequency.value, B: DECK.filt.B.lp.frequency.value }, q: DECK.filt.A.hp.Q.value } : null), filtConst: { HP_TOP: FILT_HP_TOP, LP_BOTTOM: FILT_LP_BOTTOM, PEAK_DB: FILT_PEAK_DB }, tap: () => { if (!DECK.tap) { DECK.tap = ctx.createAnalyser(); DECK.tap.fftSize = 2048; DECK.master.connect(DECK.tap); } return true; },
          tapPeak: () => { const a = DECK.tap, b = new Float32Array(a.fftSize); a.getFloatTimeDomainData(b); let m = 0, r = 0; for (const x of b) { m = Math.max(m, Math.abs(x)); r += x * x; } return { peak: m, rms: Math.sqrt(r / b.length) }; },
          moveRows: () => MOD_ROWS.map(r => ({ id: r.id, key: r.key, off: !!ui(r.id).disabled })),
          base: id => (ROOM_UNITS.find(u => u.id === id) || SET_UNITS.find(u => u.id === id)).base(),
