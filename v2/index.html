@@ -2523,14 +2523,14 @@ function djWalk(night, n, cur, target) {
 function djSeedFor(profile, night, n, attempt, from, maxDist) {
   // KEYS MOVE BY THE CAMELOT RULE [#49]: with `from` (the seed of the track going out) only a seed whose key is within `maxDist` steps of
   // the outgoing one counts as a hit, so the attempts are counted among the compatible ones. Should the profile have none in the search
-  // window the key rule is dropped rather than the night stopped: a key is a preference, a track is not.
+  // range the key rule is dropped rather than the night stopped: a key is a preference, a track is not.
   const fromKey = from === undefined || from === null ? null : draw(from).globals;
   const ok = seed => { if (!fromKey) return true; const g = draw(seed).globals; return djKeyDist(fromKey, g) <= (maxDist === undefined ? 1 : maxDist); };
   let hit = -1, drawn = 0;
   for (let k = 0; k < 4000; k++) {
     const seed = (rand01(night, D.DJ, n, 100 + k) * 2147483647) | 0;
     if (profileForSeed(seed).def.id !== profile) continue;
-    if (fromKey && ++drawn > 240) break;             // the search window: a draw is a few ms, so it is bounded
+    if (fromKey && ++drawn > 240) break;             // the search range: a draw is a few ms, so it is bounded
     if (ok(seed) && ++hit === attempt) return seed;
   }
   if (fromKey) return djSeedFor(profile, night, n, attempt);
