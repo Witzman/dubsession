@@ -6573,20 +6573,26 @@ function createEngine(ctx, opts) {
      feedback path is filtered so each repeat is darker than the last: [D] "dark
      filtered-out delays is half the genre's own description of itself." --- */
   const FREEZE_FB = 0.985, FREEZE_Q_DB = 20 * Math.log10(Math.SQRT1_2);   // Butterworth: no resonant peak
+  /* THE ECHO'S LOOP HAS ONE WAY IN (#45). It used to be a cycle of two delays (L -> R -> dark -> fb -> L) with a panner tapping each,
+     and Chromium renders a cycle by pulling back from the destination: the first node of the loop it reaches is read a quantum late
+     by the next. The two taps sit on one input and are pulled in the order of a hash of their addresses, so every render entered the
+     loop at L or at R, and the echo came out in one of two states, 128 samples apart in one leg, 13-20 dB apart as waveforms. No
+     soloed measurement through the delay repeated. The same echo, y(t) = x(t-T) + fb * dark(y(t-2T)), is one loop of one delay
+     (2T) closed on the sum `s`, with the first tap on `s` and the second on `s` delayed by T: both taps hang off `s`, so the
+     loop is entered at `s` whichever tap is pulled first. The timing is the state where R is entered first (the second tap on
+     time, the loop a quantum long) - one of the two the old graph landed in - and it is now the only one. */
   function pingPong(time, fb, darkHz) {
-    const inp = ctx.createGain(), L = ctx.createDelay(3), R = ctx.createDelay(3),
-          f = ctx.createGain(), pl = ctx.createStereoPanner(), pr = ctx.createStereoPanner(),
+    const inp = ctx.createGain(), L = ctx.createDelay(3), loop = ctx.createDelay(6), R = ctx.createDelay(3),
+          s = ctx.createGain(), f = ctx.createGain(), pl = ctx.createStereoPanner(), pr = ctx.createStereoPanner(),
           out = ctx.createGain();
-    L.delayTime.value = time; R.delayTime.value = time; f.gain.value = fb;
+    L.delayTime.value = time; R.delayTime.value = time; loop.delayTime.value = 2 * time; f.gain.value = fb;
     pl.pan.value = -0.8; pr.pan.value = 0.8;
-    inp.connect(L);
-    L.connect(pl); pl.connect(out);
-    L.connect(R);
-    R.connect(pr); pr.connect(out);
+    inp.connect(L); L.connect(s);
+    s.connect(pl); pl.connect(out);
+    s.connect(R); R.connect(pr); pr.connect(out);
     const dk = ctx.createBiquadFilter(); dk.type = "lowpass"; dk.frequency.value = darkHz;
-    R.connect(dk); dk.connect(f);
-    f.connect(L);
-    return { in: inp, out, L, R, fb: f, dark: dk, darkQ: dk.Q.value };
+    s.connect(loop); loop.connect(dk); dk.connect(f); f.connect(s);
+    return { in: inp, out, L, R, loop, fb: f, dark: dk, darkQ: dk.Q.value };
   }
 
   /* =========================================================================
@@ -8108,6 +8114,7 @@ function createEngine(ctx, opts) {
       const dt = 60 / cfg.bpm * cfg.dlyBeats;
       A.pp.L.delayTime.setTargetAtTime(dt, t, 0.05);
       A.pp.R.delayTime.setTargetAtTime(dt, t, 0.05);
+      A.pp.loop.delayTime.setTargetAtTime(2 * dt, t, 0.05);
     }
     if (key === "dlyFbk" && !cfg.freeze) A.pp.fb.gain.setTargetAtTime(value, t, 0.05);
     /* FREEZE, HELD. The echo's input is closed and its feedback is latched just under 1, so what is in the loop keeps going
