@@ -215,7 +215,8 @@
   /* THE PIN COUNT SITS BESIDE THE ROLL THAT CANNOT TAKE IT AWAY, and it is
      --hot because it is the hand's [#51 §4.3]. */
   .pincount { color: var(--hot); font-size: 12px; letter-spacing: .1em; }
-  .bs-why { color: var(--dim); font-size: 11px; display: flex; align-items: center;
+  .bs-rel { margin-left: auto; white-space: nowrap; padding: 2px 8px; min-width: 76px; }
+  .bs-why { color: var(--dim); font-size: 11px; display: flex; align-items: center; gap: 8px;
             padding-left: 8px; line-height: 1.25; }
   #steps { display: flex; gap: 3px; margin-bottom: 8px; }
   #steps i { flex: 1; height: 5px; background: var(--line); }
@@ -4585,6 +4586,8 @@ function setPin(ch, ls, v) {
   return PINS;
 }
 function clearPins() { for (const k of Object.keys(PINS)) delete PINS[k]; return PINS; }
+function rowPinCount(ch) { return PINS[ch] ? PINS[ch].filter(v => v !== null).length : 0; }
+function clearRowPins(ch) { delete PINS[ch]; return PINS; }
 function pinCount() {
   let n = 0;
   for (const k of Object.keys(PINS)) for (const v of PINS[k]) if (v !== null) n++;
@@ -8392,6 +8395,14 @@ function paintPins() {
   if (note) note.textContent = "a new piece — same manifest, same genre, a different draw"
     + (n ? ". your pins stay." : "");
 }
+// ONE LANE'S PINS, and only that lane's: the other rows keep the hand's marks. Same steps as the whole sheet, so nothing downstream can tell them apart.
+function releaseRow(ch) {
+  const c = CHANNELS.find(x => String(x.ch) === String(ch));
+  clearRowPins(ch); rebuildDerived();
+  if (engine) engine.recompose();
+  writeUrl(); paintPins(); repaintSheet();
+  say((c ? c.voice : "channel " + ch) + " released — the generator has that lane back" + (pinCount() ? "; your other pins stay." : "."));
+}
 function releasePins(spoken) {
   clearPins(); rebuildDerived();
   if (engine) engine.recompose();
@@ -8829,6 +8840,9 @@ function buildBarSheet() {
     }
     const why = document.createElement("div");
     why.className = "bs-why"; why.id = "bsy" + ch;
+    // THE ROW'S OWN WAY OUT [#62]: the reason on the left, and on the right a release that only exists while the lane carries a pin.
+    why.innerHTML = `<span class="bs-wt" id="bsyt${ch}"></span>`
+      + (pinnable(ch) ? `<button class="sm bs-rel" id="bsr${ch}" data-ch="${ch}" hidden aria-label="release the pins on ${c.voice}">release</button>` : "");
     box.appendChild(why);
   }
   const first = CHANNELS.find(c => pinnable(c.ch));
@@ -8954,9 +8968,11 @@ function paintBarSheet(bar, C) {
     // on a lane with its own cycle a pin is pinned to the LANE'S step, so the
     // column it appears in moves every bar. That is the polymeter, and a pin
     // that seems to jump without a word beside it is a bug report.
-    const why = ui("bsy" + ch);
+    const why = ui("bsyt" + ch);
     if (why) why.textContent = rested ? shortSilence(ch, C).replace(/^silent · /, "")
                                       : pinNote(ch);
+    const rel = ui("bsr" + ch);
+    if (rel) { const n = rowPinCount(ch); rel.hidden = n === 0; rel.textContent = "release " + n; }
   }
 }
 
@@ -10466,6 +10482,8 @@ function wire() {
     togglePin(ch, i);
   };
   ui("barsheet").addEventListener("click", e => {
+    const rel = e.target && e.target.closest ? e.target.closest(".bs-rel") : null;
+    if (rel) { releaseRow(rel.dataset.ch); return; }
     const cell = e.target && e.target.closest ? e.target.closest(".bs-c") : null;
     if (!cell || cell.dataset.ch === undefined) return;
     sheetRove(cell.dataset.ch, parseInt(cell.dataset.i, 10), false);
