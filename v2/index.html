@@ -1830,8 +1830,10 @@ const STYLE = {
   // to this engine; it is not declared here at all.
   frame: {
     tempo:     { range:[125,125], d:D.FRAME, f:0 },          // PINNED. §3: [116,128]. §14 step 4+
-    root:      { range:[7,7], q:1, snap:"section", d:D.FRAME, f:1 },   // PINNED. §3: [0,11]
-    scale:     { pool:[0], snap:"section", d:D.FRAME, f:2 }, // PINNED. §3: MIN×5 DOR×2 PHR HMIN PENT
+    // DRAWN (#49): any root, and the source's own scale odds — natural minor five in ten, dorian two, phrygian, harmonic minor and the
+    // minor pentatonic one each, and NEVER major (dub techno is a minor genre; MAJ stays reachable by hand in the KEY bank).
+    root:      { range:[0,11], q:1, snap:"section", d:D.FRAME, f:1 },
+    scale:     { pool:[0,0,0,0,0,2,2,3,4,5], snap:"section", d:D.FRAME, f:2 },
     // [D] the genre pack's groove row for dub: swing .08 on the rim and the
     // hat and nothing else. ONE DRAWN SCALAR × A FIXED PER-CHANNEL SHARE (S3);
     // the kick, the sub and the pad are `hard` at zero. NOT WIRED YET —
@@ -2518,14 +2520,28 @@ function djWalk(night, n, cur, target) {
 // The `attempt`-th seed that draws `profile` on this night's track n. A seed
 // picks its profile by hash (`profileForSeed`), so this is a search over cheap
 // hashes and not over draws.
-function djSeedFor(profile, night, n, attempt) {
-  let hit = -1;
+function djSeedFor(profile, night, n, attempt, from, maxDist) {
+  // KEYS MOVE BY THE CAMELOT RULE [#49]: with `from` (the seed of the track going out) only a seed whose key is within `maxDist` steps of
+  // the outgoing one counts as a hit, so the attempts are counted among the compatible ones. Should the profile have none in the search
+  // window the key rule is dropped rather than the night stopped: a key is a preference, a track is not.
+  const fromKey = from === undefined || from === null ? null : draw(from).globals;
+  const ok = seed => { if (!fromKey) return true; const g = draw(seed).globals; return djKeyDist(fromKey, g) <= (maxDist === undefined ? 1 : maxDist); };
+  let hit = -1, drawn = 0;
   for (let k = 0; k < 4000; k++) {
     const seed = (rand01(night, D.DJ, n, 100 + k) * 2147483647) | 0;
-    if (profileForSeed(seed).def.id === profile && ++hit === attempt) return seed;
+    if (profileForSeed(seed).def.id !== profile) continue;
+    if (fromKey && ++drawn > 240) break;             // the search window: a draw is a few ms, so it is bounded
+    if (ok(seed) && ++hit === attempt) return seed;
   }
+  if (fromKey) return djSeedFor(profile, night, n, attempt);
   throw new Error("no seed draws " + profile);
 }
+// Where a key sits on the circle of fifths, by its PARENT MAJOR: natural minor and its two cousins that share the relative major,
+// dorian is a major scale started on its second degree, phrygian on its third. One step round the circle is one Camelot step; the
+// relative major/minor swap is no step at all.
+const DJ_PARENT = { 0: 3, 2: -2, 3: -4, 4: 3, 5: 3 };
+const djKeyPos = k => ((((k.root + (DJ_PARENT[k.scale] === undefined ? 3 : DJ_PARENT[k.scale])) % 12) + 12) % 12 * 7) % 12;
+function djKeyDist(a, b) { const d = Math.abs(djKeyPos(a) - djKeyPos(b)); return Math.min(d, 12 - d); }
 
 // The tempo the transport goes to: toward the incoming piece's, by at most
 // `tempoStep` — a set that lurches 6 BPM between two records is two recordings.
@@ -2555,7 +2571,7 @@ function djPlan(night, n, cur) {
   const at = cur.start + cur.bars;                    // the bar the outgoing track ends
   const target = djArc(night, at);
   const profile = djWalk(night, n, cur.profile, target);
-  const seed = djSeedFor(profile, night, n, 0);
+  const seed = djSeedFor(profile, night, n, 0, cur.seed, 1);
   const bpm = djTempoNext(cur.bpm, draw(seed).tempo);
   const rem = DJ_CFG.commissionBars - DJ_CFG.leadBars;
   const blend = djBlendLen(Math.abs(bpm - cur.bpm), rem, DJ_CFG.blend.patience);
@@ -2574,7 +2590,7 @@ function djPlan(night, n, cur) {
 function djPlanCloser(night, n, cur) {
   const ids = [cur.profile].concat(PROFILE_GRAPH[cur.profile]);
   const profile = ids.reduce((a, b) => djHome(b) < djHome(a) ? b : a);
-  const seed = djSeedFor(profile, night, n, 0);
+  const seed = djSeedFor(profile, night, n, 0, cur.seed, 0);
   const bpm = Math.min(cur.bpm, djTempoNext(cur.bpm, draw(seed).tempo));
   const blend = djBlendLen(Math.abs(bpm - cur.bpm), DJ_CFG.commissionBars - DJ_CFG.leadBars, DJ_CFG.blend.patience);
   return { n: n, profile: profile, seed: seed, target: djHome(profile), bpm: bpm, blend: blend,
@@ -2932,6 +2948,24 @@ function walkAt(seed, walk, bar) {
     if (pos > hi) pos = 2 * hi - pos;             // reflect, do not park
     if (pos < lo) pos = 2 * lo - pos;
   }
+  return pos;
+}
+
+/* A WALK NEVER LANDS THE HARMONY ON A DIMINISHED OR AUGMENTED TRIAD [#49]. The sign of the span fixed this for natural minor (down one
+   degree is the flat VII, a major triad), but the scale is no longer one scale: in HARMONIC MINOR the degree under the tonic is the
+   leading tone, and its triad is diminished for two minutes. So the position the walk computed is walked back toward home until the
+   triad on it is a major or a minor one. The identity where nothing is wrong: natural minor, dorian and phrygian at -1 are untouched.
+   Only the seven-note scales have a triad to judge; the pentatonic's stacked degrees are left as they are. */
+function triadConsonant(sc, d) {
+  const n = sc.length;
+  if (n !== 7) return true;
+  const at = i => { const j = (((d + i) % n) + n) % n; return sc[j] + 12 * Math.floor((d + i) / n); };
+  const a = at(2) - at(0), b = at(4) - at(2);
+  return (a === 3 && b === 4) || (a === 4 && b === 3);
+}
+function walkClear(scale, pos) {
+  const sc = SCALE_STEPS[scale] || SCALE_STEPS[0];
+  while (pos !== 0 && !triadConsonant(sc, pos)) pos += pos > 0 ? -1 : 1;
   return pos;
 }
 
@@ -3337,6 +3371,7 @@ function compositionAt(seed, piece, movement, bar, opts) {
     // print "held by you" against "running" rather than guessing.
     silent: {}, frozen: {}, held: {}, gesture: null, fire: null
   };
+  out.walk = walkClear(out.scale, out.walk);   // #49: whatever scale is sounding, the walk never lands on a diminished triad
   for (const p of HOLD_PARAMS) out.held[p] = {};
   for (const ch of ALL_CHANNELS) out.wet[ch] = { delay: now.wet[ch].delay, reverb: now.wet[ch].reverb };
 
@@ -3621,7 +3656,7 @@ const MOVEMENT = {
 
     /* --- SECTION 2, bar 32, 1:01 — the chord starts breathing ----------- */
     { at: 32, event: ["chance", 6, 0.75],
-      why: "The odds are rolled once per NOTE, so the G minor triad becomes a " +
+      why: "The odds are rolled once per NOTE, so the home triad becomes a " +
            "different subset of itself across the stab's five-bar phrase while " +
            "the figure never moves — spontaneous repetition applied to notes. " +
            "0.75 and not 0.5: fourteen of twenty stabs are still the full " +
@@ -3654,22 +3689,25 @@ const MOVEMENT = {
     /* --- SECTION 5, bar 128, 4:06 — the root falls to flat-VII ---------- */
     { at: 128, event: ["walk", 96, -1],
       why: "The only device in the whole inherited vocabulary that moves " +
-           "harmony over bars, and it is used ONCE. Down one degree of G " +
-           "natural minor: stab F3 A3 C4, pad F2 A2 C3, sub F1 then D#2 — F " +
-           "major, the bVII, with the flat seventh under the second half. " +
-           "Diatonic throughout; nothing chromatic. The bass has been playing " +
-           "F under every bar since bar 0, so the harmony moves to a note that " +
-           "was always there. THE SIGN IS LOAD-BEARING: +1 degree is A " +
-           "DIMINISHED, and across 2000 seeds the unsigned walk goes up 49.3% " +
-           "of the time. See finding 2 in the spec. Period 96 bars means it " +
-           "turns over by itself at bar 192 and is home for the exit." },
+           "harmony over bars, and it is used ONCE. Down one degree of the home " +
+           "scale: in a natural minor that is the bVII (G minor to F major: stab " +
+           "F3 A3 C4, pad F2 A2 C3, sub F1 then D#2), with the flat seventh " +
+           "under the second half. Diatonic throughout; nothing chromatic. The " +
+           "bass has been playing that note under every bar since bar 0, so the " +
+           "harmony moves to a note that was always there. THE SIGN IS " +
+           "LOAD-BEARING: +1 degree is a DIMINISHED triad in natural minor, and " +
+           "across 2000 seeds the unsigned walk goes up 49.3% of the time. And " +
+           "in harmonic minor the degree under the tonic is diminished too, so " +
+           "there the harmony stays home (walkClear). See finding 2 in the " +
+           "spec. Period 96 bars means it turns over by itself at bar 192 and " +
+           "is home for the exit." },
 
     /* --- SECTION 6, bar 160, 5:07 — the room opens wide ----------------- */
     { at: 160, event: ["wet", 7, "reverb", 0.62],
       why: "The movement's peak, and in this genre the peak is the most " +
            "ENCLOSED point and not the loudest — building to a loud peak is " +
            "the one move that would make this tech-house. Nothing gets louder: " +
-           "the F major pad simply occupies a much larger space and everything " +
+           "the pad, a degree down, simply occupies a much larger space and everything " +
            "else is heard inside it. The 32-bar tide still rides +/-0.18 " +
            "around the new base, so the pad now breathes between 0.44 and " +
            "0.80. Channel 7 only — if the drums go soft, this landed on the " +
@@ -3679,7 +3717,7 @@ const MOVEMENT = {
     { at: 192, event: null,
       why: "THE ONLY SECTION WITH NOTHING DIALLED, and one of the largest " +
            "changes in the movement: the walk bound at bar 128 turns over on " +
-           "its own and the root returns to exactly G — not near it. With span " +
+           "its own and the root returns to exactly the home key — not near it. With span " +
            "1 the walk is at 0 after two steps for EVERY seed, so this is " +
            "deterministic and not a hope. It is here to prove the thing the " +
            "two-hour spec rests on: a device with a long period generates " +
@@ -3722,7 +3760,7 @@ const MOVEMENT = {
     { at: 88,  what: ["throw", 2, 0.90, 1],
       why: "the clap again, carrying the boundary into section 4" },
     { at: 152, what: ["throw", 6, 0.95, 2],
-      why: "the first throw in F major. The same gesture, a different chord: " +
+      why: "the first throw a degree down. The same gesture, a different chord: " +
            "the cheapest possible proof that the harmony really moved" },
     { at: 184, what: ["throw", 2, 0.90, 1],
       why: "the clap inside the big room, so the throw has somewhere to go" },
@@ -10939,7 +10977,7 @@ function djStop(why) {
 // it is needed and not at the bar line.
 function djCompose(plan, incoming) {
   for (let attempt = 0; attempt < 3; attempt++) {
-    const seed = attempt === 0 ? plan.seed : djSeedFor(plan.profile, DJ.night, plan.n, attempt);
+    const seed = attempt === 0 ? plan.seed : djSeedFor(plan.profile, DJ.night, plan.n, attempt, DJ.cur && DJ.cur.seed, plan.closer ? 0 : 1);
     try {
       const d = deckBuild(seed, incoming);
       if (!d.piece.drawFailed) { plan.seed = seed; return d; }
@@ -11136,7 +11174,7 @@ function tonightAhead(night, cur, n0) {
     let c = cur;
     for (let i = 1; i <= 4; i++) {
       const p = (i === 1 && DJ.plan && !DJ.plan.closer) ? DJ.plan : djPlan(night, n0 + i, c);
-      out.push(p); c = { profile: p.profile, bpm: p.bpm, start: p.start, bars: p.bars };
+      out.push(p); c = { profile: p.profile, bpm: p.bpm, start: p.start, bars: p.bars, seed: p.seed };
     }
   }
   TN.ahead = out; TN.aheadKey = key;
@@ -12062,7 +12100,7 @@ window.p02 = {
           ho: (() => { const o = { A: null, B: null }, oth = DECK.b || DECK.pending, h = e => DECK_LANES.map(l => +e.A.chan[l].ho.gain.value.toFixed(3));
                        if (engine) o[DECK.main] = h(engine); if (oth) o[oth.label || otherLabel(DECK.main)] = h(oth.engine); return o; })(), bpm: T.bpm, bar: Math.floor(T.step / 16),
           seed: SEED, log: DJ.log.slice() }),
-        cfg: DJ_CFG, arc: djArc, walk: djWalk, seedFor: djSeedFor, blendLen: djBlendLen, plan: djPlan,
+        cfg: DJ_CFG, arc: djArc, walk: djWalk, seedFor: djSeedFor, keyDist: djKeyDist, blendLen: djBlendLen, plan: djPlan,
         handovers: djHandovers, graph: PROFILE_GRAPH,
         homes: () => PROFILE_DEFS.map(p => [p.id, p.energy[2]]) },
   deck: {
