@@ -11616,6 +11616,35 @@ function buildLaneBank() {
   kitBank("lane", "LANE", cols);
 }
 
+// THE RIDE BANK: how far each lane's material is ridden — sound, rhythm, melody — over the station's own rails (ride_<dim>_<ch>),
+// glide selects (ridelen_) and dice (ridejump_). The encoder's 0 is the piece as drawn; a glide of "hand" lands wherever the
+// control is on the next bar, a length in bars glides there. A dimension with nothing to ride is drawn off and keeps its dice,
+// the only gesture that reaches a name. Built after wireRides(): the inputs it sits on have to exist and be wired.
+function buildRideBank() {
+  const byCh = new Map();
+  for (const r of rideRowsOf()) { if (!byCh.has(r.ch)) byCh.set(r.ch, []); byCh.get(r.ch).push(r); }
+  const groups = [];
+  for (const [ch, rows] of byCh) {
+    const gone = () => !!PIECE.empty[ch], g = kitEl("div", "kx-group"), row = kitEl("div", "kx-grow");
+    g.append(kitEl("div", "kx-gname", voiceName(ch)));
+    for (const r of rows) {
+      const col = kitEl("div", "kx-strip"), L = () => RIDE.lanes[rideKey(r.ch, r.dim)];
+      const off = () => gone() || !r.rides, why = () => gone() ? "no material on this lane" : !r.rides ? "nothing drawn to ride here: the dice only" : "";
+      const enc = kitEncoder({ id: "ride_" + r.id, label: r.dim, tone: "arc", fmt: v => (v === 0 ? "drawn" : v.toFixed(2)), def: () => 0,
+        off, dead: () => (off() ? why() : (L() && L().held ? "held by the contract" : "")), held: () => !off() && parseFloat(ui("ride_" + r.id).value) !== 0,
+        title: voiceName(ch) + " " + r.dim + " \u2014 how far it is ridden from the piece as drawn; double-click puts it back" });
+      const len = kitStepped({ label: "glide", tone: "arc", options: RIDE_LENGTHS.map(b => ({ v: b, label: b ? b + (b === 1 ? " bar" : " bars") : "hand" })),
+        get: () => parseFloat(ui("ridelen_" + r.id).value), set: v => { const e = ui("ridelen_" + r.id); e.value = String(v); e.dispatchEvent(new Event("change", { bubbles: true })); },
+        def: () => 0, off, dead: why, title: "bars the ride takes to arrive; hand lands wherever the control is, on the next bar" });
+      const die = kitButton({ kind: "fired", label: "dice", tone: "echo", off: gone, fire: () => ui("ridejump_" + r.id).click(),
+        title: "throw the dice at " + voiceName(ch) + "'s " + r.dim + ": somewhere unrelated, on the next bar" });
+      col.append(enc.el, len.el, die.el); row.append(col);
+    }
+    g.append(row); groups.push(g);
+  }
+  kitBank("ride", "RIDE", groups);
+}
+
 // THE DECK BANK: what the hand does to the decks and the transport — auto, the master mute, release all, the crossfader (along
 // its track), load and unload B. The deck-B seed field, the lane hand-over pads and the two status lines are the drawer's own
 // elements, MOVED here with their ids (their wiring is by id), not copied.
@@ -12076,6 +12105,7 @@ buildHoldBank();
 buildDeckBank();
 buildRides();
 wireRides();
+buildRideBank();
 buildSections();
 buildSteps();
 buildVoices();
