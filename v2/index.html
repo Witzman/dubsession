@@ -2563,23 +2563,31 @@ function djBlendLen(gapBpm, rem, patience) {
   return Math.min(len, rem);
 }
 
-// A track's length in bars: whole phrases, drawn from the night.
-function djTrackBars(night, n) {
-  const ph = DJ_CFG.phrase, lo = DJ_CFG.trackBars[0] / ph, hi = DJ_CFG.trackBars[1] / ph;
+// A track's length in bars: whole phrases, drawn from the night. WITH THE RING ON
+// (`movBars` given) the track IS its movement, start to close: a drawn movement is
+// 192-320 bars and its peak, its wide room and its close sit past bar 100, so a
+// track cut at 64-96 played the first third of it and never got there (#90). The
+// blend then lands over the close section, which is where a DJ mixes out. With
+// the ring off nothing moves in a track, so the drawn length stands as before.
+function djTrackBars(night, n, movBars) {
+  const ph = DJ_CFG.phrase;
+  if (movBars > 0) return ph * Math.max(1, Math.floor(movBars / ph));
+  const lo = DJ_CFG.trackBars[0] / ph, hi = DJ_CFG.trackBars[1] / ph;
   return ph * (lo + Math.floor(rand01(night, D.DJ, n, 3) * (hi - lo + 1)));
 }
 
 // The spec for the track AFTER `cur` ({profile, bpm, start, bars}). Returns a
 // plain object; composing it may fail and be retried, planning it is done.
-function djPlan(night, n, cur) {
+function djPlan(night, n, cur, ring) {
   const at = cur.start + cur.bars;                    // the bar the outgoing track ends
   const target = djArc(night, at);
   const profile = djWalk(night, n, cur.profile, target);
   const seed = djSeedFor(profile, night, n, 0, cur.seed, 1);
-  const bpm = djTempoNext(cur.bpm, draw(seed).tempo);
+  const drawn = draw(seed);
+  const bpm = djTempoNext(cur.bpm, drawn.tempo);
   const rem = DJ_CFG.commissionBars - DJ_CFG.leadBars;
   const blend = djBlendLen(Math.abs(bpm - cur.bpm), rem, DJ_CFG.blend.patience);
-  return { n: n, profile: profile, seed: seed, target: target, bpm: bpm, blend: blend, bars: djTrackBars(night, n),
+  return { n: n, profile: profile, seed: seed, target: target, bpm: bpm, blend: blend, bars: djTrackBars(night, n, ring && drawn.movement && drawn.movement.bars),
            start: at - blend };
 }
 
@@ -11213,7 +11221,7 @@ function djStart() {
   DJ.on = true; DJ.closing = false; DJ.fading = false; DJ.night = SEED | 0; DJ.n = 0; DJ.live = DECK.main; DJ.plan = null; DJ.built = null;
   DJ.phase = "play"; DJ.retire = null; DJ.log = []; DJ.trail = [];
   const bar = Math.floor(T.step / 16);
-  DJ.cur = { profile: PIECE.profile.id, bpm: T.bpm, start: bar, bars: djTrackBars(DJ.night, 0), seed: PIECE.seed };
+  DJ.cur = { profile: PIECE.profile.id, bpm: T.bpm, start: bar, bars: djTrackBars(DJ.night, 0, autoOn && PIECE.movement && PIECE.movement.bars), seed: PIECE.seed };
   deckXfade(0);
   djLog("start", { night: DJ.night, profile: DJ.cur.profile, bars: DJ.cur.bars });
   djNote("");
@@ -11249,9 +11257,10 @@ function djCompose(plan, incoming) {
 }
 function djCommission(bar) {
   const c = DJ.cur, incoming = DJ.live === "A" ? "B" : "A";
-  const plan = djPlan(DJ.night, DJ.n + 1, c);
+  const plan = djPlan(DJ.night, DJ.n + 1, c, autoOn);
   const t0 = performance.now();
   const built = djCompose(plan, incoming);
+  if (built && autoOn) plan.bars = djTrackBars(DJ.night, plan.n, built.piece.movement && built.piece.movement.bars);   // a retry drew another seed, so another movement
   if (!built) {
     c.bars += 16;
     djLog("abandon", { n: plan.n, profile: plan.profile });
@@ -11425,7 +11434,7 @@ const TN_LANES = ["kick", "rimshot", "clap", "hats", "lead", "sub", "stab", "pad
 const TN_COL = { A: "#5fb7a8", B: "#e6b450" };
 function tonightAhead(night, cur, n0) {
   const closer = cur.closer, planKey = DJ.plan ? DJ.plan.seed + ":" + DJ.plan.start : "-";
-  const key = [night, n0, cur.profile, cur.start, cur.bars, DJ.closing ? 1 : 0, planKey, DJ.push].join("|");
+  const key = [night, n0, cur.profile, cur.start, cur.bars, DJ.closing ? 1 : 0, planKey, DJ.push, autoOn ? 1 : 0].join("|");
   if (key === TN.aheadKey) return TN.ahead;
   const out = [];
   if (DJ.closing) {
@@ -11433,7 +11442,7 @@ function tonightAhead(night, cur, n0) {
   } else {
     let c = cur;
     for (let i = 1; i <= 4; i++) {
-      const p = (i === 1 && DJ.plan && !DJ.plan.closer) ? DJ.plan : djPlan(night, n0 + i, c);
+      const p = (i === 1 && DJ.plan && !DJ.plan.closer) ? DJ.plan : djPlan(night, n0 + i, c, autoOn);
       out.push(p); c = { profile: p.profile, bpm: p.bpm, start: p.start, bars: p.bars, seed: p.seed };
     }
   }
@@ -11460,7 +11469,7 @@ function tonightDeck(label, bar) {
 function tonightPaint() {
   const el = ui("tn_arc"); if (!el) return;
   const night = DJ.on ? DJ.night : (SEED | 0);
-  const cur = DJ.on ? DJ.cur : { profile: PIECE.profile.id, bpm: T.bpm, start: 0, bars: djTrackBars(night, 0), closer: false };
+  const cur = DJ.on ? DJ.cur : { profile: PIECE.profile.id, bpm: T.bpm, start: 0, bars: djTrackBars(night, 0, autoOn && PIECE.movement && PIECE.movement.bars), closer: false };
   const n0 = DJ.on ? DJ.n : 0;
   const bar = DJ.on ? Math.floor(T.step / 16) : 0;
   const own = DECK_LANES.map(l => DECK.owner[l] + (DECK.fading[l] || "")).join("");
