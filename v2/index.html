@@ -1325,7 +1325,10 @@ const D = { PROFILE:0x5052, FRAME:0x4652, DRUM:0x4452, NOTE:0x4E54, VOX:0x5658,
             RIDE:0x5244,
             // the DJ's own domain (#84): the night's arc, the walk, the seed search.
             // None of it is the piece, so none of it may share a coordinate with one.
-            DJ:0x444A };
+            DJ:0x444A,
+            // the arrangement's own domain (#49): the drawn movement's lengths, roles, events and gestures. Not D.FORM, whose f0 and f1 are the
+            // voice budget and its order: two purposes on one coordinate always agree.
+            ARR:0x4152 };
 
 // Reserved coordinates: allocated, not yet spent. They are in check 5's
 // uniqueness set so a later commit cannot quietly take one.
@@ -1848,9 +1851,10 @@ const STYLE = {
     humanVeloShare:{ fixed:{ 1:1, 3:1.6, 4:1.6 } },          // → 5 8 8, [M]'s row
     // S1: the grammars are `rolling`, `static`, `sparse`. `progression` is a
     // harmonic device on the chord channel, not a grammar.
-    grammar:   { pool:["rolling"], snap:"section", d:D.FRAME, f:6 },   // PINNED. #49
+    grammar:   { pool:["rolling","rolling","rolling","static","sparse"], snap:"section", d:D.FRAME, f:6 },   // DRAWN (#49); the default seed's movement is the hand-written one
     // S2: section lengths are drawn PER SECTION, not once per piece.
-    // `MOVEMENT` still owns these three; #49 wires them.
+    // the drawn movement owns these three (its lengths are drawn PER SECTION and its total is legal, not drawn from this pool); they stay
+    // as the manifest's declared shape.
     phrase:    { pool:[8], d:D.FRAME, f:7 },
     section:   { pool:[32], d:D.FRAME, f:8 },
     bars:      { pool:[256], d:D.FRAME, f:9 }
@@ -3333,13 +3337,14 @@ function compositionAt(seed, piece, movement, bar, opts) {
   opts = opts || {};
   const auto = !!opts.auto;
   const holds = opts.holds || null;
-  // An explicit FIRE timeline is the live performance contract. In that mode
-  // AUTO is only the clock and the base arrangement waits for the hand; the
-  // legacy direct call without `fires` remains available to old pure-layer
-  // measurements and does not drive the desk.
+  // An explicit FIRE timeline is the live performance contract: the hand's holds and the fired gestures are layered over whatever
+  // arrangement is sounding, and the mutation pass only runs for the micro gestures the hand fired.
+  // THE RING IS THE RING IN BOTH MODES [#49]. This used to read the BASE in performance mode ("AUTO is only the clock"), and that
+  // half-applied the schedule: chance and move came through `atWrap` below and presence, sends and the walk did not, so a drawn
+  // movement was neither playing nor silent. With the ring OFF (the default) `scheduleStateAt` returns the base exactly as before, so
+  // nothing moves for anyone who has not switched it on; with it ON the schedule plays under the hand.
   const performanceMode = opts.fires !== undefined;
-  const now = performanceMode ? baseComposition(piece, movement.phrase)
-                              : scheduleStateAt(piece, movement, bar, auto);
+  const now = scheduleStateAt(piece, movement, bar, auto);
   const out = {
     bar, seed, auto, mods: now.mods,
     root: opts.keyRoot === undefined ? now.root : opts.keyRoot,
@@ -3605,7 +3610,7 @@ function modValue(mod, seed, i, barPos) {
    tides rather than arrivals. One PERCEPTIBLE event per section holds from
    bar 32 onward.
    ========================================================================= */
-const MOVEMENT = {
+const MOVEMENT_SHIPPED = {
   phrase: 8,                  // bars — the listener's "loop"
   section: 32,                // bars — one perceptible event each
   bars: 256,                  // 8.19 min at 125 BPM
@@ -3773,6 +3778,250 @@ const MOVEMENT = {
      covers the movement's rest AND the harmonic move, so section 5 — the
      biggest event in the piece — arrives into an undecorated stretch. */
 };
+
+/* =========================================================================
+   THE ARRANGEMENT IS DRAWN [#49] — a movement per piece, and a why per event
+   -------------------------------------------------------------------------
+   `MOVEMENT_SHIPPED` above is one hand-written piece's schedule and stays: the DEFAULT SEED's movement is that literal, so the page
+   the owner knows is reachable. Every other seed draws its own from one of three grammars (rolling three in five, static one,
+   sparse one — repetition is the weight): the sections' LENGTHS are the drawn numbers, `at` is never drawn but the running sum of
+   the lengths (so assertSectionOrder cannot throw), and the last section is GENERATED, not drawn — it puts back everything the
+   movement moved, so the ring arrives on a piece that is already complete (the closure law). The lengths are REDRAWN until the total
+   is a legal one and never patched to fit: a patched value is how a contract gets violated by the code that enforces it.
+
+   THE WHY IS GENERATED FROM THE EVENT, AND MUST ADD SOMETHING THE TUPLE DOES NOT CARRY: an arithmetic fact, a musical name, or the
+   role's comparative clause (`ARR_BECAUSE`, one hand-written sentence per role, about the role and never about a bar number, so it
+   cannot go stale). A sentence with none of the three is not written.
+
+   The design record is kept with the project's process documents, not here; the numbers in it were measured against the real
+   fold, and this draw follows its fourth round: an opening state that declares two coprime phrase lengths (a third when their lcm is
+   short), two thinning sections, gestures with one inside the floor. The pools are the genre's, the session's, and unheard.
+   ========================================================================= */
+let MOVEMENT = MOVEMENT_SHIPPED;   // the movement of the piece the surface shows; rebound with the piece in rebuildDerived
+const ARR_BARS = [192, 320];
+const ARR_MIN_SECTION = 16;
+const ARR_CH = { 0: "kick", 1: "rimshot", 2: "clap", 3: "hats", 4: "lead", 5: "sub", 6: "stab", 7: "pad" };
+const ARR_THING = { delay: "echo", reverb: "room", level: "level", cutoff: "tone" };
+const ARR_PAIRS = [[3, 5], [5, 7], [3, 7], [5, 8], [3, 8]];
+const ARR_LINE = {
+  rolling: "rolling · no arc. One thing changes at a time and the floor never goes.",
+  static: "static · the room is the arrangement. Nothing enters and nothing leaves.",
+  sparse: "sparse · one voice in or out at every boundary. The density is the story.",
+  shipped: "the hand-written movement · eight sections of 32 bars, one perceptible event each."
+};
+const ARR_BECAUSE = {
+  floor: "the reference the rest is heard against. It holds, bit for bit, so that the first change has something to be a change from.",
+  thin: "before the echo and not after: an echo carries forward only the variety that already exists. Opened over a frozen chord it just makes the frozen chord longer.",
+  open: "the echo is the second instrument, not an effect on the first.",
+  turn: "the only device here that moves harmony over bars, and it is used once. Down a degree, never up: up is a diminished chord.",
+  wide: "the peak of a dub record is its most enclosed point, not its loudest. Building to a loud peak is the one move that would make this tech-house.",
+  lean: "two loops of different lengths running side by side. Nothing is generating that, and it is the oldest trick in machine music.",
+  bind: "sends move, and they move out of phase, so that two of them are never both loud.",
+  add: "the density is the story: a voice arriving is the event, so nothing else is dialled beside it.",
+  drop: "a voice going is the same event turned round: what is left is heard differently for it.",
+  close: "everything that was moved is put back before the wrap, so the ring arrives on a piece that is already complete."
+};
+const arrGcd = (a, b) => { a = Math.round(a); b = Math.round(b); while (b) { const t = a % b; a = b; b = t; } return a; };
+const arrLcm = (a, b) => Math.round(a) * Math.round(b) / arrGcd(a, b);
+const arrMag = frac => frac < 0.15 ? ", a little" : frac > 0.4 ? ", wide" : "";
+const arrPc = (root, sc, deg) => { const n = sc.length, j = (((deg) % n) + n) % n; return ((root + sc[j] + 12 * Math.floor(deg / n)) % 12 + 12) % 12; };
+const ARR_NOTE = ["C", "C#", "D", "Eb", "E", "F", "F#", "G", "Ab", "A", "Bb", "B"];
+
+function drawMovement(seed, piece) {
+  seed = seed | 0;
+  if (seed === DEFAULT_SEED) return MOVEMENT_SHIPPED;
+  const grammar = piece.frame && ARR_LINE[piece.frame.grammar] ? piece.frame.grammar : "rolling";
+  const has = ch => !piece.empty[ch];
+  // every draw is a stream on its own coordinate (D.FORM, purpose, running index), so adding a draw to one purpose moves no other
+  const stream = f => { let i = 0; return () => rand01(seed, D.ARR, f, i++); };
+  const pick = (r, a) => a[Math.floor(r() * a.length)];
+  const between = (r, lo, hi) => lo + Math.floor(r() * (hi - lo + 1));
+  const range = (r, lo, hi) => +(lo + r() * (hi - lo)).toFixed(2);
+  const scaleSteps = SCALE_STEPS[piece.globals.scale] || SCALE_STEPS[0], root = piece.globals.root;
+  const wet0 = (ch, verb) => ((piece.wets[ch] || { delay: 0, reverb: 0 })[verb] || 0) / 100;
+
+  // ---- the section rows of the grammar: role, length range, and how many the draw makes ---------------------------------------
+  const rg = stream(1);
+  let rows;
+  if (grammar === "rolling") {
+    rows = [["floor", 32, 48], ["thin", 24, 40], ["open", 24, 40], ["thin", 24, 40], ["turn", 32, 48], ["wide", 24, 40], ["lean", 16, 32], ["close", 16, 32]];
+    if (rg() < 0.4) rows.splice(6, 1);                                   // the lean section is six draws in ten
+  } else if (grammar === "static") {
+    rows = [["floor", 64, 96], ["bind", 64, 96], ["bind", 64, 96], ["close", 16, 32]];
+    if (rg() < 0.3) rows.splice(2, 1);
+  } else {
+    const n = between(rg, 6, 8);
+    rows = [["floor", 24, 40]];
+    for (let i = 1; i < n; i++) rows.push(["move", 24, 40]);              // add or drop is decided below, from who is present
+    rows.push(["close", 16, 32]);
+  }
+  // ---- the lengths: REDRAWN until the total is legal, never patched -----------------------------------------------------------
+  let lens = null;
+  const rl = stream(2);
+  for (let tries = 0; tries < 2000 && !lens; tries++) {
+    const l = rows.map(r => between(rl, r[1], r[2]));
+    const total = l.reduce((a, b) => a + b, 0);
+    if (total % 32 === 0 && total >= ARR_BARS[0] && total <= ARR_BARS[1] && Math.min.apply(null, l) >= ARR_MIN_SECTION) lens = l;
+  }
+  if (!lens) return MOVEMENT_SHIPPED;                                     // no legal draw: the literal, never a patched one
+  const at = []; let acc = 0; for (const l of lens) { at.push(acc); acc += l; }
+  const bars = acc;
+
+  // ---- the opening state, at bar 0: two coprime loop lengths (three when the pair is short), the anchors pinned, one slow room -
+  const ro = stream(3);
+  const [pa, pb] = pick(ro, ARR_PAIRS), pc = arrLcm(pa, pb) < 21 ? pick(ro, [7, 8]) : 0;
+  const roomBars = pick(ro, [16, 32, 64]), roomDepth = between(ro, 12, 24);
+  const sections = [], used = { role: {}, mods: [] };
+  const chanceNow = {};                                  // what each channel's odds are as the sections go by: the close puts THESE back
+  const moveNow = {}, moveAt = {};                       // and which channels the machine was let off the loop on, and where
+  if (pc && has(1)) chanceNow[1] = 0.80;
+  const push = (atBar, event, role, why) => sections.push({ at: atBar, event, why });   // `role` is for the reader of this function
+  const becauseOnce = role => { if (used.role[role]) return ""; used.role[role] = 1; return " " + ARR_BECAUSE[role].charAt(0).toUpperCase() + ARR_BECAUSE[role].slice(1); };
+  const modText = (ch, verb, bars_, atBar) => {
+    const other = used.mods.length ? used.mods[used.mods.length - 1] : null;
+    return "the " + ARR_CH[ch] + "'s " + ARR_THING[verb] + " breathes over " + bars_ + " bars"
+      + (other ? ", and never peaks with the " + ARR_CH[other.ch] + "'s " + ARR_THING[other.verb] + " over " + other.bars + " — the two line up only every " + arrLcm(bars_, other.bars) + " bars" : "") + ".";
+  };
+  push(0, ["move", 0, "LOCK"], "floor", "OPENING STATE, not an event. The kick is pinned — the machine will not touch it, though the arrangement still can." + becauseOnce("floor"));
+  if (has(7)) push(0, ["move", 7, "LOCK"], "floor", "OPENING STATE. The pad is pinned: the backcloth that fills the space between the noticeable sounds. Kick and pad are the floor and the ceiling; everything between them is weather.");
+  if (has(3)) push(0, ["phrase", 3, pa], "floor", "OPENING STATE. The hats loop over " + pa + " bars against the stab's " + pb + " — the two come round together only every " + arrLcm(pa, pb) + " bars.");
+  if (has(6)) push(0, ["phrase", 6, pb], "floor", "OPENING STATE. The stab loops over " + pb + " bars against the hats' " + pa + ", a different length on purpose: lengths that disagree are the point.");
+  if (pc && has(1)) {
+    push(0, ["phrase", 1, pc], "floor", "OPENING STATE. A third loop, the rimshot's " + pc + " bars: " + pa + " against " + pb + " comes round every " + arrLcm(pa, pb) + " bars, too soon to carry a whole movement.");
+    push(0, ["chance", 1, 0.80], "floor", "OPENING STATE. The rimshot's odds at 0.80, because a third loop length is inaudible while every step fires.");
+  }
+  if (grammar === "static") {
+    // the room is the arrangement, but the pattern inside it still varies: two channels that loop at different lengths, thinned, so the
+    // piece does not come round until the two loops do (and the bind sections re-cut one of them, below)
+    for (const sc of [6, 3, 1].filter(c => has(c) && !(c === 1 && pc)).slice(0, 2)) {
+      const p = range(ro, 0.70, 0.85); chanceNow[sc] = p; used.staticCh = used.staticCh || []; used.staticCh.push(sc);
+      push(0, ["chance", sc, p], "floor", "OPENING STATE. The " + ARR_CH[sc] + " runs at about " + Math.round(p * 100) + " of every hundred " + (TONAL.indexOf(sc) !== -1 ? "notes" : "hits") + ": the room is the arrangement, but the pattern inside it still varies.");
+    }
+  }
+  if (has(7)) { used.mods.push({ ch: 7, verb: "reverb", bars: roomBars }); push(0, ["mod", 7, "reverb", roomDepth, roomBars, "tri"], "floor", "OPENING STATE. The pad's room breathes over " + roomBars + " bars, the slowest thing in the piece."); }
+
+  // ---- the section events, one per section, drawn from the role's pool; `standing` is what the close puts back ----------------
+  const standing = { wet: [], chance: [] };
+
+  const re = stream(4);
+  const onNow = new Set([0, 1, 2, 3, 4, 5, 6, 7].filter(has));            // who is sounding as the sections go by (sparse changes it)
+  const opening = new Set(onNow);
+  let turned = false;
+  // a walk visits every degree between the tonic and its span, so a span is legal only if every one of them is a major or minor triad;
+  // in harmonic minor none is, and the turn is then not drawn at all
+  const legalSpans = [-1, -1, -1, -2, -3].filter(sp => { for (let p = -1; p >= sp; p--) if (!triadConsonant(scaleSteps, p)) return false; return true; });
+  // sparse starts from the floor and adds: only the kick and the sub are in the first section's own mask
+  if (grammar === "sparse") for (const ch of [...onNow]) if (ch !== 0 && ch !== 5) onNow.delete(ch);
+  const startMask = new Set(onNow);
+  // the section that lets the machine off the loop: the second thinning of a rolling piece, the first bind of a static one, the second move of a sparse one
+  const moveRow = grammar === "rolling" ? 3 : grammar === "static" ? 1 : 2;
+  if (grammar === "sparse") for (const ch of opening) if (!startMask.has(ch)) push(0, ["leave", ch, 0], "floor", "OPENING STATE. The " + ARR_CH[ch] + " is out for the first stretch — it arrives later, and the density is the story.");
+  rows.forEach((row, i) => {
+    const role = row[0], a = at[i];
+    if (role === "floor") return;
+    if (role === "close") {
+      // GENERATED: the inverse of every standing change, so bar `bars - 1` equals bar 0
+      const parts = [];
+      for (const w of standing.wet) { push(a, ["wet", w.ch, w.verb, w.base], "close", "the " + ARR_CH[w.ch] + "'s " + ARR_THING[w.verb] + " comes home before the wrap, to " + Math.round(w.base * 100) + " — it was opened at bar " + (w.at + 1) + "." + (parts.length ? "" : becauseOnce("close"))); parts.push(1); }
+      for (const ch of Object.keys(moveNow)) { push(a, ["move", +ch, 0], "close", "the " + ARR_CH[ch] + " is back on its loop before the wrap — it was let off it at bar " + (moveAt[ch] + 1) + "." + (parts.length ? "" : becauseOnce("close"))); parts.push(1); }
+      for (const c of standing.chance) { push(a, ["chance", c.ch, c.base], "close", "the " + ARR_CH[c.ch] + "'s chord comes back " + (c.base === 1 ? "whole" : "to its opening odds") + ", having been in pieces since bar " + (c.at + 1) + "." + (parts.length ? "" : becauseOnce("close"))); parts.push(1); }
+      for (const ch of [0, 1, 2, 3, 4, 5, 6, 7]) {
+        if (onNow.has(ch) && !startMask.has(ch)) { push(a, ["leave", ch, Math.min(8, Math.floor(lens[i] / 2))], "close", "the " + ARR_CH[ch] + " goes over " + Math.min(8, Math.floor(lens[i] / 2)) + " bars — back at bar 1 of the next lap, where the ring began." + (parts.length ? "" : becauseOnce("close"))); onNow.delete(ch); parts.push(1); }
+        else if (!onNow.has(ch) && startMask.has(ch)) { push(a, ["enter", ch, Math.min(8, Math.floor(lens[i] / 2))], "close", "the " + ARR_CH[ch] + " arrives over " + Math.min(8, Math.floor(lens[i] / 2)) + " bars, so the wrap finds the mask it began with." + (parts.length ? "" : becauseOnce("close"))); onNow.add(ch); parts.push(1); }
+      }
+      if (!parts.length) push(a, null, "close", "nothing is dialled here — " + lens[i] + " bars of the floor as it stands, so the ring arrives on a piece that is already complete.");
+      return;
+    }
+    let ev = null, text = "";
+    if (role === "thin") {
+      const pool = [3, 3, 6, 1].filter(has); let ch = pool.length ? pick(re, pool) : 0;
+      if (pool.length) {
+        // a second thinning goes to ANOTHER channel when there is one, and otherwise cuts deeper: two sections whose odds barely differ are one section
+        const again = used.thinned || [];
+        let cc = ch; if (again.indexOf(ch) !== -1 && pool.some(c => again.indexOf(c) === -1)) cc = pick(re, pool.filter(c => again.indexOf(c) === -1));
+        const p = again.indexOf(cc) !== -1 ? Math.max(0.45, +(chanceNow[cc] - between(re, 10, 20) / 100).toFixed(2)) : range(re, 0.60, 0.85);
+        (used.thinned = again).push(cc);
+        ev = ["chance", cc, p]; if (!standing.chance.some(x => x.ch === cc)) standing.chance.push({ ch: cc, base: chanceNow[cc] === undefined ? 1 : chanceNow[cc], at: a }); chanceNow[cc] = p;
+        ch = cc;
+        text = TONAL.indexOf(ch) !== -1
+          ? "the " + ARR_CH[ch] + "'s chord breaks into a different subset of itself each bar — the odds are rolled once per note, about " + Math.round(p * 100) + " of every hundred notes get through."
+          : "the " + ARR_CH[ch] + " thins — about " + Math.round(p * 100) + " of every hundred hits get through.";
+      }
+    } else if (role === "open") {
+      const pool = [6, 6, 6, 2].filter(has), ch = pool.length ? pick(re, pool) : 0;
+      if (pool.length) { const v = range(re, 0.40, 0.70); ev = ["wet", ch, "delay", v]; standing.wet.push({ ch, verb: "delay", base: wet0(ch, "delay"), at: a });
+        text = "the " + ARR_CH[ch] + "'s echo opens" + arrMag((v - wet0(ch, "delay")) / 2) + ", to " + Math.round(v * 100) + " — " + (ch === 6 ? "after the chord has started breaking up, so there is variety for the echo to carry." : "a different instrument thrown into the echo."); }
+    } else if (role === "wide") {
+      const pool = [7, 7, 3].filter(has), ch = pool.length ? pick(re, pool) : 0;
+      if (pool.length) { const v = range(re, 0.45, 0.70); ev = ["wet", ch, "reverb", v]; standing.wet.push({ ch, verb: "reverb", base: wet0(ch, "reverb"), at: a });
+        text = "the " + ARR_CH[ch] + "'s room opens" + arrMag((v - wet0(ch, "reverb")) / 2) + " — nothing gets louder; it occupies more space, to " + Math.round(v * 100) + "."; }
+    } else if (role === "turn") {
+      // span -1 only, and a period whose step count is EVEN at the last bar: the walk steps at every multiple of P from bar 0 and between
+      // two steps it is one degree down, so it is home at the wrap only if an even number of steps has gone by (the closure law)
+      const periods = [48, 64, 96].filter(P => Math.floor((bars - 1) / P) % 2 === 0 && Math.floor((a + P) / P) * P <= bars - 8 && legalSpans.indexOf(-1) !== -1
+        && (() => { for (let k = 1; k * P < bars; k += 2) if (k * P >= a) return true; return false; })());
+      if (!turned && periods.length) {
+        const P = pick(re, periods), span = -1; turned = true;
+        const d = span, pcs = [arrPc(root, scaleSteps, d), arrPc(root, scaleSteps, d + 2), arrPc(root, scaleSteps, d + 4)];
+        const minor = ((pcs[1] - pcs[0]) % 12 + 12) % 12 === 3;
+        ev = ["walk", P, span];
+        text = "the root falls " + Math.abs(span) + " degree" + (Math.abs(span) === 1 ? "" : "s") + " — " + ARR_NOTE[pcs[0]] + (minor ? " minor" : " major") + " — " + "and it steps every " + P + " bars, one degree down and back, so it is home before the wrap.";
+      }
+    } else if (role === "lean" || role === "bind") {
+      if (role === "bind" && grammar === "static" && used.staticCh && used.staticCh.length) {
+        // a bind section also re-cuts the odds of one thinned channel, by a clear step, so the loop it is heard against is a different subset
+        const cc = used.staticCh[used.bindN = (used.bindN || 0) % used.staticCh.length], was = chanceNow[cc], to = +(was > 0.75 ? was - between(re, 12, 20) / 100 : was + between(re, 12, 20) / 100).toFixed(2);
+        used.bindN++;
+        if (!standing.chance.some(x => x.ch === cc)) standing.chance.push({ ch: cc, base: was, at: a });
+        chanceNow[cc] = to; push(a, ["chance", cc, to], role, "The " + ARR_CH[cc] + " is re-cut to about " + Math.round(to * 100) + " of every hundred (it was " + Math.round(was * 100) + "): a different subset of the same loop, and the room unchanged around it.");
+      }
+      const chs = [6, 6, 7, 3, 5].filter(has); if (chs.length) {
+        const ch = pick(re, chs), verb = pick(re, ["delay", "reverb", "reverb", "level"]), depth = between(re, 12, 34), taken = used.mods.map(m => m.bars);
+        let rate = pick(re, [5, 7, 11, 13]); for (let k = 0; k < 8 && taken.some(t => arrGcd(t, rate) !== 1); k++) rate = pick(re, [3, 5, 7, 11, 13]);
+        const shape = pick(re, ["tri", "tri", "tri", "ramp", "sh"]);
+        text = modText(ch, verb, rate, a); ev = ["mod", ch, verb, depth, rate, shape]; used.mods.push({ ch, verb, bars: rate });
+      }
+    } else if (role === "move") {
+      // sparse: exactly one voice in or out at every boundary; additive for the first third, then biased to strip when five or more are on
+      const on = [...onNow].filter(c => c !== 0 && c !== 5), off = [1, 2, 3, 4, 6, 7].filter(c => has(c) && !onNow.has(c));
+      const early = i <= Math.ceil(rows.length / 3), heavy = onNow.size >= 5, light = onNow.size <= 3;
+      let add = early ? true : heavy ? re() < 0.25 : light ? re() < 0.75 : re() < 0.5;
+      if (add && !off.length) add = false; if (!add && !on.length) add = true;
+      const pool = add ? off : on;
+      if (pool.length) {
+        const ch = pick(re, pool), ramp = Math.min(pick(re, [8, 16, 24]), Math.floor(lens[i] / 2));
+        if (add) { ev = ["enter", ch, ramp]; onNow.add(ch); text = "the " + ARR_CH[ch] + " arrives over " + ramp + " bars — the " + (onNow.size) + "th voice of " + [...opening].length + "." + becauseOnce("add") }
+        else { ev = ["leave", ch, ramp]; onNow.delete(ch); text = "the " + ARR_CH[ch] + " goes over " + ramp + " bars — " + onNow.size + " voices left." + becauseOnce("drop"); }
+      }
+    }
+    if (!ev) push(a, null, role, "nothing is dialled here — " + lens[i] + " bars of the floor as it stands.");
+    else push(a, ev, role, text.charAt(0).toUpperCase() + text.slice(1) + (role === "move" ? "" : becauseOnce(role)));
+    // THE MACHINE IS LET OFF THE LOOP, once per movement, in the section named for it: on the channel that already varies, about one bar in
+    // ten steps off the phrase grid. It is what keeps a voice-starved piece (three voices, no hats) from being one loop under a name;
+    // the close puts it back.
+    if (i === moveRow) {
+      // only a channel whose odds are under 1 shows the difference: at chance 1 every step fires whichever bar of the loop it is
+      const thinned = Object.keys(chanceNow).map(Number).filter(c => has(c) && chanceNow[c] < 1), pool = thinned.length ? thinned : [3, 6, 1, 2].filter(has), ch = pool.length ? pick(re, pool) : 0;
+      if (ch) { const m = pick(re, [0.08, 0.10, 0.12, 0.15]); moveNow[ch] = m; moveAt[ch] = a;
+        push(a, ["move", ch, m], role, "The " + ARR_CH[ch] + " steps off its loop about one bar in " + Math.round(1 / m) + " — the loop is a habit, not a rule.");
+      }
+    }
+  });
+  // ---- gestures: throws on the 8-bar grid, unevenly spaced, one inside the floor section --------------------------------------
+  const rgs = stream(5), gestures = [];
+  const throwCh = [2, 6, 6].filter(has);
+  if (throwCh.length) {
+    const n = between(rgs, 3, 6);
+    for (let g = 0; g < n; g++) {
+      const lo = g === 0 ? 2 : Math.floor(lens[0] / 8), hi = g === 0 ? Math.max(2, Math.floor(lens[0] / 8) - 1) : Math.floor(bars / 8) - 2;
+      const bar = 8 * between(rgs, lo, Math.max(lo, hi)), ch = pick(rgs, throwCh), w = range(rgs, 0.90, 0.96), len = pick(rgs, [1, 1, 2]);
+      gestures.push({ at: bar, what: ["throw", ch, w, len],
+        why: "the " + ARR_CH[ch] + " thrown into the echo for " + len + " bar" + (len === 1 ? "" : "s") + (g === 0 ? " — the first thing that happens, inside the floor, because the floor has no event and needs one flick of a hand in it." : ".") });
+    }
+    gestures.sort((x, y) => x.at - y.at);
+  }
+  return { grammar, phrase: 8, section: Math.max.apply(null, lens), bars, sections, gestures, lens, rows: rows.map((r, i) => ({ role: r[0], at: at[i], bars: lens[i] })), line: ARR_LINE[grammar] };
+}
 
 /* =========================================================================
    4b-ter. THE DRAW — `draw(seed)` turns the STYLE into one piece.
@@ -4329,6 +4578,8 @@ function draw(seed) {
   repair(piece);
   const left = quiz(piece, selected.contract);
   if (left.length) throw DrawError(seed, left);
+  // THE ARRANGEMENT, LAST: it reads who is sounding, the scale, the sends and the root, all of which are settled and checked by here
+  piece.movement = drawMovement(seed, piece);
   return piece;
 }
 
@@ -4750,6 +5001,7 @@ function rebuildDerived() {
   // becomes the table the scheduler, the fingerprint, the silence reasons and
   // the sheet all index, so the hand reaches every one of them at once.
   for (const ch of Object.keys(PIECE.drums)) DRUM_PAT[ch] = applyPins(ch, lanePat(PIECE.drums[ch]));
+  MOVEMENT = PIECE.movement || MOVEMENT_SHIPPED;      // #49: the arrangement is the piece's, and follows it
   MOD_SLOTS = modSlotsOf(PIECE, MOVEMENT);
   MOD_SLOT_KEYS = Object.keys(MOD_SLOTS);
 }
@@ -6165,7 +6417,7 @@ function createEngine(ctx, opts) {
     // is served under /dub/ and never under /, so this reads the QUERY and not
     // the path, and a path-shaped seed would resolve against the main site.
     seed: (opts.seed === undefined ? 0x11CE9E : opts.seed | 0),
-    movement: opts.movement || MOVEMENT,
+    movement: opts.movement || null,      // null = the movement of whichever piece is being played (#49)
     // THE RING IS OFF UNLESS SOMEBODY TURNS IT ON. Owner decision 2026-09-18.
     // With this false the arrangement holds still and [M]'s modulators keep
     // breathing; nothing in the page moves a value the hand did not move.
@@ -7439,7 +7691,7 @@ function createEngine(ctx, opts) {
   let gen = 0;
   function compositionFor(bar) {
     if (compBar !== bar || compGen !== gen) {
-      comp = compositionAt(cfg.seed, PIECE, cfg.movement, bar,
+      comp = compositionAt(cfg.seed, PIECE, cfg.movement || PIECE.movement || MOVEMENT_SHIPPED, bar,
                            { auto: cfg.auto, holds: cfg.holds, fires: cfg.fires,
                              keyRoot: cfg.keyRoot, keyScale: cfg.keyScale });
       compBar = bar; compGen = gen;
@@ -8182,6 +8434,13 @@ function releaseFires() {
    and exempt — they settle in seconds, which is why the determinism proof
    allows a warm-up and then demands sample identity. --- */
 let seekSync = null;   // the surface's fader repaint, set when the bank is built; the paint loop calls it so the span follows the track
+// which section a bar is in, and how many there are: sections are the DISTINCT `at`s of the movement, not a fixed 32 bars each
+function movementSection(bar) {
+  const ats = [];
+  for (const s of MOVEMENT.sections) if (ats.indexOf(s.at) === -1) ats.push(s.at);
+  let n = 0; for (let i = 0; i < ats.length; i++) if (ats[i] <= bar) n = i;
+  return { n: n + 1, of: ats.length };
+}
 function seekSpan() { return Math.max(1, Math.min(MOVEMENT.bars, (DJ.on && DJ.cur) ? DJ.cur.bars : MOVEMENT.bars)); }
 function seek(bar) {
   bar = Math.max(0, Math.floor(bar));
@@ -8190,7 +8449,7 @@ function seek(bar) {
   uiQueue.length = 0;
   if (ctx && T.running) T.nextT = ctx.currentTime + 0.1;
   if (engine) engine.recompose();
-  say(`seek to bar ${bar + 1} — section ${Math.floor(bar / MOVEMENT.section) + 1} of ${Math.ceil(MOVEMENT.bars / MOVEMENT.section)}.`);
+  say(`seek to bar ${bar + 1} — section ${movementSection(bar).n} of ${movementSection(bar).of}.`);
   return bar;
 }
 
@@ -8360,6 +8619,7 @@ function rebuild(before) {
   // bar's.
   if (surfaceBuilt) {
     buildBarSheet();
+    buildSections();            // the schedule table is the piece's own movement (#49)
     lastHeadStep = -1;
     paintBarSheet(previewBar(), shownComposition());
     rebuildModRows(); outputs();
@@ -9862,7 +10122,7 @@ function paintHeader(C) {
   const n = hand.count();
   ui("releaseall").disabled = n === 0 && fireCount() === 0;
   ui("movenow").textContent =
-    (C.auto ? `auto ON · section ${Math.floor(bar / MOVEMENT.section) + 1} of ${Math.ceil(MOVEMENT.bars / MOVEMENT.section)}`
+    (C.auto ? `auto ON · ${MOVEMENT.grammar || "shipped"} · section ${movementSection(bar).n} of ${movementSection(bar).of}`
             : "auto OFF · the schedule is not running · the arrangement is yours")
     + ` · bar ${bar + 1}`
     + ` · walk ${C.walk >= 0 ? "+" : ""}${C.walk} ${Math.abs(C.walk) === 1 ? "degree" : "degrees"}`
@@ -9881,8 +10141,8 @@ function paintHeader(C) {
   // about the schedule from outside it and not a sentence. Whether the ring is
   // running is field 2 and is printed beside this one, so it is not repeated.
   ui("schedsum").textContent = live === -1
-    ? `${nEv} events over ${MOVEMENT.bars} bars · none has run`
-    : `section ${Math.floor(bar / MOVEMENT.section) + 1} of ${Math.ceil(MOVEMENT.bars / MOVEMENT.section)} · last ${eventText(MOVEMENT.sections[live].event)} at bar ${MOVEMENT.sections[live].at + 1}`;
+    ? `${MOVEMENT.grammar || "shipped"} · ${nEv} events over ${MOVEMENT.bars} bars · none has run`
+    : `${MOVEMENT.grammar || "shipped"} · section ${movementSection(bar).n} of ${movementSection(bar).of} · last ${eventText(MOVEMENT.sections[live].event)} at bar ${MOVEMENT.sections[live].at + 1}`;
   MOVEMENT.sections.forEach((x, i) => {
     const tr = ui("sec" + i); if (!tr) return;
     tr.style.color = i === live ? "var(--hot)" : "";
@@ -10814,7 +11074,7 @@ function deckBuild(seed, label) {
   usePiece(piece);
   let eng;
   try {
-    eng = createEngine(ctx, { seed: seed, movement: MOVEMENT, auto: false,
+    eng = createEngine(ctx, { seed: seed, auto: false,
                               keyRoot: KEY_HAND.root, keyScale: KEY_HAND.scale,
                               transpose: PITCH_HAND.transpose, semi: PITCH_HAND.semi,
                               // the hand's own objects, by reference, as deck A's engine has them:
@@ -11336,7 +11596,7 @@ async function start() {
     ctx = new (window.AudioContext || window.webkitAudioContext)();
     // The held values are section 4c's object, handed over rather than copied:
     // anything set before this gesture is already waiting in it.
-    engine = createEngine(ctx, { seed: SEED, movement: MOVEMENT, auto: autoOn,
+    engine = createEngine(ctx, { seed: SEED, auto: autoOn,
                                 transpose: PITCH_HAND.transpose, semi: PITCH_HAND.semi,
                                 keyRoot: KEY_HAND.root, keyScale: KEY_HAND.scale,
                                 holds: HOLDS, fires: FIRES,
@@ -12180,7 +12440,7 @@ window.p02 = {
     grammar:p.grammar, energy:p.energy.slice(), why:p.why,
     must:p.must.slice(), avoid:p.avoid.slice()})),
   profileForSeed: seed => profileForSeed(seed).def.id,
-  PIECE, INPUT_GAIN, MASTER_TRIM, BED_LEVEL, MOVEMENT, MOD_RATE_BARS, MOD_RATES, HOLD_PARAMS,
+  PIECE, INPUT_GAIN, MASTER_TRIM, BED_LEVEL, MOVEMENT, movement: () => MOVEMENT, drawMovement, MOD_RATE_BARS, MOD_RATES, HOLD_PARAMS,
   FIRE_MACROS, FIRE_MICROS,
   VOX, VOX_STYLE,
   // the voice table itself, so a measurement can sweep every control to its own
