@@ -566,13 +566,7 @@
   .tone-control .unit .strip .v { z-index: 1; inset: 0; display: grid; place-items: center;
                                   transform: none; font-size: 9px; text-align: center; }
   .tone-control .unit .why { display: none; }
-  #d_voices, #d_movers { display: none; }
-  /* the station's material rails are the RIDE bank's models now: their inputs stay in the page, out of sight */
-  #chanbox .g-rides { display: none; }
-  /* the station is covered whole (MIX, LANE, SPACE, VOICE, RIDE, RECIPE): its inputs, buttons and readouts are those banks' models and stay in the page, out of sight */
-  #chanbox { display: none; }
-  /* covered by the console (KEY, SPACE, VOICE, MOVE): their inputs are those banks' models and stay in the page, out of sight */
-  #tonight ~ #bench #pitch, #tonight ~ #bench #d_room, #tonight ~ #bench #d_set, #tonight ~ #bench #decks, #tonight ~ #bench #schedule { display: none; }
+  #models { display: none; }
   .space-control { min-height: 74px; }
   .spacepad { position: relative; width: 100%; max-width: 58px; height: 58px; margin: 0 auto;
               border: 1px solid var(--line); touch-action: none; cursor: crosshair;
@@ -645,7 +639,7 @@
      owner's pick of 2026-09-25: the energy arc of the whole night is the hero, the
      decks and their lanes are small underneath. It has its OWN palette on purpose:
      verdigris is deck A, brass is deck B, bone is the arc, and nothing here uses
-     the oxide/lacquer hues of the bench below it (--hot is the hand's and --time
+     the oxide/lacquer hues of the console below it (--hot is the hand's and --time
      is time's, and this view is neither). --------------------------------------- */
   #tonight { --tn-bg:#101820; --tn-panel:#17232c; --tn-ink:#e9e4d4; --tn-dim:#9fb0b4; --tn-a:#5fb7a8; --tn-b:#e6b450; --tn-grid:#22303a;
     background:var(--tn-bg); color:var(--tn-ink); border-radius:22px; padding:30px 34px 26px; margin:18px 0 22px;
@@ -781,9 +775,6 @@
   @media (max-width: 760px) { #tonight { padding:22px 18px; } #tonight h2 { font-size:34px; } #tonight .tn-decks { grid-template-columns:1fr; } #tonight .tn-ctl { grid-template-columns:1fr; }
     #tonight .tn-head { flex-direction:column; } #tonight .tn-lanes button { font-size:11px; padding:6px; } }
   @media (prefers-reduced-motion: reduce) { #tonight .tn-now { transition:none; } }
-  #bench { margin-top:26px; }
-  #bench .bench-h { font:600 17px 'Bricolage Grotesque', system-ui, sans-serif; color:var(--dim); margin:0 0 14px; padding:14px 2px 0; border-top:1px solid var(--dim); }
-  #bench .bench-h span { font-weight:400; font-size:14px; margin-left:10px; }
 </style>
 </head>
 <body>
@@ -866,11 +857,10 @@
     </div>
   </section>
 
-  <!-- NO BENCH FOLDED UNDER THE PAGE (owner, 2026-09-25). What the console does not cover yet stays VISIBLE, in place,
-       until sprint 24 gives it a bank: KEY (pitch), the bar and seek, the station's pins /
-       sheet, the drawers (voices, movers, set, schedule, decks). The FIRE section is fully covered by the FIRE bank; its buttons
-       are that bank's model and stay in the page, out of sight. -->
-  <div id="bench"><h2 class="bench-h">the rest of the desk <span>not yet in the console</span></h2>
+  <!-- THERE IS NO BENCH (owner, 2026-09-25). Every control is a widget on the console; these sections are what the widgets sit ON:
+       the inputs, selects and buttons the console's banks read and write by id, and the readouts paint() writes into. They are
+       models, not a page, so they are hidden as one. Nothing here is a second copy to keep in step. -->
+  <div id="models" hidden>
   <section id="pitch" aria-label="global pitch controls">
     <div class="pane-head"><b>PITCH</b>
       <span class="pane-note">key for the whole instrument · lands on the next bar</span></div>
@@ -11459,7 +11449,7 @@ function kitShow(key) {
 
 
 // THE MIX BANK: one column per strip — lane fader, M and S, echo send, room send. Every face sits on the input
-// the bench's strip sat on (fad<ch>, hs_delay_<ch>, hs_reverb_<ch>) and mute and solo go through the same two functions,
+// the old station's strip sat on (fad<ch>, hs_delay_<ch>, hs_reverb_<ch>) and mute and solo go through the same two functions,
 // so nothing the harnesses hang on those ids moves. A send's reset RELEASES the hold (back under the schedule);
 // it is not a number. Built after buildChannels(): the inputs it sits on have to exist.
 function buildMixBank() {
@@ -11519,7 +11509,7 @@ function buildSpaceBank() {
   ]);
 }
 
-// THE FIRE BANK: the bench's fire buttons and length selects are the model. A press asks; the gesture STARTS ON THE NEXT
+// THE FIRE BANK: the hidden models' fire buttons and length selects are the model. A press asks; the gesture STARTS ON THE NEXT
 // BAR LINE (promoteFires runs at step % 16 === 0), so a waiting button counts down to it — the fill is how far through the
 // bar the transport is. FIRES is one object shared by every engine, so a fire reaches both decks of a blend.
 const FIRE_KEYS = { drop: "q", buildup: "w", phaseout: "e", reverbout: "r", "ghost-hat": "a", "hats-out": "s", "bass-octave": "d", "stab-lean": "g", turnaround: "h", "kick-ghost": "j" };
