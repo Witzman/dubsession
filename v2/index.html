@@ -570,7 +570,7 @@
   /* the station's material rails are the RIDE bank's models now: their inputs stay in the page, out of sight */
   #chanbox .g-rides { display: none; }
   /* covered by the console (KEY, SPACE, VOICE, MOVE): their inputs are those banks' models and stay in the page, out of sight */
-  #tonight ~ #bench #pitch, #tonight ~ #bench #d_room, #tonight ~ #bench #d_set, #tonight ~ #bench #decks { display: none; }
+  #tonight ~ #bench #pitch, #tonight ~ #bench #d_room, #tonight ~ #bench #d_set, #tonight ~ #bench #decks, #tonight ~ #bench #schedule { display: none; }
   .space-control { min-height: 74px; }
   .spacepad { position: relative; width: 100%; max-width: 58px; height: 58px; margin: 0 auto;
               border: 1px solid var(--line); touch-action: none; cursor: crosshair;
@@ -11664,6 +11664,26 @@ function buildDeckBank() {
   kitBank("deck", "DECK", [grp("HAND", [auto.el, mute.el, rel.el]), grp("CROSSFADE", [xf.el, load.el, unload.el])], panel => panel.appendChild(hand));
 }
 
+// THE SCHEDULE BANK: where the night is in the arrangement — the seek (an unplaced bar to go to, then GO), the line that says which
+// bar and section is playing, and the table of the schedule's events, MOVED here with its id (the live section is coloured by
+// paintHeader, which finds the rows by id). The seek input and its button stay in the page, out of sight, as the models.
+function buildScheduleBank() {
+  const seek = kitFader({ id: "seek", horizontal: true, label: "seek", tone: "arc", step: 1, def: () => 0,
+    fmt: v => (Math.round(v) + 1) + " / " + MOVEMENT.bars, title: "the bar to go to; nothing moves until GO" });
+  const go = kitButton({ kind: "fired", label: "GO", tone: "arc", fire: () => ui("seekgo").click(),
+    title: "jump the transport to the seek bar; the composition is that bar's, with no history" });
+  const g = kitEl("div", "kx-group"); g.append(kitEl("div", "kx-gname", "SEEK"));
+  const row = kitEl("div", "kx-grow kx-wrap"); row.append(seek.el, go.el); g.append(row);
+  kitBank("schedule", "SCHEDULE", [g], panel => {
+    const line = kitEl("div", "kx-line"); line.setAttribute("aria-live", "polite"); panel.appendChild(line);
+    KIT.list.push({ id: "schedstate", el: line, draw() {
+      const t = (T.running ? "playing bar " + (Math.floor(T.step / 16) + 1) : "stopped") + " \u00b7 " + ui("schedsum").textContent;
+      if (line.textContent !== t) line.textContent = t;
+    } });
+    panel.appendChild(ui("sections"));
+  });
+}
+
 // THE HOLD BANK: gestures that last as long as the hand does. ECHO THROW opens one lane's echo send (to THROW_LEVEL) while held;
 // FREEZE latches the echo's loop so its tail sustains itself; the ISOLATOR kills a band of a deck (low under 250 Hz, mid,
 // high over 2.5 kHz) while held. Release gives each back. Every one is on a key, shown on the pad.
@@ -12108,6 +12128,7 @@ buildDeckBank();
 buildRides();
 wireRides();
 buildRideBank();
+buildScheduleBank();
 buildSections();
 buildSteps();
 buildVoices();
