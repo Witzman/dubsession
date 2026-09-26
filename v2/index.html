@@ -7032,7 +7032,10 @@ function createEngine(ctx, opts) {
       // NOTHING SOUNDS BEFORE A GESTURE. This runs inside createEngine, which
       // the live page only calls from the start button's handler; offline it
       // runs at time 0 of a render that has no output device.
-      src.start(ctx.currentTime, offset);
+      // THE BED PLAYS FROM THE PIECE'S CLOCK, NOT THE RENDER'S (#25): a render that starts at bar 32 (`bedAt`, seconds) has to be
+      // where a render from bar 0 is at bar 32, or a seek lands on another stretch of the record and no run-up can fix it.
+      const pos = (((offset + (opts.bedAt || 0) * speed) % A.bedBuf.duration) + A.bedBuf.duration) % A.bedBuf.duration;
+      src.start(ctx.currentTime, pos);
     }
     second.connect(bedSatIn);
     bedSatIn.connect(A.bedSat); A.bedSat.connect(A.bedHp); A.bedHp.connect(A.bedLp);
@@ -12275,7 +12278,8 @@ async function renderOffline_(o, drawSeed) {
     // the floor is a construction-time trim as well as a live one, so a render
     // can ask for the piece with it and without it at identical settings
     bedTrim: o.bedTrim,
-    pieceTrim: o.pieceTrim
+    pieceTrim: o.pieceTrim,
+    bedAt: startBar * 16 * stepDur - 0.05   // the schedule below puts the first step 50 ms in
   });
   eng.cfg.bpm = bpm;
   if (o.set) for (const k of Object.keys(o.set)) eng.set(k, o.set[k]);
