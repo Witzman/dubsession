@@ -569,6 +569,8 @@
   #d_voices, #d_movers { display: none; }
   /* the station's material rails are the RIDE bank's models now: their inputs stay in the page, out of sight */
   #chanbox .g-rides { display: none; }
+  /* the station is covered whole (MIX, LANE, SPACE, VOICE, RIDE, RECIPE): its inputs, buttons and readouts are those banks' models and stay in the page, out of sight */
+  #chanbox { display: none; }
   /* covered by the console (KEY, SPACE, VOICE, MOVE): their inputs are those banks' models and stay in the page, out of sight */
   #tonight ~ #bench #pitch, #tonight ~ #bench #d_room, #tonight ~ #bench #d_set, #tonight ~ #bench #decks, #tonight ~ #bench #schedule { display: none; }
   .space-control { min-height: 74px; }
@@ -860,7 +862,7 @@
   </section>
 
   <!-- NO BENCH FOLDED UNDER THE PAGE (owner, 2026-09-25). What the console does not cover yet stays VISIBLE, in place,
-       until sprint 24 gives it a bank: KEY (pitch), the bar and seek, the station's density / tone / space pad / pins /
+       until sprint 24 gives it a bank: KEY (pitch), the bar and seek, the station's pins /
        sheet, the drawers (voices, movers, set, schedule, decks). The FIRE section is fully covered by the FIRE bank; its buttons
        are that bank's model and stay in the page, out of sight. -->
   <div id="bench"><h2 class="bench-h">the rest of the desk <span>not yet in the console</span></h2>
@@ -11446,7 +11448,8 @@ function buildMixBank() {
     col.append(name, ...ws.map(w => w.el));
     cols.push(col);
   }
-  kitBank("mix", "MIX", cols);
+  kitBank("mix", "MIX", cols, panel => panel.appendChild(kitButton({ kind: "fired", label: "faders back", tone: "rel", fire: () => ui("reset").click(),
+    title: "every lane fader back to the level the manifest drew" }).el));
 }
 
 // THE SPACE BANK: echo, room, pump and the noise floor, over the drawer's inputs (dlydiv, fbk, dlytrim, revsize, revtrim,
@@ -11682,6 +11685,32 @@ function buildScheduleBank() {
     } });
     panel.appendChild(ui("sections"));
   });
+}
+
+// THE RECIPE BANK: which voice a lane plays — kick voice, rim waveform, sub waveform, stab voice — over requestVoiceRecipe(), the
+// door the station's selects use. A recipe lands on the next bar (a sounding note rings out), and until it does the state line
+// says "now X -> next bar Y". A lane with one recipe has nothing to choose and is not drawn. Double-click returns the drawn one.
+function buildRecipeBank() {
+  const groups = [];
+  for (const ch of Object.keys(VOICE_RECIPE_OPTIONS)) {
+    const def = VOICE_RECIPE_OPTIONS[ch];
+    if (def.options.length <= 1) continue;
+    const drawn = () => { const o = def.options.find(o => Object.keys(o.values).every(k => PIECE.vox[k] === o.values[k])); return o ? o.id : def.options[0].id; };
+    const shown = () => { const pend = VOICE_RECIPE_STATE.pending[ch], live = voiceRecipeReadback(ch); return pend ? pend.id : (live ? live.id : drawn()); };
+    const gone = () => !!PIECE.empty[ch];
+    const st = kitStepped({ label: def.label, tone: "arc", options: def.options.map(o => ({ v: o.id, label: o.label })),
+      get: shown, set: v => requestVoiceRecipe(Number(ch), v), def: drawn, off: gone, dead: () => (gone() ? "no material on this lane" : chReach(Number(ch))),
+      held: () => !gone() && shown() !== drawn(), title: def.label + " \u2014 lands on the next bar; double-click returns the drawn one" });
+    const g = kitEl("div", "kx-group"); g.append(kitEl("div", "kx-gname", voiceName(Number(ch))));
+    const row = kitEl("div", "kx-grow"); row.append(st.el); g.append(row);
+    const line = kitEl("div", "kx-line"); line.setAttribute("aria-live", "polite"); g.append(line);
+    KIT.list.push({ id: "recipestate_" + ch, el: line, draw() {
+      const t = ui("recipe_state_" + ch) ? ui("recipe_state_" + ch).textContent : "";
+      if (line.textContent !== t) line.textContent = t;
+    } });
+    groups.push(g);
+  }
+  kitBank("recipe", "RECIPE", groups);
 }
 
 // THE HOLD BANK: gestures that last as long as the hand does. ECHO THROW opens one lane's echo send (to THROW_LEVEL) while held;
@@ -12129,6 +12158,7 @@ buildRides();
 wireRides();
 buildRideBank();
 buildScheduleBank();
+buildRecipeBank();
 buildSections();
 buildSteps();
 buildVoices();
