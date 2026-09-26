@@ -92,7 +92,7 @@ const exported = [
   // write against; `RESERVED` is the coordinates that are allocated and not
   // yet spent.
   'STYLE', 'CONTRACT', 'D', 'RESERVED', 'PATHS', 'DEFAULT_SEED',
-  'draw', 'repair', 'quiz', 'fieldAt', 'drawSet', 'clone', 'rebuildDerived',
+  'draw', 'repair', 'quiz', 'drawSet', 'clone', 'rebuildDerived',
   // #47 — the drawn rhythm and the drawn melody. `usePiece` is the ONE door
   // that rebinds the module's `PIECE` and rebuilds everything derived from it;
   // a test that set `PIECE` some other way would be testing a piece the
@@ -1015,7 +1015,7 @@ const trackAxes = p => [
   JSON.stringify([p.globals.root, p.globals.scale, p.stab.voicing, p.stab.degrees,
     p.bass.model, p.bass.law, p.bass.octave]),
   JSON.stringify([p.frame.grammar, p.frame.phrase, p.frame.section, p.frame.bars]),
-  JSON.stringify([p.engines, p.voices, p.vox])
+  JSON.stringify([p.voices, p.vox])
 ];
 const byGrammar = new Map();
 let neighborTotal = 0, neighborBelowTwo = 0, neighborCount = 0;
