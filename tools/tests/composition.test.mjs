@@ -120,6 +120,7 @@ const exported = [
   'PROFILE_DEFS', 'profileForSeed',
   ...(region.includes('const PROFILE_GRAPH') ? ['PROFILE_GRAPH'] : []),
   // #19 — the energy macro (v2 only): a hand level over the tops, 0 is the identity.
+  ...(region.includes('function walkClear') ? ['walkClear', 'triadConsonant', 'SCALE_STEPS'] : []),
   ...(region.includes('function energyAt') ? ['ENERGY_NOTCHES', 'ENERGY_RAMP', 'ENERGY_CHAN', 'energyAt', 'energyChance', 'energySend'] : []),
 ];
 const L = new Function(`${region}\n; return { ${exported.join(', ')} };`)();
@@ -1837,6 +1838,24 @@ if (typeof L.energyAt === 'function') {
   const lockedBase = L.compositionAt(SEED, P, M, 4, { mutate: false, auto: true, fires: { events: [] } });
   const lk = L.ALL_CHANNELS.filter(c => lockedBase.move[c] === L.LOCK);
   ok(lk.length > 0 && lk.every(c => locked.chance[c] === lockedBase.chance[c] && locked.wet[c].delay === lockedBase.wet[c].delay), 'a channel at LOCK is exempt', 'locked: ' + lk.join(','));
+}
+
+if (typeof L.walkClear === 'function') {
+  group('the walk never lands the harmony on a diminished triad, in any scale a piece can draw');
+  const scales = [0, 2, 3, 4, 5];
+  const bad = [];
+  for (const sc of scales) for (const pos of [-3, -2, -1, 0, 1, 2, 3]) {
+    const w = L.walkClear(sc, pos);
+    if (L.SCALE_STEPS[sc].length === 7 && w !== 0 && !L.triadConsonant(L.SCALE_STEPS[sc], w)) bad.push(sc + '@' + pos + '->' + w);
+    if (Math.abs(w) > Math.abs(pos) || (w !== 0 && Math.sign(w) !== Math.sign(pos))) bad.push('moved away ' + sc + '@' + pos + '->' + w);
+  }
+  ok(bad.length === 0, 'every cleared walk is a major or minor triad and never further from home', bad.slice(0, 4).join(' '));
+  ok(L.walkClear(0, -1) === -1 && L.walkClear(2, -1) === -1 && L.walkClear(3, -1) === -1, 'natural minor, dorian and phrygian keep the flat VII walk untouched');
+  ok(L.walkClear(4, -1) === 0 && L.walkClear(4, 1) === 0, 'harmonic minor stays home instead of a diminished triad');
+  for (const sc of scales) {
+    const C = L.compositionAt(SEED, P, M, 130, { mutate: false, auto: true, keyScale: sc });
+    ok(L.SCALE_STEPS[sc].length !== 7 || C.walk === 0 || L.triadConsonant(L.SCALE_STEPS[sc], C.walk), `the composition's own walk at bar 130 is consonant in scale ${sc}`, 'walk ' + C.walk);
+  }
 }
 
 console.log(`\n${checks - failures}/${checks} checks passed`);
