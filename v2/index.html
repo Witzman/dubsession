@@ -567,6 +567,8 @@
                                   transform: none; font-size: 9px; text-align: center; }
   .tone-control .unit .why { display: none; }
   #d_voices, #d_movers { display: none; }
+  /* the station's material rails are the RIDE bank's models now: their inputs stay in the page, out of sight */
+  #chanbox .g-rides { display: none; }
   /* covered by the console (KEY, SPACE, VOICE, MOVE): their inputs are those banks' models and stay in the page, out of sight */
   #tonight ~ #bench #pitch, #tonight ~ #bench #d_room, #tonight ~ #bench #d_set, #tonight ~ #bench #decks { display: none; }
   .space-control { min-height: 74px; }
@@ -858,7 +860,7 @@
   </section>
 
   <!-- NO BENCH FOLDED UNDER THE PAGE (owner, 2026-09-25). What the console does not cover yet stays VISIBLE, in place,
-       until sprint 24 gives it a bank: KEY (pitch), the bar and seek, the station's density / tone / space pad / rides / pins /
+       until sprint 24 gives it a bank: KEY (pitch), the bar and seek, the station's density / tone / space pad / pins /
        sheet, the drawers (voices, movers, set, schedule, decks). The FIRE section is fully covered by the FIRE bank; its buttons
        are that bank's model and stay in the page, out of sight. -->
   <div id="bench"><h2 class="bench-h">the rest of the desk <span>not yet in the console</span></h2>
