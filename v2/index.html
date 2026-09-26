@@ -2156,11 +2156,6 @@ const STYLE = {
   // `VOICE_PARAMS[k].def`. #48 wires them and widens them together, so that
   // the first commit in which a voice trim is drawn is also the first in which
   // it is heard, rather than one silent commit and one loud one.
-  // #48's two alternative voices. A pool of NAMES; the renderer switches on it.
-  engines: {
-    kick: { pool:["909"], d:D.VOX, f:38 },                   // PINNED. §3: 909×3 + hum
-    stab: { pool:["dubstab"], d:D.VOX, f:39 }                // PINNED. §3: dubstab×3 + rhodes
-  },
 
   /* --- THE LEVELS. FIXED, AND NOT UP FOR DISCUSSION. ------------------- */
   // [M] "THE EIGHT CHANNEL FADERS ARE 019'S, moved only where a channel
@@ -3786,7 +3781,6 @@ function flattenStyle(node, prefix, out) {
   return out;
 }
 const PATHS = flattenStyle(STYLE, "", []);
-const fieldAt = path => path.split(".").reduce((o, k) => o[k], STYLE);
 
 function DrawError(seed, left) {
   const e = new Error("seed " + seed + " could not be repaired into a dub techno piece ("
@@ -4034,7 +4028,7 @@ function draw(seed) {
     },
     frame: frame,
     drums: {}, chords: {}, empty: {}, wets: {}, levels: {}, mods: [],
-    engines: {}, budget: {},
+    budget: {},
     violations: [],
     drawn: drawn,
     profile: { id:selected.def.id, name:selected.def.name, genre:selected.def.genre,
@@ -4192,9 +4186,7 @@ function draw(seed) {
   for (const ch of [1, 2, 3]) if (piece.drums[ch].hits <= 0 && !piece.empty[ch])
     piece.empty[ch] = "no material — the draw gave this lane no hits";
 
-  /* --- 8. THE ENGINES --------------------------------------------------- */
-  piece.engines.kick = pull(style.engines.kick, "engines.kick");
-  piece.engines.stab = pull(style.engines.stab, "engines.stab");
+  /* --- 8. THE ENGINES: drawn as `vox.kickEngine` / `vox.stabEngine`, the only copy (#73) --- */
 
   /* --- 9. THE SPACE ----------------------------------------------------- */
   for (const ch of Object.keys(style.wets)) piece.wets[ch] = {
@@ -7920,7 +7912,7 @@ function morphDiscrete(path, a, b) {
   if (Array.isArray(a) || Array.isArray(b)) return true;
   if (typeof a !== "number" || typeof b !== "number") return true;
   const p = path.replace(/\s+/g, "");
-  return /^(piece\.)?(globals\.(root|scale|dlytime|revSeconds)|frame\.(grammar|phrase|section|bars)|drums\..+\.(hits|rotate|len)|stab\.(voicing|base)|bass\.(model|law|octave)|pad\.(voicing|base)|lead\.(cycle|base|onsets)|budget\.voices|chords\.|empty\.|engines\.)/.test(p);
+  return /^(piece\.)?(globals\.(root|scale|dlytime|revSeconds)|frame\.(grammar|phrase|section|bars)|drums\..+\.(hits|rotate|len)|stab\.(voicing|base)|bass\.(model|law|octave)|pad\.(voicing|base)|lead\.(cycle|base|onsets)|budget\.voices|chords\.|empty\.)/.test(p);
 }
 function morphValue(a, b, x, key, path) {
   if (key === "seed" || key === "file" || key === "profile" || key === "contract"
