@@ -8584,9 +8584,11 @@ const CHANNELS = [
         + "the space between them. The fader shapes its character under a hard "
         + "ceiling rather than lifting it. THE MANIFEST HAS NO OPINION ABOUT "
         + "THIS ONE: the parent's round has no rumble at all, so it starts at "
-        + "the reference's own 0.70. IT LIVES UNDER THE SUB — measured, 2 to 3 dB "
-        + "under it inside 30-120 Hz, where at the reference's own ceiling it was "
-        + "9.4 dB under and inaudible. The two "
+        + "the reference's own 0.70. RE-MEASURED 2026-09-26 through the corrected band "
+        + "filter (#85; the old one was +1.4 dB at its edges): rumble minus sub inside "
+        + "30-120 Hz, default faders, seeds 0-7, runs -3.1 to +5.9 dB, so it does NOT "
+        + "reliably live under the sub — the earlier \"2 to 3 dB under\" has no recorded "
+        + "conditions and is withdrawn; whether the spread is right is the owner's ear (#22). The two "
         + "share one band and one job, so if you want more wash, take it off "
         + "the sub on the fader above rather than looking for more here." }
 ];
@@ -11842,11 +11844,13 @@ async function renderOffline_(o, drawSeed) {
   // masked?" gets an answer instead of an argument.
   if (o.band) {
     let node = eng.tail;
+    // a lowpass / highpass Q is in dB: -3.01 dB is Butterworth, 0.7071 was +0.71 dB of resonance (#85)
+    const BQ = 20 * Math.log10(Math.SQRT1_2);
     for (let i = 0; i < 2; i++) {
       const hp = off.createBiquadFilter(); hp.type = "highpass";
-      hp.frequency.value = o.band[0]; hp.Q.value = 0.7071;
+      hp.frequency.value = o.band[0]; hp.Q.value = BQ;
       const lp = off.createBiquadFilter(); lp.type = "lowpass";
-      lp.frequency.value = o.band[1]; lp.Q.value = 0.7071;
+      lp.frequency.value = o.band[1]; lp.Q.value = BQ;
       node.connect(hp); hp.connect(lp); node = lp;
     }
     node.connect(off.destination);
