@@ -1049,18 +1049,6 @@
             <div class="why" id="w_stabcut"></div>
           </div>
 
-          <!-- THE FLOOR. One control, and it is a trim on a level that was
-               measured rather than a level of its own — the number it
-               multiplies is BED_LEVEL and the reasoning is beside it in the
-               source. At 0 the readout says `off`, because a channel that
-               produces nothing has to say so. -->
-          <div class="unit" id="u_bed">
-            <div class="t">noise floor</div>
-            <label class="strip"><input id="bed" type="range" min="0" max="2" step="0.01" value="1" aria-label="noise floor"
-              title="Tape air, dust ticks breathing once per revolution (0.55 Hz = 33 rpm) and a few pops, band-limited 140 Hz to 9 kHz and injected after the reverb and the delay so the deck saturator and the finisher act on it the way they act on the room. It never ducks with the kick and it never moves on its own: a floor you can hear arrive is not a floor."><span class="fill"></span><output id="bed_v" class="v"></output></label>
-            <div class="why" id="w_bed"></div>
-          </div>
-
           <!-- THE MASTER OVER EVERY MODULATOR. `send modulation` named two of
                the four verbs and was false: this also scales channel 3's
                LEVEL modulator, measured — x0 to x1 moves that channel's
@@ -2131,7 +2119,7 @@ const STYLE = {
     dlyFbk:  { range:[42,42], d:D.SPACE, f:16 },             // percent, /100 at the engine
     rumble:  { range:[0.70,0.70], d:D.SPACE, f:17 },         // [E] :1015 — their fader ships at 70
     pump:    { range:[0,0], d:D.SPACE, f:18 },               // measured, not assumed; see the control
-    bedTrim: { range:[1,1], d:D.SPACE, f:19 }                // 1 is BED_LEVEL as measured
+    bedTrim: { pool:[0,0,1,1,1], d:D.SPACE, f:19 }            // #95: drawn per track, 2 in 5 have none. 1 is BED_LEVEL as measured
   },
 
   /* --- THE MODULATORS. THIS SPEC OWNS THIS BLOCK. ---------------------- */
@@ -2221,7 +2209,7 @@ const CONTRACT = {
     "the chord on the offbeat — never sharing the downbeat with the kick",
     "the bass answering the chord rather than doubling it",
     "the send as the arrangement: two modulators at least, on coprime bar counts",
-    "a noise floor under it — a patch with none sounds like a demo of an oscillator",
+    "a noise floor under it, or the declared absence of one — drawn per track, never a control",
     "percussion as punctuation: one hit, not a pattern"
   ],
   avoid: [
@@ -2249,7 +2237,7 @@ const CONTRACT = {
     // channel 6 and on channel 7 and nowhere else. `cutoffMod[5]` is written
     // and read by nobody — a control that does nothing, which rule G2 refuses.
     cutoffChannels:[6, 7],
-    bedTrimMin:    0.2,
+    bedTrimMin:    0,                             // a floor is a draw (owner 2026-10-02): a track has it or it does not
     budgetMin:     4
   }
 };
@@ -10614,8 +10602,6 @@ const ROOM_UNITS = [
     // `cfg.stabCut` is read in two places and both of them are channel 6
     dead: () => chReach(6),
     note: () => "how far open the stab's filter starts" },
-  { id: "bed", unit: "u_bed", short: "noise floor", base: () => 1, dead: () => "",
-    note: () => "tape air — it never ducks with the kick and it never moves on its own" },
   { id: "moddepth", unit: "u_moddepth", short: "all modulation", base: () => 1,
     dead: C => (C && C.mods.length) ? "" : "nothing is bound at this bar — there is no swing to scale",
     note: () => "a master on how far every modulator swings — never on the value it swings around" }
@@ -10819,9 +10805,6 @@ function outputs() {
     ["fbk", v => v.toFixed(2)], ["dlytrim", v => "×" + v.toFixed(2)],
     ["revsize", v => v.toFixed(1) + " s"], ["revtrim", v => "×" + v.toFixed(2)],
     ["moddepth", v => "×" + v.toFixed(2)], ["stabcut", v => "×" + v.toFixed(2)],
-    // SILENCE EXPLAINS ITSELF, including a floor's. `×0.00` is a number that
-    // could be a rounding; `off` is not.
-    ["bed", v => v === 0 ? "off" : "×" + v.toFixed(2)],
     ["transpose", v => (v > 0 ? "+" : "") + v + " deg"],
     ["semi", v => (v > 0 ? "+" : "") + v + " st"]
   ];
@@ -10897,7 +10880,6 @@ function wire() {
   bind("revtrim", "revTrim", null, true);
   bind("moddepth", "modDepth", null, true);
   bind("stabcut", "stabCut", null, true);
-  bind("bed", "bedTrim", null, true);
   // THE VOICE TRIMS, THROUGH THE SAME ONE DOOR. The row's id and the engine's
   // key come from the same entry, so there is nothing here to keep in step.
   for (const k of VOICE_KEYS) bind(VOICE_PARAMS[k].id, k, null, true);
@@ -11185,7 +11167,6 @@ function replayHandOnly(eng) {
   if (MIX.solo !== null) eng.set("solo", MIX.solo);
   eng.set("master", val("vol"));
   eng.set("stabCut", val("stabcut"));
-  eng.set("bedTrim", val("bed"));
   eng.set("modDepth", val("moddepth"));
   eng.set("dlyTrim", val("dlytrim"));
   eng.set("revTrim", val("revtrim"));
@@ -11738,7 +11719,6 @@ async function start() {
     engine.set("pump", val("pump"));
     engine.set("dlyFbk", val("fbk"));
     engine.set("stabCut", val("stabcut"));
-    engine.set("bedTrim", val("bed"));
     // THE THREE TRIMS WERE MISSING FROM THIS LIST (#44). Everything else the
     // hand can reach before the first gesture was replayed into the new engine
     // and these were not, so a trim moved on the cold page was shown on the
@@ -12049,8 +12029,7 @@ function buildSpaceBank() {
       enc("revsize", "size", v => v.toFixed(1) + " s", "room", "how long the room takes to stop", { change: true }),
       enc("revtrim", "level", v => "\u00d7" + v.toFixed(2), "room", "a master over every room send on the desk")),
     group("BODY",
-      enc("pump", "pump", v => v.toFixed(2), "arc", "the kick ducks the mix — the manifest has none, so it starts at zero"),
-      enc("bed", "air", v => v === 0 ? "off" : "\u00d7" + v.toFixed(2), "out", "tape air — it never ducks with the kick"))
+      enc("pump", "pump", v => v.toFixed(2), "arc", "the kick ducks the mix — the manifest has none, so it starts at zero"))
   ]);
 }
 
