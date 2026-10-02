@@ -3499,8 +3499,10 @@ function compositionAt(seed, piece, movement, bar, opts) {
   // (what is present, what is silent) and writes over it for this bar only.
   const firedMicros = out.fire.micros || [];
   out.mut = performanceMode
-    ? (opts.mutate === false || firedMicros.length === 0 ? MUT_NONE
-       : mutationsAt(seed, piece, movement, out, auto, firedMicros))
+    ? (opts.mutate === false || (firedMicros.length === 0 && !auto) ? MUT_NONE
+       // THE CUE IS THE ARRANGEMENT'S AND RUNS WITH THE RING ON (#94); the independent slots stay the hand's: with no micro fired,
+       // `cueOnly` leaves every bar but a cue bar untouched
+       : mutationsAt(seed, piece, movement, out, auto, firedMicros, firedMicros.length === 0))
     : (opts.mutate === false ? MUT_NONE
        : mutationsAt(seed, piece, movement, out, auto, firedMicros));
   // Macro ratchets are FIRE state too, but they do not need the random
@@ -3833,6 +3835,7 @@ function drawMovement(seed, piece) {
   if (seed === DEFAULT_SEED) return MOVEMENT_SHIPPED;
   const grammar = piece.frame && ARR_LINE[piece.frame.grammar] ? piece.frame.grammar : "rolling";
   const has = ch => !piece.empty[ch];
+  const ARC_KINDS = ["intro", "groove", "build", "peak", "breakdown", "return", "close"];
   const ARC_MASKS = [[0, 3, 6, 7], [0, 1, 3, 5, 6, 7], [0, 1, 2, 3, 5, 6, 7], [0, 1, 2, 3, 4, 5, 6, 7], [0, 3, 5, 6, 7], [0, 1, 2, 3, 4, 5, 6, 7], null];  // intro, groove, build, peak, breakdown, return; close restores the intro
   // every draw is a stream on its own coordinate (D.FORM, purpose, running index), so adding a draw to one purpose moves no other
   const stream = f => { let i = 0; return () => rand01(seed, D.ARR, f, i++); };
@@ -4059,7 +4062,7 @@ function drawMovement(seed, piece) {
     }
     gestures.sort((x, y) => x.at - y.at);
   }
-  return { grammar, phrase: 8, section: Math.max.apply(null, lens), bars, sections, gestures, lens, rows: rows.map((r, i) => ({ role: r[0], at: at[i], bars: lens[i] })), line: ARR_LINE[grammar] };
+  return { grammar, phrase: 8, section: Math.max.apply(null, lens), bars, sections, gestures, lens, rows: rows.map((r, i) => ({ role: r[0], at: at[i], bars: lens[i], kind: grammar === "arc" ? ARC_KINDS[i] : undefined })), line: ARR_LINE[grammar] };
 }
 
 /* =========================================================================
@@ -5269,6 +5272,24 @@ function mutSectionStart(movement, bar, auto) {
   return false;
 }
 
+// What section is `bar` in, and how many bars into it? Only the arc grammar names its sections; every other movement answers null, and
+// so does a page with the ring off - there is no section to answer a cue.
+function mutSectionKind(movement, bar, auto) {
+  if (!auto || !movement || !movement.rows || !movement.bars) return null;
+  const b = ((bar % movement.bars) + movement.bars) % movement.bars;
+  for (const r of movement.rows) if (r.kind && b >= r.at && b < r.at + r.bars) return { kind: r.kind, into: b - r.at };
+  return null;
+}
+// THE CUE (#94). Inside a groove, build or peak, every 8-bar window draws ONE cue and every lane answers it in the same bar, in its
+// own idiom, with verbs this layer already has. The cue bar is one of the window's last four. It REPLACES whatever the independent
+// slots drew for that bar, so the bar is a decision a band made together and not four small things that landed by coincidence.
+// A pure function of (seed, window), so a seek and an offline render agree. `rest` is a cue: the bar is left alone.
+const CUE_POOL = { groove: ["lift", "drive", "turn", "strip", "open", "float", "rest"], build: ["lift", "drive", "turn", "open", "rest"],
+                   peak: ["lift", "drive", "turn", "strip", "float", "rest"] };
+const CUE_VERBS = { lift: ["octave", "ghost"], drive: ["octave", "lean+"], turn: ["stutter", "lean-"], strip: ["hatsout", "lean-"],
+                    open: ["hold", "lean+"], float: ["hold", "lean-"], rest: [] };
+const cueBar = (seed, w) => w * 8 + 4 + Math.floor(mutRoll(seed, w, 8, 0) * 4);
+
 const MUT_NONE = {
   bar: -1, cap: MUT_CAP, fired: [], suppressed: [], ghost: {}, dropped: {},
   skip: {}, bassOctave: null, hold: null, stabLean: 0, ratchet: null,
@@ -5281,12 +5302,12 @@ const MUT_NONE = {
 // absence of a fired micro therefore returns the untouched base.
 const MUT_NEEDS_AUTO = false;
 
-function mutationsAt(seed, piece, movement, C, auto, manual) {
+function mutationsAt(seed, piece, movement, C, auto, manual, cueOnly) {
   if (MUT_NEEDS_AUTO && !auto) return MUT_NONE;
   const bar = C.bar;
   const forced = new Set(manual || []);
   const M = {
-    bar, cap: MUT_CAP, fired: [], suppressed: [], ghost: {}, dropped: {},
+    bar, cap: MUT_CAP, fired: [], suppressed: [], ghost: {}, dropped: {}, cue: null,
     skip: {}, bassOctave: null, hold: null, stabLean: 0,
     ratchet: C.fire && C.fire.ratchet ? C.fire.ratchet : null,
     sig: "", matSig: "", text: ""
@@ -5438,6 +5459,35 @@ function mutationsAt(seed, piece, movement, C, auto, manual) {
     });
   }
 
+  /* THE CUE, replacing whatever was drawn for this bar. */
+  let cueName = null;
+  {
+    const w = Math.floor(bar / 8), sk = bar === cueBar(seed, w) ? mutSectionKind(movement, bar, auto) : null;
+    if (sk && CUE_POOL[sk.kind] && sk.into >= 8) {
+      const pool = CUE_POOL[sk.kind];
+      cueName = mutOne(seed, w, 8, 1, pool);
+      const kept = cand.filter(c => c.manual); cand.length = 0; cand.push(...kept);   // a hand-fired micro still outranks the cue
+      const R = {
+        octave: () => { if (!(on(5) && take5 && take5.length)) return; const idx = []; for (let e = 0; e < take5.length; e++) if (take5[e].step !== 0) idx.push(e);
+          if (idx.length) { const e = mutOne(seed, w, 8, 2, idx); cand.push({ slot: 3, name: "cue " + cueName + ": bass octave", sig: "c3#" + e, material: true, why: "the bass note at step " + (take5[e].step + 1) + " jumps an octave",
+            apply: m => { m.bassOctave = { index: e, degrees: sc.length }; } }); } },
+        ghost: () => { const fr = mutFreeSteps(3, 0, bar).filter(x => x !== 0); if (on(3) && fr.length) { const st = mutOne(seed, w, 8, 3, fr); cand.push({ slot: 1, name: "cue " + cueName + ": ghost hat", sig: "c1@" + st, material: true,
+            why: "an extra hat on the 16th at step " + (st + 1), apply: m => { (m.ghost[3] = m.ghost[3] || []).push({ step: st, velo: 0.55 }); } }); } },
+        "lean+": () => { if (on(6)) cand.push({ slot: 4, name: "cue " + cueName + ": stab lean", sig: "c4+", material: false, why: "the stabs lean forward across the bar", apply: m => { m.stabLean = 8; } }); },
+        "lean-": () => { if (on(6)) cand.push({ slot: 4, name: "cue " + cueName + ": stab lean", sig: "c4-", material: false, why: "the stabs lean back across the bar", apply: m => { m.stabLean = -8; } }); },
+        hatsout: () => { if (on(3)) cand.push({ slot: 2, name: "cue " + cueName + ": hats out", sig: "c2", material: true, why: "the hat lane sits out this one bar", apply: m => { m.dropped[3] = true; } }); },
+        stutter: () => { if (on(3)) cand.push({ slot: 5, name: "cue " + cueName + ": hat stutter", sig: "c5s", material: true, why: "the hats stutter over the bar line",
+            apply: m => { const g = (m.ghost[3] = m.ghost[3] || []); for (const st of [13, 15]) if ((!DRUM_PAT[3] || !DRUM_PAT[3][st]) && pinAt(3, st) !== 0) g.push({ step: st, velo: 0.5 }); } }); },
+        hold: () => { if (on(5) && take5 && take5.length) cand.push({ slot: 5, name: "cue " + cueName + ": bass held over", sig: "c5h", material: true, why: "the last bass note is held across the bar line",
+            apply: m => { m.hold = { index: take5.length - 1, mult: 1.6 }; } }); }
+      };
+      for (const v of CUE_VERBS[cueName]) R[v]();
+      M.cue = cueName;
+    }
+  }
+
+  if (cueOnly && !cueName) { const kept = cand.filter(c => c.manual); cand.length = 0; cand.push(...kept); }
+
   /* M7 is the lead's quote transform. THE LEAD DOES NOT EXIST YET — channel 4
      is empty in this piece and says so — so the slot is named and skipped
      rather than half-built. */
@@ -5457,7 +5507,7 @@ function mutationsAt(seed, piece, movement, C, auto, manual) {
   M.sig = M.fired.length ? M.fired.map(f => f.sig).join(",") : "-";
   const mat = M.fired.filter(f => f.material);
   M.matSig = mat.length ? mat.map(f => f.sig).join(",") : "-";
-  M.text = M.fired.map(f => f.why).join(" · ")
+  M.text = (M.cue ? "the cue is " + M.cue + (M.fired.length ? ": " : " - the bar is left alone") : "") + M.fired.map(f => f.why).join(" · ")
     + (M.suppressed.length ? (M.fired.length ? " · " : "")
        + M.suppressed.map(s => s.name + " suppressed, two things were already happening").join(" · ") : "");
   return M;
