@@ -1851,7 +1851,7 @@ const STYLE = {
     humanVeloShare:{ fixed:{ 1:1, 3:1.6, 4:1.6 } },          // → 5 8 8, [M]'s row
     // S1: the grammars are `rolling`, `static`, `sparse`. `progression` is a
     // harmonic device on the chord channel, not a grammar.
-    grammar:   { pool:["rolling","rolling","rolling","static","sparse"], snap:"section", d:D.FRAME, f:6 },   // DRAWN (#49); the default seed's movement is the hand-written one
+    grammar:   { pool:["arc","arc","arc","arc","rolling","rolling","static","sparse"], snap:"section", d:D.FRAME, f:6 },   // DRAWN (#49); the default seed's movement is the hand-written one
     // S2: section lengths are drawn PER SECTION, not once per piece.
     // the drawn movement owns these three (its lengths are drawn PER SECTION and its total is legal, not drawn from this pool); they stay
     // as the manifest's declared shape.
@@ -3818,9 +3818,11 @@ const ARR_LINE = {
   rolling: "rolling · no arc. One thing changes at a time and the floor never goes.",
   static: "static · the room is the arrangement. Nothing enters and nothing leaves.",
   sparse: "sparse · one voice in or out at every boundary. The density is the story.",
+  arc: "arc · intro, groove, build, peak, breakdown, return, close. Voices enter and leave by section and the kick is pulled once, for eight bars, before the return.",
   shipped: "the hand-written movement · eight sections of 32 bars, one perceptible event each."
 };
 const ARR_BECAUSE = {
+  pull: "a breakdown with the kick still in it is a thinner groove. Taking it out for eight bars is what makes the return an arrival.",
   floor: "the reference the rest is heard against. It holds, bit for bit, so that the first change has something to be a change from.",
   thin: "before the echo and not after: an echo carries forward only the variety that already exists. Opened over a frozen chord it just makes the frozen chord longer.",
   open: "the echo is the second instrument, not an effect on the first.",
@@ -3843,6 +3845,7 @@ function drawMovement(seed, piece) {
   if (seed === DEFAULT_SEED) return MOVEMENT_SHIPPED;
   const grammar = piece.frame && ARR_LINE[piece.frame.grammar] ? piece.frame.grammar : "rolling";
   const has = ch => !piece.empty[ch];
+  const ARC_MASKS = [[0, 3, 6, 7], [0, 1, 3, 5, 6, 7], [0, 1, 2, 3, 5, 6, 7], [0, 1, 2, 3, 4, 5, 6, 7], [0, 3, 5, 6, 7], [0, 1, 2, 3, 4, 5, 6, 7], null];  // intro, groove, build, peak, breakdown, return; close restores the intro
   // every draw is a stream on its own coordinate (D.FORM, purpose, running index), so adding a draw to one purpose moves no other
   const stream = f => { let i = 0; return () => rand01(seed, D.ARR, f, i++); };
   const pick = (r, a) => a[Math.floor(r() * a.length)];
@@ -3857,6 +3860,10 @@ function drawMovement(seed, piece) {
   if (grammar === "rolling") {
     rows = [["floor", 32, 48], ["thin", 24, 40], ["open", 24, 40], ["thin", 24, 40], ["turn", 32, 48], ["wide", 24, 40], ["lean", 16, 32], ["close", 16, 32]];
     if (rg() < 0.4) rows.splice(6, 1);                                   // the lean section is six draws in ten
+  } else if (grammar === "arc") {
+    // #93. The Endless Set's `rolling` is seven rows, each with its own lane mask; this is that idea rebuilt with drawn lengths and
+    // masks of our own. The role names an event the section also carries (the existing pools); `arcMask[i]` is who is sounding in it.
+    rows = [["floor", 24, 32], ["bind", 32, 48], ["open", 16, 32], ["wide", 32, 48], ["lean", 16, 24], ["turn", 32, 48], ["close", 16, 32]];
   } else if (grammar === "static") {
     rows = [["floor", 64, 96], ["bind", 64, 96], ["bind", 64, 96], ["close", 16, 32]];
     if (rg() < 0.3) rows.splice(2, 1);
@@ -3923,10 +3930,14 @@ function drawMovement(seed, piece) {
   const legalSpans = [-1, -1, -1, -2, -3].filter(sp => { for (let p = -1; p >= sp; p--) if (!triadConsonant(scaleSteps, p)) return false; return true; });
   // sparse starts from the floor and adds: only the kick and the sub are in the first section's own mask
   if (grammar === "sparse") for (const ch of [...onNow]) if (ch !== 0 && ch !== 5) onNow.delete(ch);
+  if (grammar === "arc") for (const ch of [...onNow]) if (ARC_MASKS[0].indexOf(ch) === -1) onNow.delete(ch);
   const startMask = new Set(onNow);
   // the section that lets the machine off the loop: the second thinning of a rolling piece, the first bind of a static one, the second move of a sparse one
-  const moveRow = grammar === "rolling" ? 3 : grammar === "static" ? 1 : 2;
+  const moveRow = grammar === "rolling" || grammar === "arc" ? 3 : grammar === "static" ? 1 : 2;
+  const wetNow = {};                                                       // the sends as the sections leave them, so a later move is a clear step from THIS
+  if (grammar === "arc") for (const ch of opening) if (!startMask.has(ch)) push(0, ["leave", ch, 0], "floor", "OPENING STATE. The " + ARR_CH[ch] + " is out for the intro — it comes in with its section.");
   if (grammar === "sparse") for (const ch of opening) if (!startMask.has(ch)) push(0, ["leave", ch, 0], "floor", "OPENING STATE. The " + ARR_CH[ch] + " is out for the first stretch — it arrives later, and the density is the story.");
+  const segMoves = [];
   rows.forEach((row, i) => {
     const role = row[0], a = at[i];
     if (role === "floor") return;
@@ -3942,6 +3953,17 @@ function drawMovement(seed, piece) {
       }
       if (!parts.length) push(a, null, "close", "nothing is dialled here — " + lens[i] + " bars of the floor as it stands, so the ring arrives on a piece that is already complete.");
       return;
+    }
+    let pullAt = -1;
+    const addedHere = new Set();
+    if (grammar === "arc") {
+      const want = new Set(ARC_MASKS[i].filter(has));
+      for (const ch of [0, 1, 2, 3, 4, 5, 6, 7]) {
+        if (want.has(ch) && !onNow.has(ch)) { const rp = ch === 0 ? 1 : Math.min(pick(re, [2, 4]), Math.floor(lens[i] / 2)); push(a, ["enter", ch, rp], role, "the " + ARR_CH[ch] + (ch === 0 ? " is back" : " comes in") + " over " + rp + " bars, with this section."); onNow.add(ch); addedHere.add(ch); }
+        else if (!want.has(ch) && onNow.has(ch)) { const rp = Math.min(pick(re, [1, 2]), Math.floor(lens[i] / 2)); push(a, ["leave", ch, rp], role, "the " + ARR_CH[ch] + " goes over " + rp + " bar" + (rp === 1 ? "" : "s") + " \u2014 this section is thinner for it."); onNow.delete(ch); }
+      }
+      // THE KICK IS PULLED ONCE PER PIECE (owner 2026-10-02, "a"): the last eight bars of the breakdown, a clean cut, and the return puts it back
+      if (i === 4 && has(0) && onNow.has(0) && lens[i] >= 16) pullAt = a + lens[i] - 8;
     }
     let ev = null, text = "";
     if (role === "thin") {
@@ -4007,6 +4029,22 @@ function drawMovement(seed, piece) {
     }
     if (!ev) push(a, null, role, "nothing is dialled here — " + lens[i] + " bars of the floor as it stands.");
     else push(a, ev, role, text.charAt(0).toUpperCase() + text.slice(1) + (role === "move" ? "" : becauseOnce(role)));
+    if (ev && ev[0] === "wet") wetNow[ev[1] + ev[2]] = ev[3];
+    if (grammar === "arc" && role !== "close" && i > 0 && lens[i] >= 24 && !(i === 4)) {
+      // SEGMENT MOTION: one clear step on a send, mid-section, on a voice that is sounding and was not brought in by THIS section,
+      // on the 8-bar grid. A step of less than 0.15 would be an inaudible nudge and is not made. The close puts every send home.
+      const pool = [6, 6, 2, 3, 7].filter(c => has(c) && onNow.has(c) && !addedHere.has(c) && !(ev && ev[0] === "wet" && ev[1] === c));
+      if (pool.length) {
+        const ch = pick(re, pool), verb = ch === 7 ? "reverb" : "delay", cur = wetNow[ch + verb] !== undefined ? wetNow[ch + verb] : wet0(ch, verb);
+        const to = cur < 0.45 ? range(re, cur + 0.2, cur + 0.4) : range(re, Math.max(0, cur - 0.4), cur - 0.2);
+        const k = between(re, 1, Math.floor(lens[i] / 8) - 1), at8 = a + 8 * k;
+        if (at8 > a && at8 < a + lens[i] && Math.abs(to - cur) >= 0.15) {
+          if (!standing.wet.some(w => w.ch === ch && w.verb === verb)) standing.wet.push({ ch, verb, base: wet0(ch, verb), at: at8 });
+          wetNow[ch + verb] = to; segMoves.push([at8, ["wet", ch, verb, +to.toFixed(2)], "the " + ARR_CH[ch] + "'s " + ARR_THING[verb] + " " + (to > cur ? "opens" : "closes") + " to " + Math.round(to * 100) + " mid-section \u2014 the section moves under its own mask."]);
+        }
+      }
+    }
+    if (pullAt >= 0) { push(pullAt, ["leave", 0, 1], "pull", "THE KICK IS PULLED, once in the piece: eight bars of the floor without it, so the return is something the kick comes back into." + becauseOnce("pull")); onNow.delete(0); }
     // THE MACHINE IS LET OFF THE LOOP, once per movement, in the section named for it: on the channel that already varies, about one bar in
     // ten steps off the phrase grid. It is what keeps a voice-starved piece (three voices, no hats) from being one loop under a name;
     // the close puts it back.
@@ -4018,6 +4056,8 @@ function drawMovement(seed, piece) {
       }
     }
   });
+  for (const m of segMoves) sections.push({ at: m[0], event: m[1], why: m[2] });
+  if (segMoves.length) sections.sort((x, y) => x.at - y.at);                // stable: events sharing a bar keep their drawn order
   // ---- gestures: throws on the 8-bar grid, unevenly spaced, one inside the floor section --------------------------------------
   const rgs = stream(5), gestures = [];
   const throwCh = [2, 6, 6].filter(has);
@@ -12604,6 +12644,7 @@ window.p02 = {
   // `opts` is { auto, holds } and DEFAULTS TO auto OFF, the same way the layer
   // itself does — asking without saying which instrument you mean gets the one
   // that does not move on its own.
+  usePiece,                       // for the probes: p93-arc folds many pieces through the one pure layer
   compositionAt: (bar, seed, movement, opts) =>
     compositionAt(seed === undefined ? SEED : seed, PIECE, movement || MOVEMENT, bar, opts),
   stepFires, walkAt, transposeDegrees, modValue, shapeAt, scheduleStateAt, applyFires,
