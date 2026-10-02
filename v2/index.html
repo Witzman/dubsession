@@ -789,12 +789,12 @@
   <div class="top">
     <button id="go">start</button>
     <button id="mute" aria-pressed="false">mute</button>
-    <button id="auto" aria-pressed="false" style="margin-left:14px">auto</button>
+    <button id="auto" aria-pressed="true" style="margin-left:14px">auto</button>
     <button id="releaseall" disabled>release all</button>
   </div>
 
   <div id="movenow" style="color:var(--dim);margin-top:8px">
-    auto is OFF — the schedule is not running. The arrangement is yours.</div>
+    auto is ON — the schedule is running. Switch it off to freeze the arrangement.</div>
 
   <div id="status"></div>
 
@@ -1047,18 +1047,6 @@
             <div class="t">stab cutoff</div>
             <label class="strip"><input id="stabcut" type="range" min="0.35" max="2" step="0.01" value="1" aria-label="stab cutoff"><span class="fill"></span><output id="stabcut_v" class="v"></output></label>
             <div class="why" id="w_stabcut"></div>
-          </div>
-
-          <!-- THE FLOOR. One control, and it is a trim on a level that was
-               measured rather than a level of its own — the number it
-               multiplies is BED_LEVEL and the reasoning is beside it in the
-               source. At 0 the readout says `off`, because a channel that
-               produces nothing has to say so. -->
-          <div class="unit" id="u_bed">
-            <div class="t">noise floor</div>
-            <label class="strip"><input id="bed" type="range" min="0" max="2" step="0.01" value="1" aria-label="noise floor"
-              title="Tape air, dust ticks breathing once per revolution (0.55 Hz = 33 rpm) and a few pops, band-limited 140 Hz to 9 kHz and injected after the reverb and the delay so the deck saturator and the finisher act on it the way they act on the room. It never ducks with the kick and it never moves on its own: a floor you can hear arrive is not a floor."><span class="fill"></span><output id="bed_v" class="v"></output></label>
-            <div class="why" id="w_bed"></div>
           </div>
 
           <!-- THE MASTER OVER EVERY MODULATOR. `send modulation` named two of
@@ -1851,7 +1839,7 @@ const STYLE = {
     humanVeloShare:{ fixed:{ 1:1, 3:1.6, 4:1.6 } },          // → 5 8 8, [M]'s row
     // S1: the grammars are `rolling`, `static`, `sparse`. `progression` is a
     // harmonic device on the chord channel, not a grammar.
-    grammar:   { pool:["rolling","rolling","rolling","static","sparse"], snap:"section", d:D.FRAME, f:6 },   // DRAWN (#49); the default seed's movement is the hand-written one
+    grammar:   { pool:["arc","arc","arc","arc","rolling","rolling","static","sparse"], snap:"section", d:D.FRAME, f:6 },   // DRAWN (#49); the default seed's movement is the hand-written one
     // S2: section lengths are drawn PER SECTION, not once per piece.
     // the drawn movement owns these three (its lengths are drawn PER SECTION and its total is legal, not drawn from this pool); they stay
     // as the manifest's declared shape.
@@ -1931,7 +1919,10 @@ const STYLE = {
       // [D] "Hats sit behind the bass, not on it. Rolling rotates the
       // eighth-note hats one sixteenth late for exactly this." One in four
       // sits late, and that is the parent's Rolling piece as a draw.
-      3: { hits:{pool:[4,6,7,8,8,8,9,10,12],d:D.DRUM,f:8}, rotate:{pool:[0,0,0,1],d:D.DRUM,f:9},
+      // #92: the pool was [0,0,0,1] - two rotations, so every hat lane was one of two
+      // euclids per hit count. 2 and 3 put a sparse lane on the offbeat eighth and the
+      // sixteenth after it; 5 is the pushed one. Measured on p92-alike.mjs.
+      3: { hits:{pool:[4,6,7,8,8,8,9,10,12],d:D.DRUM,f:8}, rotate:{pool:[0,0,0,1,2,2,3,5],d:D.DRUM,f:9},
            velo:{range:[46,68],q:1,d:D.DRUM,f:10},
            why:{fixed:"the hats, under everything, and they are the lane that may be busy"} }
     },
@@ -2128,7 +2119,7 @@ const STYLE = {
     dlyFbk:  { range:[42,42], d:D.SPACE, f:16 },             // percent, /100 at the engine
     rumble:  { range:[0.70,0.70], d:D.SPACE, f:17 },         // [E] :1015 — their fader ships at 70
     pump:    { range:[0,0], d:D.SPACE, f:18 },               // measured, not assumed; see the control
-    bedTrim: { range:[1,1], d:D.SPACE, f:19 }                // 1 is BED_LEVEL as measured
+    bedTrim: { pool:[0,0,1,1,1], d:D.SPACE, f:19 }            // #95: drawn per track, 2 in 5 have none. 1 is BED_LEVEL as measured
   },
 
   /* --- THE MODULATORS. THIS SPEC OWNS THIS BLOCK. ---------------------- */
@@ -2218,7 +2209,7 @@ const CONTRACT = {
     "the chord on the offbeat — never sharing the downbeat with the kick",
     "the bass answering the chord rather than doubling it",
     "the send as the arrangement: two modulators at least, on coprime bar counts",
-    "a noise floor under it — a patch with none sounds like a demo of an oscillator",
+    "a noise floor under it, or the declared absence of one — drawn per track, never a control",
     "percussion as punctuation: one hit, not a pattern"
   ],
   avoid: [
@@ -2246,7 +2237,7 @@ const CONTRACT = {
     // channel 6 and on channel 7 and nowhere else. `cutoffMod[5]` is written
     // and read by nobody — a control that does nothing, which rule G2 refuses.
     cutoffChannels:[6, 7],
-    bedTrimMin:    0.2,
+    bedTrimMin:    0,                             // a floor is a draw (owner 2026-10-02): a track has it or it does not
     budgetMin:     4
   }
 };
@@ -2287,11 +2278,11 @@ const PROFILE_DEFS = [
       drums: { kick:{pool:[
         {v:[0,4,8,12],why:"deep minimal four-floor"},
         {v:[0,4,8,12],why:"deep minimal four-floor"},
-        {v:[0,8],why:"deep minimal halftime floor"}]},
+        {v:[0,8],why:"deep minimal halftime floor"},{v:[0,4,8,14],why:"deep minimal: the displaced fourth, the one departure the contract allows"}]},
         present:{pool:[{v:[2],why:"clap and room only"},{v:[2,3],why:"sparse upper kit"},{v:[1,3],why:"rim and hats, no clap"}]},
         lanes:{1:{hits:{pool:[1,1,1],d:D.DRUM,f:2}},2:{hits:{pool:[1,1,2],d:D.DRUM,f:5}},3:{hits:{pool:[4,5,6],d:D.DRUM,f:8}}}
       },
-      stab:{figure:{pool:[{v:[2,10],why:"two patient offbeat stabs"},{v:[6,14],why:"late offbeat answers"},{v:[7,15],why:"leaning offbeat stabs"}]}},
+      stab:{figure:{pool:[{v:[2,10],why:"two patient offbeat stabs"},{v:[6,14],why:"late offbeat answers"},{v:[7,15],why:"leaning offbeat stabs"},{v:[10,14],why:"two late stabs, the second near the bar line"},{v:[7],why:"one lone offbeat stab"}]}},
       bass:{density:{range:[0.10,0.22]},law:{pool:[null,null,{v:"pedal",why:"the deep sub is a held pedal"}]}},
       pad:{present:{pool:[true,false,false]},hold:{range:[14,15.5]}},
       lead:{present:{pool:[{v:false,why:"no lead: the room carries the top"},{v:false,why:"no lead: the room carries the top"},{v:false,why:"no lead: the room carries the top"},{v:true,why:"a rare drenched minimal motif"}]}},
@@ -2305,7 +2296,7 @@ const PROFILE_DEFS = [
     avoid: ["straight-ahead house chords", "a busy lead", "dry drums"],
     patch: {
       drums:{kick:{pool:[{v:[0,4,8,12],why:"chord-heavy four-floor"},{v:[0,4,8,14],why:"leaning four-floor"}]},lanes:{3:{hits:{pool:[6,7,8,9],d:D.DRUM,f:8}}}},
-      stab:{figure:{pool:[{v:[2,6,10,14],why:"full offbeat chord figure"},{v:[2,7,11],why:"uneven chord conversation"},{v:[4,12],why:"skank chord answer"}]}},
+      stab:{figure:{pool:[{v:[2,6,10,14],why:"full offbeat chord figure"},{v:[2,7,11],why:"uneven chord conversation"},{v:[4,12],why:"skank chord answer"},{v:[10,14],why:"a late chord pair"},{v:[7,15],why:"leaning chord pair"}]}},
       bass:{density:{range:[0.18,0.32]}},
       pad:{present:{pool:[true,true,true]},hold:{range:[13,15.5]}},
       lead:{present:{pool:[{v:false,why:"the stab owns the foreground"},{v:false,why:"the stab owns the foreground"},{v:false,why:"the stab owns the foreground"},{v:true,why:"a rare echoing chord response"}]}},
@@ -2320,7 +2311,7 @@ const PROFILE_DEFS = [
     patch: {
       frame:{tempo:{range:[116,120],q:1},swing:{range:[0.02,0.06]}},
       drums:{lanes:{1:{hits:{pool:[1,1,2],d:D.DRUM,f:2}},2:{hits:{pool:[1,1],d:D.DRUM,f:5}},3:{hits:{pool:[4,5,6,7],d:D.DRUM,f:8}}}},
-      stab:{figure:{pool:[{v:[2,10],why:"sparse ambient stab"},{v:[7,15],why:"late ambient answer"}]}},
+      stab:{figure:{pool:[{v:[2,10],why:"sparse ambient stab"},{v:[7,15],why:"late ambient answer"},{v:[7],why:"one lone ambient stab"},{v:[10,14],why:"a late ambient pair"}]}},
       bass:{density:{range:[0.10,0.20]},lenOdds:{range:[0.05,0.18]}},
       pad:{present:{pool:[true,true,true]},hold:{range:[14.5,15.5]}},
       lead:{present:{pool:[{v:true,why:"a rare drenched motif"},{v:false,why:"the room is enough"}]}},
@@ -2334,8 +2325,8 @@ const PROFILE_DEFS = [
     avoid: ["a lead melody", "festival build-ups", "snare-led house density"],
     patch: {
       frame:{tempo:{range:[122,126],q:1},swing:{range:[0.06,0.10]}},
-      drums:{kick:{pool:[{v:[0,4,8,12],why:"rolling 909 floor"}]},present:{pool:[{v:[1,2,3],why:"full rolling kit"}]},lanes:{1:{hits:{pool:[1,2],d:D.DRUM,f:2}},2:{hits:{pool:[1,1,2],d:D.DRUM,f:5}},3:{hits:{pool:[8,9,10,12],d:D.DRUM,f:8}}}},
-      stab:{figure:{pool:[{v:[2,6,10,14],why:"rolling offbeat figure"},{v:[6,14],why:"rolling chord answers"}]}},
+      drums:{kick:{pool:[{v:[0,4,8,12],why:"rolling 909 floor"},{v:[0,4,8,12],why:"rolling 909 floor"},{v:[0,4,8,14],why:"rolling 909: the displaced fourth, the one departure the contract allows"}]},present:{pool:[{v:[1,2,3],why:"full rolling kit"}]},lanes:{1:{hits:{pool:[1,2],d:D.DRUM,f:2}},2:{hits:{pool:[1,1,2],d:D.DRUM,f:5}},3:{hits:{pool:[8,9,10,12],d:D.DRUM,f:8}}}},
+      stab:{figure:{pool:[{v:[2,6,10,14],why:"rolling offbeat figure"},{v:[6,14],why:"rolling chord answers"},{v:[4,12],why:"rolling skank answer"},{v:[2,7,11],why:"rolling uneven conversation"},{v:[10,14],why:"rolling late pair"}]}},
       bass:{density:{range:[0.32,0.45]},homeBias:{range:[0.30,0.38]},law:{pool:[null,null,null,{v:"octave",why:"rolling octave answer"}]}},
       pad:{present:{pool:[false,true]},hold:{range:[13,14.5]}},
       lead:{present:{pool:[{v:false,why:"the 909 floor owns the motion"},{v:false,why:"the 909 floor owns the motion"},{v:false,why:"the 909 floor owns the motion"},{v:false,why:"the 909 floor owns the motion"},{v:true,why:"a rare filtered 909 echo"}]}}
@@ -2349,7 +2340,7 @@ const PROFILE_DEFS = [
     patch: {
       frame:{tempo:{range:[118,124],q:1},swing:{range:[0.02,0.06]}},
       drums:{kick:{pool:[{v:[0,8],why:"halftime sub floor"}]},present:{pool:[{v:[2],why:"one clap and room"},{v:[2,3],why:"clap with a thin hat"}]},lanes:{2:{hits:{pool:[1,1],d:D.DRUM,f:5}},3:{hits:{pool:[4,4,5],d:D.DRUM,f:8}}}},
-      stab:{figure:{pool:[{v:[2,10],why:"two distant stabs"},{v:[6,14],why:"two delayed answers"}]}},
+      stab:{figure:{pool:[{v:[2,10],why:"two distant stabs"},{v:[6,14],why:"two delayed answers"},{v:[7],why:"one distant stab"},{v:[10,14],why:"two late distant stabs"},{v:[7,15],why:"a late pair"}]}},
       bass:{density:{range:[0.10,0.16]},law:{pool:[{v:"pedal",why:"the sub stays home"},{v:"pedal",why:"the sub stays home"}]}},
       pad:{present:{pool:[false,false,true]}},
       lead:{present:{pool:[{v:false,why:"no lead in the sparse sub profile"},{v:false,why:"no lead in the sparse sub profile"},{v:false,why:"no lead in the sparse sub profile"},{v:true,why:"a rare sub-harmonic trace"}]}},
@@ -2373,8 +2364,8 @@ const PROFILE_DEFS = [
       // the reference's 128-132 is above the hard band [115,128] (F11): held at
       // the top of what the contract allows, and raised as a question on #87
       frame:{tempo:{range:[126,128],q:1},swing:{range:[0.04,0.10]}},
-      drums:{kick:{pool:[{v:[0,4,8,12],why:"hypnotic four-floor"}]},present:{pool:[{v:[1,2,3],why:"full pulse kit: the phasing lives in the percussion"}]},lanes:{1:{hits:{pool:[1,2],d:D.DRUM,f:2}},2:{hits:{pool:[1,1,2],d:D.DRUM,f:5}},3:{hits:{pool:[8,9,10],d:D.DRUM,f:8}}}},
-      stab:{figure:{pool:[{v:[7],why:"one lone offbeat stab, the reference's [7]"},{v:[10],why:"one lone late stab, the reference's [10]"}]}},
+      drums:{kick:{pool:[{v:[0,4,8,12],why:"hypnotic four-floor"},{v:[0,4,8,12],why:"hypnotic four-floor"},{v:[0,4,8,12],why:"hypnotic four-floor"},{v:[0,4,8,14],why:"hypnotic: the displaced fourth, the one departure the contract allows"}]},present:{pool:[{v:[1,2,3],why:"full pulse kit: the phasing lives in the percussion"}]},lanes:{1:{hits:{pool:[1,2],d:D.DRUM,f:2}},2:{hits:{pool:[1,1,2],d:D.DRUM,f:5}},3:{hits:{pool:[8,9,10],d:D.DRUM,f:8}}}},
+      stab:{figure:{pool:[{v:[7],why:"one lone offbeat stab, the reference's [7]"},{v:[10],why:"one lone late stab, the reference's [10]"},{v:[7,15],why:"a late monotone pair"}]}},
       bass:{density:{range:[0.34,0.46]},law:{pool:[{v:"pedal",why:"the sub is a monotone"},{v:"pedal",why:"the sub is a monotone"},null]}},
       pad:{present:{pool:[true,true,true]},hold:{range:[14.5,15.5]}},
       lead:{present:{pool:[{v:false,why:"no lead: the pad and the pulse are the piece"},{v:false,why:"no lead: the pad and the pulse are the piece"},{v:false,why:"no lead: the pad and the pulse are the piece"}]}},
@@ -2388,8 +2379,8 @@ const PROFILE_DEFS = [
     avoid: ["edit density", "a busy top", "a dry room"],
     patch: {
       frame:{tempo:{range:[120,124],q:1},swing:{range:[0.08,0.12]}},
-      drums:{kick:{pool:[{v:[0,4,8,12],why:"hypnagogic four-floor"}]},present:{pool:[{v:[2,3],why:"clap and a thin top"},{v:[1,2,3],why:"a full but soft kit"}]},lanes:{1:{hits:{pool:[1,2],d:D.DRUM,f:2}},2:{hits:{pool:[1,1,2],d:D.DRUM,f:5}},3:{hits:{pool:[5,6,7],d:D.DRUM,f:8}}}},
-      stab:{figure:{pool:[{v:[7,15],why:"a late pair, felt rather than heard"},{v:[2,10],why:"two patient offbeat stabs"}]}},
+      drums:{kick:{pool:[{v:[0,4,8,12],why:"hypnagogic four-floor"},{v:[0,4,8,12],why:"hypnagogic four-floor"},{v:[0,4,8,14],why:"hypnagogic: the displaced fourth, the one departure the contract allows"}]},present:{pool:[{v:[2,3],why:"clap and a thin top"},{v:[1,2,3],why:"a full but soft kit"}]},lanes:{1:{hits:{pool:[1,2],d:D.DRUM,f:2}},2:{hits:{pool:[1,1,2],d:D.DRUM,f:5}},3:{hits:{pool:[5,6,7],d:D.DRUM,f:8}}}},
+      stab:{figure:{pool:[{v:[7,15],why:"a late pair, felt rather than heard"},{v:[2,10],why:"two patient offbeat stabs"},{v:[10],why:"one lone late stab"},{v:[10,14],why:"a late pair near the bar line"},{v:[2,7,11],why:"an uneven three, drowsy"}]}},
       bass:{density:{range:[0.22,0.34]},lenOdds:{range:[0.10,0.25]}},
       pad:{present:{pool:[true,true,true]},hold:{range:[14.5,15.5]}},
       lead:{present:{pool:[{v:true,why:"a drenched motif over the pad"},{v:false,why:"the bass carries the tune"},{v:false,why:"the bass carries the tune"}]}},
@@ -3508,8 +3499,10 @@ function compositionAt(seed, piece, movement, bar, opts) {
   // (what is present, what is silent) and writes over it for this bar only.
   const firedMicros = out.fire.micros || [];
   out.mut = performanceMode
-    ? (opts.mutate === false || firedMicros.length === 0 ? MUT_NONE
-       : mutationsAt(seed, piece, movement, out, auto, firedMicros))
+    ? (opts.mutate === false || (firedMicros.length === 0 && !auto) ? MUT_NONE
+       // THE CUE IS THE ARRANGEMENT'S AND RUNS WITH THE RING ON (#94); the independent slots stay the hand's: with no micro fired,
+       // `cueOnly` leaves every bar but a cue bar untouched
+       : mutationsAt(seed, piece, movement, out, auto, firedMicros, firedMicros.length === 0))
     : (opts.mutate === false ? MUT_NONE
        : mutationsAt(seed, piece, movement, out, auto, firedMicros));
   // Macro ratchets are FIRE state too, but they do not need the random
@@ -3815,9 +3808,11 @@ const ARR_LINE = {
   rolling: "rolling · no arc. One thing changes at a time and the floor never goes.",
   static: "static · the room is the arrangement. Nothing enters and nothing leaves.",
   sparse: "sparse · one voice in or out at every boundary. The density is the story.",
+  arc: "arc · intro, groove, build, peak, breakdown, return, close. Voices enter and leave by section and the kick is pulled once, for eight bars, before the return.",
   shipped: "the hand-written movement · eight sections of 32 bars, one perceptible event each."
 };
 const ARR_BECAUSE = {
+  pull: "a breakdown with the kick still in it is a thinner groove. Taking it out for eight bars is what makes the return an arrival.",
   floor: "the reference the rest is heard against. It holds, bit for bit, so that the first change has something to be a change from.",
   thin: "before the echo and not after: an echo carries forward only the variety that already exists. Opened over a frozen chord it just makes the frozen chord longer.",
   open: "the echo is the second instrument, not an effect on the first.",
@@ -3840,6 +3835,8 @@ function drawMovement(seed, piece) {
   if (seed === DEFAULT_SEED) return MOVEMENT_SHIPPED;
   const grammar = piece.frame && ARR_LINE[piece.frame.grammar] ? piece.frame.grammar : "rolling";
   const has = ch => !piece.empty[ch];
+  const ARC_KINDS = ["intro", "groove", "build", "peak", "breakdown", "return", "close"];
+  const ARC_MASKS = [[0, 3, 6, 7], [0, 1, 3, 5, 6, 7], [0, 1, 2, 3, 5, 6, 7], [0, 1, 2, 3, 4, 5, 6, 7], [0, 3, 5, 6, 7], [0, 1, 2, 3, 4, 5, 6, 7], null];  // intro, groove, build, peak, breakdown, return; close restores the intro
   // every draw is a stream on its own coordinate (D.FORM, purpose, running index), so adding a draw to one purpose moves no other
   const stream = f => { let i = 0; return () => rand01(seed, D.ARR, f, i++); };
   const pick = (r, a) => a[Math.floor(r() * a.length)];
@@ -3854,6 +3851,10 @@ function drawMovement(seed, piece) {
   if (grammar === "rolling") {
     rows = [["floor", 32, 48], ["thin", 24, 40], ["open", 24, 40], ["thin", 24, 40], ["turn", 32, 48], ["wide", 24, 40], ["lean", 16, 32], ["close", 16, 32]];
     if (rg() < 0.4) rows.splice(6, 1);                                   // the lean section is six draws in ten
+  } else if (grammar === "arc") {
+    // #93. The Endless Set's `rolling` is seven rows, each with its own lane mask; this is that idea rebuilt with drawn lengths and
+    // masks of our own. The role names an event the section also carries (the existing pools); `arcMask[i]` is who is sounding in it.
+    rows = [["floor", 24, 32], ["bind", 32, 48], ["open", 16, 32], ["wide", 32, 48], ["lean", 16, 24], ["turn", 32, 48], ["close", 16, 32]];
   } else if (grammar === "static") {
     rows = [["floor", 64, 96], ["bind", 64, 96], ["bind", 64, 96], ["close", 16, 32]];
     if (rg() < 0.3) rows.splice(2, 1);
@@ -3920,10 +3921,14 @@ function drawMovement(seed, piece) {
   const legalSpans = [-1, -1, -1, -2, -3].filter(sp => { for (let p = -1; p >= sp; p--) if (!triadConsonant(scaleSteps, p)) return false; return true; });
   // sparse starts from the floor and adds: only the kick and the sub are in the first section's own mask
   if (grammar === "sparse") for (const ch of [...onNow]) if (ch !== 0 && ch !== 5) onNow.delete(ch);
+  if (grammar === "arc") for (const ch of [...onNow]) if (ARC_MASKS[0].indexOf(ch) === -1) onNow.delete(ch);
   const startMask = new Set(onNow);
   // the section that lets the machine off the loop: the second thinning of a rolling piece, the first bind of a static one, the second move of a sparse one
-  const moveRow = grammar === "rolling" ? 3 : grammar === "static" ? 1 : 2;
+  const moveRow = grammar === "rolling" || grammar === "arc" ? 3 : grammar === "static" ? 1 : 2;
+  const wetNow = {};                                                       // the sends as the sections leave them, so a later move is a clear step from THIS
+  if (grammar === "arc") for (const ch of opening) if (!startMask.has(ch)) push(0, ["leave", ch, 0], "floor", "OPENING STATE. The " + ARR_CH[ch] + " is out for the intro — it comes in with its section.");
   if (grammar === "sparse") for (const ch of opening) if (!startMask.has(ch)) push(0, ["leave", ch, 0], "floor", "OPENING STATE. The " + ARR_CH[ch] + " is out for the first stretch — it arrives later, and the density is the story.");
+  const segMoves = [];
   rows.forEach((row, i) => {
     const role = row[0], a = at[i];
     if (role === "floor") return;
@@ -3939,6 +3944,17 @@ function drawMovement(seed, piece) {
       }
       if (!parts.length) push(a, null, "close", "nothing is dialled here — " + lens[i] + " bars of the floor as it stands, so the ring arrives on a piece that is already complete.");
       return;
+    }
+    let pullAt = -1;
+    const addedHere = new Set();
+    if (grammar === "arc") {
+      const want = new Set(ARC_MASKS[i].filter(has));
+      for (const ch of [0, 1, 2, 3, 4, 5, 6, 7]) {
+        if (want.has(ch) && !onNow.has(ch)) { const rp = ch === 0 ? 1 : Math.min(pick(re, [2, 4]), Math.floor(lens[i] / 2)); push(a, ["enter", ch, rp], role, "the " + ARR_CH[ch] + (ch === 0 ? " is back" : " comes in") + " over " + rp + " bars, with this section."); onNow.add(ch); addedHere.add(ch); }
+        else if (!want.has(ch) && onNow.has(ch)) { const rp = Math.min(pick(re, [1, 2]), Math.floor(lens[i] / 2)); push(a, ["leave", ch, rp], role, "the " + ARR_CH[ch] + " goes over " + rp + " bar" + (rp === 1 ? "" : "s") + " \u2014 this section is thinner for it."); onNow.delete(ch); }
+      }
+      // THE KICK IS PULLED ONCE PER PIECE (owner 2026-10-02, "a"): the last eight bars of the breakdown, a clean cut, and the return puts it back
+      if (i === 4 && has(0) && onNow.has(0) && lens[i] >= 16) pullAt = a + lens[i] - 8;
     }
     let ev = null, text = "";
     if (role === "thin") {
@@ -4004,6 +4020,22 @@ function drawMovement(seed, piece) {
     }
     if (!ev) push(a, null, role, "nothing is dialled here — " + lens[i] + " bars of the floor as it stands.");
     else push(a, ev, role, text.charAt(0).toUpperCase() + text.slice(1) + (role === "move" ? "" : becauseOnce(role)));
+    if (ev && ev[0] === "wet") wetNow[ev[1] + ev[2]] = ev[3];
+    if (grammar === "arc" && role !== "close" && i > 0 && lens[i] >= 24 && !(i === 4)) {
+      // SEGMENT MOTION: one clear step on a send, mid-section, on a voice that is sounding and was not brought in by THIS section,
+      // on the 8-bar grid. A step of less than 0.15 would be an inaudible nudge and is not made. The close puts every send home.
+      const pool = [6, 6, 2, 3, 7].filter(c => has(c) && onNow.has(c) && !addedHere.has(c) && !(ev && ev[0] === "wet" && ev[1] === c));
+      if (pool.length) {
+        const ch = pick(re, pool), verb = ch === 7 ? "reverb" : "delay", cur = wetNow[ch + verb] !== undefined ? wetNow[ch + verb] : wet0(ch, verb);
+        const to = cur < 0.45 ? range(re, cur + 0.2, cur + 0.4) : range(re, Math.max(0, cur - 0.4), cur - 0.2);
+        const k = between(re, 1, Math.floor(lens[i] / 8) - 1), at8 = a + 8 * k;
+        if (at8 > a && at8 < a + lens[i] && Math.abs(to - cur) >= 0.15) {
+          if (!standing.wet.some(w => w.ch === ch && w.verb === verb)) standing.wet.push({ ch, verb, base: wet0(ch, verb), at: at8 });
+          wetNow[ch + verb] = to; segMoves.push([at8, ["wet", ch, verb, +to.toFixed(2)], "the " + ARR_CH[ch] + "'s " + ARR_THING[verb] + " " + (to > cur ? "opens" : "closes") + " to " + Math.round(to * 100) + " mid-section \u2014 the section moves under its own mask."]);
+        }
+      }
+    }
+    if (pullAt >= 0) { push(pullAt, ["leave", 0, 1], "pull", "THE KICK IS PULLED, once in the piece: eight bars of the floor without it, so the return is something the kick comes back into." + becauseOnce("pull")); onNow.delete(0); }
     // THE MACHINE IS LET OFF THE LOOP, once per movement, in the section named for it: on the channel that already varies, about one bar in
     // ten steps off the phrase grid. It is what keeps a voice-starved piece (three voices, no hats) from being one loop under a name;
     // the close puts it back.
@@ -4015,6 +4047,8 @@ function drawMovement(seed, piece) {
       }
     }
   });
+  for (const m of segMoves) sections.push({ at: m[0], event: m[1], why: m[2] });
+  if (segMoves.length) sections.sort((x, y) => x.at - y.at);                // stable: events sharing a bar keep their drawn order
   // ---- gestures: throws on the 8-bar grid, unevenly spaced, one inside the floor section --------------------------------------
   const rgs = stream(5), gestures = [];
   const throwCh = [2, 6, 6].filter(has);
@@ -4028,7 +4062,7 @@ function drawMovement(seed, piece) {
     }
     gestures.sort((x, y) => x.at - y.at);
   }
-  return { grammar, phrase: 8, section: Math.max.apply(null, lens), bars, sections, gestures, lens, rows: rows.map((r, i) => ({ role: r[0], at: at[i], bars: lens[i] })), line: ARR_LINE[grammar] };
+  return { grammar, phrase: 8, section: Math.max.apply(null, lens), bars, sections, gestures, lens, rows: rows.map((r, i) => ({ role: r[0], at: at[i], bars: lens[i], kind: grammar === "arc" ? ARC_KINDS[i] : undefined })), line: ARR_LINE[grammar] };
 }
 
 /* =========================================================================
@@ -5238,6 +5272,24 @@ function mutSectionStart(movement, bar, auto) {
   return false;
 }
 
+// What section is `bar` in, and how many bars into it? Only the arc grammar names its sections; every other movement answers null, and
+// so does a page with the ring off - there is no section to answer a cue.
+function mutSectionKind(movement, bar, auto) {
+  if (!auto || !movement || !movement.rows || !movement.bars) return null;
+  const b = ((bar % movement.bars) + movement.bars) % movement.bars;
+  for (const r of movement.rows) if (r.kind && b >= r.at && b < r.at + r.bars) return { kind: r.kind, into: b - r.at };
+  return null;
+}
+// THE CUE (#94). Inside a groove, build or peak, every 8-bar window draws ONE cue and every lane answers it in the same bar, in its
+// own idiom, with verbs this layer already has. The cue bar is one of the window's last four. It REPLACES whatever the independent
+// slots drew for that bar, so the bar is a decision a band made together and not four small things that landed by coincidence.
+// A pure function of (seed, window), so a seek and an offline render agree. `rest` is a cue: the bar is left alone.
+const CUE_POOL = { groove: ["lift", "drive", "turn", "strip", "open", "float", "rest"], build: ["lift", "drive", "turn", "open", "rest"],
+                   peak: ["lift", "drive", "turn", "strip", "float", "rest"] };
+const CUE_VERBS = { lift: ["octave", "ghost"], drive: ["octave", "lean+"], turn: ["stutter", "lean-"], strip: ["hatsout", "lean-"],
+                    open: ["hold", "lean+"], float: ["hold", "lean-"], rest: [] };
+const cueBar = (seed, w) => w * 8 + 4 + Math.floor(mutRoll(seed, w, 8, 0) * 4);
+
 const MUT_NONE = {
   bar: -1, cap: MUT_CAP, fired: [], suppressed: [], ghost: {}, dropped: {},
   skip: {}, bassOctave: null, hold: null, stabLean: 0, ratchet: null,
@@ -5250,12 +5302,12 @@ const MUT_NONE = {
 // absence of a fired micro therefore returns the untouched base.
 const MUT_NEEDS_AUTO = false;
 
-function mutationsAt(seed, piece, movement, C, auto, manual) {
+function mutationsAt(seed, piece, movement, C, auto, manual, cueOnly) {
   if (MUT_NEEDS_AUTO && !auto) return MUT_NONE;
   const bar = C.bar;
   const forced = new Set(manual || []);
   const M = {
-    bar, cap: MUT_CAP, fired: [], suppressed: [], ghost: {}, dropped: {},
+    bar, cap: MUT_CAP, fired: [], suppressed: [], ghost: {}, dropped: {}, cue: null,
     skip: {}, bassOctave: null, hold: null, stabLean: 0,
     ratchet: C.fire && C.fire.ratchet ? C.fire.ratchet : null,
     sig: "", matSig: "", text: ""
@@ -5407,6 +5459,35 @@ function mutationsAt(seed, piece, movement, C, auto, manual) {
     });
   }
 
+  /* THE CUE, replacing whatever was drawn for this bar. */
+  let cueName = null;
+  {
+    const w = Math.floor(bar / 8), sk = bar === cueBar(seed, w) ? mutSectionKind(movement, bar, auto) : null;
+    if (sk && CUE_POOL[sk.kind] && sk.into >= 8) {
+      const pool = CUE_POOL[sk.kind];
+      cueName = mutOne(seed, w, 8, 1, pool);
+      const kept = cand.filter(c => c.manual); cand.length = 0; cand.push(...kept);   // a hand-fired micro still outranks the cue
+      const R = {
+        octave: () => { if (!(on(5) && take5 && take5.length)) return; const idx = []; for (let e = 0; e < take5.length; e++) if (take5[e].step !== 0) idx.push(e);
+          if (idx.length) { const e = mutOne(seed, w, 8, 2, idx); cand.push({ slot: 3, name: "cue " + cueName + ": bass octave", sig: "c3#" + e, material: true, why: "the bass note at step " + (take5[e].step + 1) + " jumps an octave",
+            apply: m => { m.bassOctave = { index: e, degrees: sc.length }; } }); } },
+        ghost: () => { const fr = mutFreeSteps(3, 0, bar).filter(x => x !== 0); if (on(3) && fr.length) { const st = mutOne(seed, w, 8, 3, fr); cand.push({ slot: 1, name: "cue " + cueName + ": ghost hat", sig: "c1@" + st, material: true,
+            why: "an extra hat on the 16th at step " + (st + 1), apply: m => { (m.ghost[3] = m.ghost[3] || []).push({ step: st, velo: 0.55 }); } }); } },
+        "lean+": () => { if (on(6)) cand.push({ slot: 4, name: "cue " + cueName + ": stab lean", sig: "c4+", material: false, why: "the stabs lean forward across the bar", apply: m => { m.stabLean = 8; } }); },
+        "lean-": () => { if (on(6)) cand.push({ slot: 4, name: "cue " + cueName + ": stab lean", sig: "c4-", material: false, why: "the stabs lean back across the bar", apply: m => { m.stabLean = -8; } }); },
+        hatsout: () => { if (on(3)) cand.push({ slot: 2, name: "cue " + cueName + ": hats out", sig: "c2", material: true, why: "the hat lane sits out this one bar", apply: m => { m.dropped[3] = true; } }); },
+        stutter: () => { if (on(3)) cand.push({ slot: 5, name: "cue " + cueName + ": hat stutter", sig: "c5s", material: true, why: "the hats stutter over the bar line",
+            apply: m => { const g = (m.ghost[3] = m.ghost[3] || []); for (const st of [13, 15]) if ((!DRUM_PAT[3] || !DRUM_PAT[3][st]) && pinAt(3, st) !== 0) g.push({ step: st, velo: 0.5 }); } }); },
+        hold: () => { if (on(5) && take5 && take5.length) cand.push({ slot: 5, name: "cue " + cueName + ": bass held over", sig: "c5h", material: true, why: "the last bass note is held across the bar line",
+            apply: m => { m.hold = { index: take5.length - 1, mult: 1.6 }; } }); }
+      };
+      for (const v of CUE_VERBS[cueName]) R[v]();
+      M.cue = cueName;
+    }
+  }
+
+  if (cueOnly && !cueName) { const kept = cand.filter(c => c.manual); cand.length = 0; cand.push(...kept); }
+
   /* M7 is the lead's quote transform. THE LEAD DOES NOT EXIST YET — channel 4
      is empty in this piece and says so — so the slot is named and skipped
      rather than half-built. */
@@ -5426,7 +5507,7 @@ function mutationsAt(seed, piece, movement, C, auto, manual) {
   M.sig = M.fired.length ? M.fired.map(f => f.sig).join(",") : "-";
   const mat = M.fired.filter(f => f.material);
   M.matSig = mat.length ? mat.map(f => f.sig).join(",") : "-";
-  M.text = M.fired.map(f => f.why).join(" · ")
+  M.text = (M.cue ? "the cue is " + M.cue + (M.fired.length ? ": " : " - the bar is left alone") : "") + M.fired.map(f => f.why).join(" · ")
     + (M.suppressed.length ? (M.fired.length ? " · " : "")
        + M.suppressed.map(s => s.name + " suppressed, two things were already happening").join(" · ") : "");
   return M;
@@ -8254,19 +8335,16 @@ const PERF = { late: [], task: [], slack: [], worstLate: 0, worstTask: 0, minSla
 
 let ctx = null, engine = null, timer = null;
 let muted = localStorage.getItem("p02.muted") === "1";
-// THE RING IS OFF ON EVERY LOAD, and deliberately not remembered. Mute is
-// remembered because forgetting it makes a noise nobody asked for; `auto` is
-// the opposite — the safe state is off, and a page that came back with the
-// schedule running because of something the owner clicked last week is the
-// arrangement moving where the hand did not put it.
+// THE RING IS ON ON EVERY LOAD, and deliberately not remembered. Owner
+// decision 2026-10-02 (#91): "no autoplay ring" is superseded by "it could also
+// evolve on itself" - a page that starts frozen is a loop. The rule that
+// survives is that it never evolves where the hand cannot reach: a held value
+// stays held, and the switch (now FREEZE) puts the arrangement under the hand.
+// Mute is remembered because forgetting it makes a noise nobody asked for;
+// `auto` is not, because "reload and it is exactly the same piece" is the claim
+// the gate procedure rests on - the piece must not depend on last week's click.
 //
-// ASKED AGAIN ON 2026-09-18, WITH THE SURFACE FOR IT BUILT, AND THE ANSWER IS
-// THE SAME, for a second reason: "reload and it is exactly the same piece" is
-// the claim the gate procedure rests on, and a switch restored from last
-// week's click makes the piece depend on history that is in neither the seed
-// nor the URL. THE HELD VALUES ARE NOT PERSISTED EITHER, and for the same
-// reason. `muted` is the only thing this page remembers.
-let autoOn = false;
+let autoOn = true;
 // The seed is the whole set: composition state at bar N is a pure function of
 // (seed, N, auto, holds). It comes from ?seed= — the QUERY, never the path,
 // because the page is served under /dub/ and a path-shaped anything resolves
@@ -10574,8 +10652,6 @@ const ROOM_UNITS = [
     // `cfg.stabCut` is read in two places and both of them are channel 6
     dead: () => chReach(6),
     note: () => "how far open the stab's filter starts" },
-  { id: "bed", unit: "u_bed", short: "noise floor", base: () => 1, dead: () => "",
-    note: () => "tape air — it never ducks with the kick and it never moves on its own" },
   { id: "moddepth", unit: "u_moddepth", short: "all modulation", base: () => 1,
     dead: C => (C && C.mods.length) ? "" : "nothing is bound at this bar — there is no swing to scale",
     note: () => "a master on how far every modulator swings — never on the value it swings around" }
@@ -10779,9 +10855,6 @@ function outputs() {
     ["fbk", v => v.toFixed(2)], ["dlytrim", v => "×" + v.toFixed(2)],
     ["revsize", v => v.toFixed(1) + " s"], ["revtrim", v => "×" + v.toFixed(2)],
     ["moddepth", v => "×" + v.toFixed(2)], ["stabcut", v => "×" + v.toFixed(2)],
-    // SILENCE EXPLAINS ITSELF, including a floor's. `×0.00` is a number that
-    // could be a rounding; `off` is not.
-    ["bed", v => v === 0 ? "off" : "×" + v.toFixed(2)],
     ["transpose", v => (v > 0 ? "+" : "") + v + " deg"],
     ["semi", v => (v > 0 ? "+" : "") + v + " st"]
   ];
@@ -10857,7 +10930,6 @@ function wire() {
   bind("revtrim", "revTrim", null, true);
   bind("moddepth", "modDepth", null, true);
   bind("stabcut", "stabCut", null, true);
-  bind("bed", "bedTrim", null, true);
   // THE VOICE TRIMS, THROUGH THE SAME ONE DOOR. The row's id and the engine's
   // key come from the same entry, so there is nothing here to keep in step.
   for (const k of VOICE_KEYS) bind(VOICE_PARAMS[k].id, k, null, true);
@@ -11145,7 +11217,6 @@ function replayHandOnly(eng) {
   if (MIX.solo !== null) eng.set("solo", MIX.solo);
   eng.set("master", val("vol"));
   eng.set("stabCut", val("stabcut"));
-  eng.set("bedTrim", val("bed"));
   eng.set("modDepth", val("moddepth"));
   eng.set("dlyTrim", val("dlytrim"));
   eng.set("revTrim", val("revtrim"));
@@ -11698,7 +11769,6 @@ async function start() {
     engine.set("pump", val("pump"));
     engine.set("dlyFbk", val("fbk"));
     engine.set("stabCut", val("stabcut"));
-    engine.set("bedTrim", val("bed"));
     // THE THREE TRIMS WERE MISSING FROM THIS LIST (#44). Everything else the
     // hand can reach before the first gesture was replayed into the new engine
     // and these were not, so a trim moved on the cold page was shown on the
@@ -12009,8 +12079,7 @@ function buildSpaceBank() {
       enc("revsize", "size", v => v.toFixed(1) + " s", "room", "how long the room takes to stop", { change: true }),
       enc("revtrim", "level", v => "\u00d7" + v.toFixed(2), "room", "a master over every room send on the desk")),
     group("BODY",
-      enc("pump", "pump", v => v.toFixed(2), "arc", "the kick ducks the mix — the manifest has none, so it starts at zero"),
-      enc("bed", "air", v => v === 0 ? "off" : "\u00d7" + v.toFixed(2), "out", "tape air — it never ducks with the kick"))
+      enc("pump", "pump", v => v.toFixed(2), "arc", "the kick ducks the mix — the manifest has none, so it starts at zero"))
   ]);
 }
 
@@ -12192,7 +12261,7 @@ function buildRideBank() {
 // elements, MOVED here with their ids (their wiring is by id), not copied.
 function buildDeckBank() {
   const grp = (name, nodes) => { const g = kitEl("div", "kx-group"); g.append(kitEl("div", "kx-gname", name)); const r = kitEl("div", "kx-grow kx-wrap"); r.append(...nodes); g.append(r); return g; };
-  const auto = kitButton({ kind: "latched", label: "auto", key: "u", tone: "arc", get: () => autoOn, set: v => setAuto(v), title: "the schedule runs the arrangement; off, it is yours" });
+  const auto = kitButton({ kind: "latched", label: "auto", key: "u", tone: "arc", get: () => autoOn, set: v => setAuto(v), title: "the schedule evolves the arrangement; off freezes it under your hand" });
   const mute = kitButton({ kind: "latched", label: "mute", key: "m", tone: "mute", get: () => muted, set: v => { if (v !== muted) ui("mute").click(); }, title: "the transport runs, nothing reaches the output" });
   const rel = kitButton({ kind: "fired", label: "release all", tone: "rel", disabled: () => ui("releaseall").disabled, fire: () => ui("releaseall").click(), title: "every hold and gesture back under the schedule" });
   const xf = kitFader({ id: "deckxf", horizontal: true, label: "A \u25c2 \u25b8 B", tone: "arc", step: 1, def: () => 0, fmt: v => (v <= 0 ? "A" : v >= 100 ? "B" : Math.round(v) + "%"), title: "equal-power crossfade between the decks; double-click puts it back on A" });
@@ -12604,6 +12673,7 @@ window.p02 = {
   // `opts` is { auto, holds } and DEFAULTS TO auto OFF, the same way the layer
   // itself does — asking without saying which instrument you mean gets the one
   // that does not move on its own.
+  usePiece,                       // for the probes: p93-arc folds many pieces through the one pure layer
   compositionAt: (bar, seed, movement, opts) =>
     compositionAt(seed === undefined ? SEED : seed, PIECE, movement || MOVEMENT, bar, opts),
   stepFires, walkAt, transposeDegrees, modValue, shapeAt, scheduleStateAt, applyFires,

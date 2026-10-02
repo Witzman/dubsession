@@ -1,5 +1,22 @@
 # Changelog
 
+## 2026-10-02 — tracks with an arc, and a floor that is drawn, on the prototype stage only
+
+- **`/v2/` starts evolving on its own.** `auto` is on when the page loads; the
+  button now freezes the arrangement under your hand. What you hold stays held.
+- **A new arrangement, `arc`**, in half of the draws: intro, groove, build, peak,
+  breakdown, return and close, each section with its own set of voices coming in
+  and going out. The kick is pulled once per piece, for the last eight bars of
+  the breakdown, and comes back with the return. Sends step mid-section.
+- **A shared cue** every eight bars inside a groove, build or peak: the bass, hats
+  and stabs answer one moment together instead of four small things by chance.
+- **Hats, stabs and kicks vary more from track to track**: the hat lane takes eight
+  rotations where it took two, the stab pools hold more figures, and the displaced
+  fourth kick is in four more styles.
+- **The noise floor is drawn per track and is no longer a control.** About two
+  tracks in five have none. The slider and the deck knob are gone.
+- **`https://witzman.de/dub` is unchanged.**
+
 ## 2026-09-25 — a Tonight view and hands on it, on the prototype stage only
 
 - **`/v2/` opens on a Tonight view**: the night's arc (played, live, and the
