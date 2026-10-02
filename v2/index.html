@@ -789,12 +789,12 @@
   <div class="top">
     <button id="go">start</button>
     <button id="mute" aria-pressed="false">mute</button>
-    <button id="auto" aria-pressed="false" style="margin-left:14px">auto</button>
+    <button id="auto" aria-pressed="true" style="margin-left:14px">auto</button>
     <button id="releaseall" disabled>release all</button>
   </div>
 
   <div id="movenow" style="color:var(--dim);margin-top:8px">
-    auto is OFF — the schedule is not running. The arrangement is yours.</div>
+    auto is ON — the schedule is running. Switch it off to freeze the arrangement.</div>
 
   <div id="status"></div>
 
@@ -8254,19 +8254,16 @@ const PERF = { late: [], task: [], slack: [], worstLate: 0, worstTask: 0, minSla
 
 let ctx = null, engine = null, timer = null;
 let muted = localStorage.getItem("p02.muted") === "1";
-// THE RING IS OFF ON EVERY LOAD, and deliberately not remembered. Mute is
-// remembered because forgetting it makes a noise nobody asked for; `auto` is
-// the opposite — the safe state is off, and a page that came back with the
-// schedule running because of something the owner clicked last week is the
-// arrangement moving where the hand did not put it.
+// THE RING IS ON ON EVERY LOAD, and deliberately not remembered. Owner
+// decision 2026-10-02 (#91): "no autoplay ring" is superseded by "it could also
+// evolve on itself" - a page that starts frozen is a loop. The rule that
+// survives is that it never evolves where the hand cannot reach: a held value
+// stays held, and the switch (now FREEZE) puts the arrangement under the hand.
+// Mute is remembered because forgetting it makes a noise nobody asked for;
+// `auto` is not, because "reload and it is exactly the same piece" is the claim
+// the gate procedure rests on - the piece must not depend on last week's click.
 //
-// ASKED AGAIN ON 2026-09-18, WITH THE SURFACE FOR IT BUILT, AND THE ANSWER IS
-// THE SAME, for a second reason: "reload and it is exactly the same piece" is
-// the claim the gate procedure rests on, and a switch restored from last
-// week's click makes the piece depend on history that is in neither the seed
-// nor the URL. THE HELD VALUES ARE NOT PERSISTED EITHER, and for the same
-// reason. `muted` is the only thing this page remembers.
-let autoOn = false;
+let autoOn = true;
 // The seed is the whole set: composition state at bar N is a pure function of
 // (seed, N, auto, holds). It comes from ?seed= — the QUERY, never the path,
 // because the page is served under /dub/ and a path-shaped anything resolves
@@ -12192,7 +12189,7 @@ function buildRideBank() {
 // elements, MOVED here with their ids (their wiring is by id), not copied.
 function buildDeckBank() {
   const grp = (name, nodes) => { const g = kitEl("div", "kx-group"); g.append(kitEl("div", "kx-gname", name)); const r = kitEl("div", "kx-grow kx-wrap"); r.append(...nodes); g.append(r); return g; };
-  const auto = kitButton({ kind: "latched", label: "auto", key: "u", tone: "arc", get: () => autoOn, set: v => setAuto(v), title: "the schedule runs the arrangement; off, it is yours" });
+  const auto = kitButton({ kind: "latched", label: "auto", key: "u", tone: "arc", get: () => autoOn, set: v => setAuto(v), title: "the schedule evolves the arrangement; off freezes it under your hand" });
   const mute = kitButton({ kind: "latched", label: "mute", key: "m", tone: "mute", get: () => muted, set: v => { if (v !== muted) ui("mute").click(); }, title: "the transport runs, nothing reaches the output" });
   const rel = kitButton({ kind: "fired", label: "release all", tone: "rel", disabled: () => ui("releaseall").disabled, fire: () => ui("releaseall").click(), title: "every hold and gesture back under the schedule" });
   const xf = kitFader({ id: "deckxf", horizontal: true, label: "A \u25c2 \u25b8 B", tone: "arc", step: 1, def: () => 0, fmt: v => (v <= 0 ? "A" : v >= 100 ? "B" : Math.round(v) + "%"), title: "equal-power crossfade between the decks; double-click puts it back on A" });
