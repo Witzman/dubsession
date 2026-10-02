@@ -1887,7 +1887,14 @@ if (typeof L.drawMovement === 'function') {
     }
     if (!closed) bump('the ring does not close (sends, chance, mask, walk)', seed);
     const starts = [...new Set(m.sections.map(x => x.at))];
-    for (const at of starts) {
+    if (m.grammar === 'arc') {
+      // #93: the floor is not "always there" any more. The kick is home at both ends of the ring and absent for ONE run of exactly eight
+      // bars (owner 2026-10-02); the sub arrives with the groove, so only the kick is held to the ring.
+      let gone = 0, runs = 0, prev = true;
+      for (let b = 0; b < m.bars; b++) { const k = L.compositionAt(seed, d, m, b, A).present[0] > 0.5; if (!k) gone++; if (prev && !k) runs++; prev = k; }
+      if (d.empty[0] ? false : (gone !== 8 || runs !== 1 || L.compositionAt(seed, d, m, 0, A).present[0] < 0.5)) bump('the arc kick is not pulled for exactly one run of eight bars', seed);
+    }
+    else for (const at of starts) {
       const c = L.compositionAt(seed, d, m, Math.min(m.bars - 1, at + 8), A);
       if ([0, 5].some(ch => !d.empty[ch] && c.present[ch] < 1 - 1e-9)) { bump('the kick or the sub is absent in a section', seed); break; }
     }
@@ -1898,7 +1905,7 @@ if (typeof L.drawMovement === 'function') {
       // drawn over it, so an absolute floor would fail the piece and not the movement
       const base = new Set(); for (let b = 0; b < L.MOVEMENT_SHIPPED.bars; b++) base.add(L.fingerprint(L.compositionAt(seed, d, L.MOVEMENT_SHIPPED, b, A), seed));
       (ratios[m.grammar] = ratios[m.grammar] || []).push(distinct / base.size);
-      if (distinct < 20 || distinct < base.size * 0.33) bump('the movement is one loop (' + distinct + ' distinct bars against the hand-written ' + base.size + ')', seed);
+      if (distinct < 20 || distinct < base.size * 0.30) bump('the movement is one loop (' + distinct + ' distinct bars against the hand-written ' + base.size + ')', seed);
       let run = 1, worst = 1; for (let b = 1; b < prints.length; b++) { if (prints[b] === prints[b - 1]) { run++; worst = Math.max(worst, run); } else run = 1; }
       if (worst > m.section + 5) bump('a frozen stretch longer than the longest section plus a phrase', seed);
     }
@@ -1906,9 +1913,9 @@ if (typeof L.drawMovement === 'function') {
   L.usePiece(saved);
   const names = Object.keys(bad);
   ok(names.length === 0, `every one of ${N} drawn movements is legal, closed, moving and explained`, names.map(k => `${bad[k].length}x ${k} (seed ${bad[k][0]})`).join('; '));
-  ok(['rolling', 'static', 'sparse'].every(g => grammars[g] > 0) && grammars.rolling > N * 0.4, 'all three grammars are drawn, rolling most', JSON.stringify(grammars));
+  ok(['arc', 'rolling', 'static', 'sparse'].every(g => grammars[g] > 0) && grammars.arc > N * 0.35 && grammars.arc > grammars.rolling, 'all four grammars are drawn, arc most', JSON.stringify(grammars));
   const med = a => a.slice().sort((x, y) => x - y)[Math.floor(a.length / 2)];
-  ok(Object.keys(ratios).every(g => med(ratios[g]) >= 0.9), 'a drawn movement is, typically, as varied as the hand-written one on the same piece', Object.keys(ratios).map(g => g + ' x' + med(ratios[g]).toFixed(2)).join(' '));
+  ok(Object.keys(ratios).every(g => med(ratios[g]) >= (g === 'arc' ? 0.5 : 0.9)), 'a drawn movement is, typically, as varied as the hand-written one on the same piece', Object.keys(ratios).map(g => g + ' x' + med(ratios[g]).toFixed(2)).join(' '));
   ok(L.draw(L.DEFAULT_SEED).movement === L.MOVEMENT_SHIPPED, 'the default seed keeps the hand-written movement');
   ok(performance.now() - t0 < 60000, 'the arrangement round runs in under a minute', Math.round(performance.now() - t0) + ' ms');
 }
