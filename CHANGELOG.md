@@ -15,6 +15,8 @@
   fourth kick is in four more styles.
 - **The noise floor is drawn per track and is no longer a control.** About two
   tracks in five have none. The slider and the deck knob are gone.
+- **GO on the seek waits for the end of the bar** instead of jumping at once. A second
+  GO before the line replaces the first; with the transport stopped it still lands at once.
 - **`https://witzman.de/dub` is unchanged.**
 
 ## 2026-09-25 — a Tonight view and hands on it, on the prototype stage only

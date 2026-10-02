@@ -8581,6 +8581,16 @@ function movementSection(bar) {
   return { n: n + 1, of: ats.length };
 }
 function seekSpan() { return Math.max(1, Math.min(MOVEMENT.bars, (DJ.on && DJ.cur) ? DJ.cur.bars : MOVEMENT.bars)); }
+// GO ON THE SEEK LANDS ON THE NEXT BAR LINE (owner 2026-10-02, #97), the way a key and a seed do: a jump mid-bar cuts the bar that is
+// sounding in half. A second GO before the line replaces the first. With the transport stopped there is no bar to wait for.
+let pendingSeek = null;
+function seekAtBar(bar) {
+  bar = Math.max(0, Math.floor(bar));
+  if (!(ctx && T.running)) { pendingSeek = null; return seek(bar); }
+  pendingSeek = bar;
+  say(`seek to bar ${bar + 1} queued — it lands on the next bar line.`);
+  return bar;
+}
 function seek(bar) {
   bar = Math.max(0, Math.floor(bar));
   // `bar` is a bar OF THE LIVE PIECE, the coordinate the fader is in [#55]: in a night the piece began at `aOffset` on the shared step count.
@@ -8975,6 +8985,13 @@ function tick() {
       paintKeyState();
       say("key " + KEY_NAMES[((KEY_HAND.root % 12) + 12) % 12]
         + " " + ui("keyscale").selectedOptions[0].text + " — landed on this bar.");
+    }
+    if (pendingSeek !== null && T.step % 16 === 0) {
+      // at the bar line the steps already scheduled are the last of the old bar: only the counter moves, and the clock carries straight on
+      const b = pendingSeek; pendingSeek = null;
+      T.step = b * 16 + (DECK.aOffset || 0);
+      if (engine) engine.recompose();
+      say(`seek to bar ${b + 1} — section ${movementSection(b).n} of ${movementSection(b).of}, from this bar.`);
     }
     if (pendingSeed !== null && T.step % 16 === 0) {
       const v = pendingSeed; pendingSeed = null;
@@ -10985,7 +11002,7 @@ function wire() {
     updSeek();
     if (!engine) { refreshHand(); paintBarSheet(previewBar(), shownComposition()); }
   }); updSeek();
-  ui("seekgo").addEventListener("click", () => { seek(parseInt(sk.value, 10)); lastPainted = -1; lastHeadStep = -1; refreshHand(); });
+  ui("seekgo").addEventListener("click", () => { seekAtBar(parseInt(sk.value, 10)); lastPainted = -1; lastHeadStep = -1; refreshHand(); });
   // THE RING, SWITCHED BY HAND, AND IT IS A LATCH LIKE EVERY OTHER LATCH HERE.
   // `autoOn` is held here as well as in the engine because the engine does not
   // exist until the first gesture, and the switch has to be settable before
@@ -12537,7 +12554,7 @@ window.p02 = {
     solo: MIX.solo, mutes: Object.keys(MIX.mutes),
     engineSolo: engine ? engine.cfg.solo : null,
     engineMutes: engine ? Object.keys(engine.cfg.mutes) : null,
-    pendingSeed,
+    pendingSeed, pendingSeek,
     morph: { active: MORPH.active, landed: MORPH.landed, target: MORPH.target,
              bars: MORPH.bars, targetSeed: MORPH.targetSeed },
     pitchUI: { transpose: PITCH_HAND.transpose, semi: PITCH_HAND.semi },
