@@ -1931,7 +1931,10 @@ const STYLE = {
       // [D] "Hats sit behind the bass, not on it. Rolling rotates the
       // eighth-note hats one sixteenth late for exactly this." One in four
       // sits late, and that is the parent's Rolling piece as a draw.
-      3: { hits:{pool:[4,6,7,8,8,8,9,10,12],d:D.DRUM,f:8}, rotate:{pool:[0,0,0,1],d:D.DRUM,f:9},
+      // #92: the pool was [0,0,0,1] - two rotations, so every hat lane was one of two
+      // euclids per hit count. 2 and 3 put a sparse lane on the offbeat eighth and the
+      // sixteenth after it; 5 is the pushed one. Measured on p92-alike.mjs.
+      3: { hits:{pool:[4,6,7,8,8,8,9,10,12],d:D.DRUM,f:8}, rotate:{pool:[0,0,0,1,2,2,3,5],d:D.DRUM,f:9},
            velo:{range:[46,68],q:1,d:D.DRUM,f:10},
            why:{fixed:"the hats, under everything, and they are the lane that may be busy"} }
     },
@@ -2287,11 +2290,11 @@ const PROFILE_DEFS = [
       drums: { kick:{pool:[
         {v:[0,4,8,12],why:"deep minimal four-floor"},
         {v:[0,4,8,12],why:"deep minimal four-floor"},
-        {v:[0,8],why:"deep minimal halftime floor"}]},
+        {v:[0,8],why:"deep minimal halftime floor"},{v:[0,4,8,14],why:"deep minimal: the displaced fourth, the one departure the contract allows"}]},
         present:{pool:[{v:[2],why:"clap and room only"},{v:[2,3],why:"sparse upper kit"},{v:[1,3],why:"rim and hats, no clap"}]},
         lanes:{1:{hits:{pool:[1,1,1],d:D.DRUM,f:2}},2:{hits:{pool:[1,1,2],d:D.DRUM,f:5}},3:{hits:{pool:[4,5,6],d:D.DRUM,f:8}}}
       },
-      stab:{figure:{pool:[{v:[2,10],why:"two patient offbeat stabs"},{v:[6,14],why:"late offbeat answers"},{v:[7,15],why:"leaning offbeat stabs"}]}},
+      stab:{figure:{pool:[{v:[2,10],why:"two patient offbeat stabs"},{v:[6,14],why:"late offbeat answers"},{v:[7,15],why:"leaning offbeat stabs"},{v:[10,14],why:"two late stabs, the second near the bar line"},{v:[7],why:"one lone offbeat stab"}]}},
       bass:{density:{range:[0.10,0.22]},law:{pool:[null,null,{v:"pedal",why:"the deep sub is a held pedal"}]}},
       pad:{present:{pool:[true,false,false]},hold:{range:[14,15.5]}},
       lead:{present:{pool:[{v:false,why:"no lead: the room carries the top"},{v:false,why:"no lead: the room carries the top"},{v:false,why:"no lead: the room carries the top"},{v:true,why:"a rare drenched minimal motif"}]}},
@@ -2305,7 +2308,7 @@ const PROFILE_DEFS = [
     avoid: ["straight-ahead house chords", "a busy lead", "dry drums"],
     patch: {
       drums:{kick:{pool:[{v:[0,4,8,12],why:"chord-heavy four-floor"},{v:[0,4,8,14],why:"leaning four-floor"}]},lanes:{3:{hits:{pool:[6,7,8,9],d:D.DRUM,f:8}}}},
-      stab:{figure:{pool:[{v:[2,6,10,14],why:"full offbeat chord figure"},{v:[2,7,11],why:"uneven chord conversation"},{v:[4,12],why:"skank chord answer"}]}},
+      stab:{figure:{pool:[{v:[2,6,10,14],why:"full offbeat chord figure"},{v:[2,7,11],why:"uneven chord conversation"},{v:[4,12],why:"skank chord answer"},{v:[10,14],why:"a late chord pair"},{v:[7,15],why:"leaning chord pair"}]}},
       bass:{density:{range:[0.18,0.32]}},
       pad:{present:{pool:[true,true,true]},hold:{range:[13,15.5]}},
       lead:{present:{pool:[{v:false,why:"the stab owns the foreground"},{v:false,why:"the stab owns the foreground"},{v:false,why:"the stab owns the foreground"},{v:true,why:"a rare echoing chord response"}]}},
@@ -2320,7 +2323,7 @@ const PROFILE_DEFS = [
     patch: {
       frame:{tempo:{range:[116,120],q:1},swing:{range:[0.02,0.06]}},
       drums:{lanes:{1:{hits:{pool:[1,1,2],d:D.DRUM,f:2}},2:{hits:{pool:[1,1],d:D.DRUM,f:5}},3:{hits:{pool:[4,5,6,7],d:D.DRUM,f:8}}}},
-      stab:{figure:{pool:[{v:[2,10],why:"sparse ambient stab"},{v:[7,15],why:"late ambient answer"}]}},
+      stab:{figure:{pool:[{v:[2,10],why:"sparse ambient stab"},{v:[7,15],why:"late ambient answer"},{v:[7],why:"one lone ambient stab"},{v:[10,14],why:"a late ambient pair"}]}},
       bass:{density:{range:[0.10,0.20]},lenOdds:{range:[0.05,0.18]}},
       pad:{present:{pool:[true,true,true]},hold:{range:[14.5,15.5]}},
       lead:{present:{pool:[{v:true,why:"a rare drenched motif"},{v:false,why:"the room is enough"}]}},
@@ -2334,8 +2337,8 @@ const PROFILE_DEFS = [
     avoid: ["a lead melody", "festival build-ups", "snare-led house density"],
     patch: {
       frame:{tempo:{range:[122,126],q:1},swing:{range:[0.06,0.10]}},
-      drums:{kick:{pool:[{v:[0,4,8,12],why:"rolling 909 floor"}]},present:{pool:[{v:[1,2,3],why:"full rolling kit"}]},lanes:{1:{hits:{pool:[1,2],d:D.DRUM,f:2}},2:{hits:{pool:[1,1,2],d:D.DRUM,f:5}},3:{hits:{pool:[8,9,10,12],d:D.DRUM,f:8}}}},
-      stab:{figure:{pool:[{v:[2,6,10,14],why:"rolling offbeat figure"},{v:[6,14],why:"rolling chord answers"}]}},
+      drums:{kick:{pool:[{v:[0,4,8,12],why:"rolling 909 floor"},{v:[0,4,8,12],why:"rolling 909 floor"},{v:[0,4,8,14],why:"rolling 909: the displaced fourth, the one departure the contract allows"}]},present:{pool:[{v:[1,2,3],why:"full rolling kit"}]},lanes:{1:{hits:{pool:[1,2],d:D.DRUM,f:2}},2:{hits:{pool:[1,1,2],d:D.DRUM,f:5}},3:{hits:{pool:[8,9,10,12],d:D.DRUM,f:8}}}},
+      stab:{figure:{pool:[{v:[2,6,10,14],why:"rolling offbeat figure"},{v:[6,14],why:"rolling chord answers"},{v:[4,12],why:"rolling skank answer"},{v:[2,7,11],why:"rolling uneven conversation"},{v:[10,14],why:"rolling late pair"}]}},
       bass:{density:{range:[0.32,0.45]},homeBias:{range:[0.30,0.38]},law:{pool:[null,null,null,{v:"octave",why:"rolling octave answer"}]}},
       pad:{present:{pool:[false,true]},hold:{range:[13,14.5]}},
       lead:{present:{pool:[{v:false,why:"the 909 floor owns the motion"},{v:false,why:"the 909 floor owns the motion"},{v:false,why:"the 909 floor owns the motion"},{v:false,why:"the 909 floor owns the motion"},{v:true,why:"a rare filtered 909 echo"}]}}
@@ -2349,7 +2352,7 @@ const PROFILE_DEFS = [
     patch: {
       frame:{tempo:{range:[118,124],q:1},swing:{range:[0.02,0.06]}},
       drums:{kick:{pool:[{v:[0,8],why:"halftime sub floor"}]},present:{pool:[{v:[2],why:"one clap and room"},{v:[2,3],why:"clap with a thin hat"}]},lanes:{2:{hits:{pool:[1,1],d:D.DRUM,f:5}},3:{hits:{pool:[4,4,5],d:D.DRUM,f:8}}}},
-      stab:{figure:{pool:[{v:[2,10],why:"two distant stabs"},{v:[6,14],why:"two delayed answers"}]}},
+      stab:{figure:{pool:[{v:[2,10],why:"two distant stabs"},{v:[6,14],why:"two delayed answers"},{v:[7],why:"one distant stab"},{v:[10,14],why:"two late distant stabs"},{v:[7,15],why:"a late pair"}]}},
       bass:{density:{range:[0.10,0.16]},law:{pool:[{v:"pedal",why:"the sub stays home"},{v:"pedal",why:"the sub stays home"}]}},
       pad:{present:{pool:[false,false,true]}},
       lead:{present:{pool:[{v:false,why:"no lead in the sparse sub profile"},{v:false,why:"no lead in the sparse sub profile"},{v:false,why:"no lead in the sparse sub profile"},{v:true,why:"a rare sub-harmonic trace"}]}},
@@ -2373,8 +2376,8 @@ const PROFILE_DEFS = [
       // the reference's 128-132 is above the hard band [115,128] (F11): held at
       // the top of what the contract allows, and raised as a question on #87
       frame:{tempo:{range:[126,128],q:1},swing:{range:[0.04,0.10]}},
-      drums:{kick:{pool:[{v:[0,4,8,12],why:"hypnotic four-floor"}]},present:{pool:[{v:[1,2,3],why:"full pulse kit: the phasing lives in the percussion"}]},lanes:{1:{hits:{pool:[1,2],d:D.DRUM,f:2}},2:{hits:{pool:[1,1,2],d:D.DRUM,f:5}},3:{hits:{pool:[8,9,10],d:D.DRUM,f:8}}}},
-      stab:{figure:{pool:[{v:[7],why:"one lone offbeat stab, the reference's [7]"},{v:[10],why:"one lone late stab, the reference's [10]"}]}},
+      drums:{kick:{pool:[{v:[0,4,8,12],why:"hypnotic four-floor"},{v:[0,4,8,12],why:"hypnotic four-floor"},{v:[0,4,8,12],why:"hypnotic four-floor"},{v:[0,4,8,14],why:"hypnotic: the displaced fourth, the one departure the contract allows"}]},present:{pool:[{v:[1,2,3],why:"full pulse kit: the phasing lives in the percussion"}]},lanes:{1:{hits:{pool:[1,2],d:D.DRUM,f:2}},2:{hits:{pool:[1,1,2],d:D.DRUM,f:5}},3:{hits:{pool:[8,9,10],d:D.DRUM,f:8}}}},
+      stab:{figure:{pool:[{v:[7],why:"one lone offbeat stab, the reference's [7]"},{v:[10],why:"one lone late stab, the reference's [10]"},{v:[7,15],why:"a late monotone pair"}]}},
       bass:{density:{range:[0.34,0.46]},law:{pool:[{v:"pedal",why:"the sub is a monotone"},{v:"pedal",why:"the sub is a monotone"},null]}},
       pad:{present:{pool:[true,true,true]},hold:{range:[14.5,15.5]}},
       lead:{present:{pool:[{v:false,why:"no lead: the pad and the pulse are the piece"},{v:false,why:"no lead: the pad and the pulse are the piece"},{v:false,why:"no lead: the pad and the pulse are the piece"}]}},
@@ -2388,8 +2391,8 @@ const PROFILE_DEFS = [
     avoid: ["edit density", "a busy top", "a dry room"],
     patch: {
       frame:{tempo:{range:[120,124],q:1},swing:{range:[0.08,0.12]}},
-      drums:{kick:{pool:[{v:[0,4,8,12],why:"hypnagogic four-floor"}]},present:{pool:[{v:[2,3],why:"clap and a thin top"},{v:[1,2,3],why:"a full but soft kit"}]},lanes:{1:{hits:{pool:[1,2],d:D.DRUM,f:2}},2:{hits:{pool:[1,1,2],d:D.DRUM,f:5}},3:{hits:{pool:[5,6,7],d:D.DRUM,f:8}}}},
-      stab:{figure:{pool:[{v:[7,15],why:"a late pair, felt rather than heard"},{v:[2,10],why:"two patient offbeat stabs"}]}},
+      drums:{kick:{pool:[{v:[0,4,8,12],why:"hypnagogic four-floor"},{v:[0,4,8,12],why:"hypnagogic four-floor"},{v:[0,4,8,14],why:"hypnagogic: the displaced fourth, the one departure the contract allows"}]},present:{pool:[{v:[2,3],why:"clap and a thin top"},{v:[1,2,3],why:"a full but soft kit"}]},lanes:{1:{hits:{pool:[1,2],d:D.DRUM,f:2}},2:{hits:{pool:[1,1,2],d:D.DRUM,f:5}},3:{hits:{pool:[5,6,7],d:D.DRUM,f:8}}}},
+      stab:{figure:{pool:[{v:[7,15],why:"a late pair, felt rather than heard"},{v:[2,10],why:"two patient offbeat stabs"},{v:[10],why:"one lone late stab"},{v:[10,14],why:"a late pair near the bar line"},{v:[2,7,11],why:"an uneven three, drowsy"}]}},
       bass:{density:{range:[0.22,0.34]},lenOdds:{range:[0.10,0.25]}},
       pad:{present:{pool:[true,true,true]},hold:{range:[14.5,15.5]}},
       lead:{present:{pool:[{v:true,why:"a drenched motif over the pad"},{v:false,why:"the bass carries the tune"},{v:false,why:"the bass carries the tune"}]}},
